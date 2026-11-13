@@ -1,0 +1,730 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  AudioLines,
+  Check,
+  CheckCheck,
+  ChevronRight,
+  Code2,
+  Folder,
+  FolderOpen,
+  GitBranch,
+  Layers3,
+  Mic,
+  Plus,
+  Search,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  Square,
+  X,
+} from "lucide-react";
+import type {
+  Harness,
+  Project,
+  RuntimeInfo,
+  Settings,
+  WorkItem,
+} from "../shared";
+import { useDictation } from "../useDictation";
+import { HarnessMark, Mark, PriorityMark, Spinner, StageIcon } from "./UI";
+
+function Modal({
+  title,
+  kicker,
+  description,
+  close,
+  children,
+  wide = false,
+}: {
+  title: string;
+  kicker: string;
+  description?: string;
+  close: () => void;
+  children: React.ReactNode;
+  wide?: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null;
+    ref.current?.querySelector<HTMLElement>("input,textarea,button")?.focus();
+    const handle = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const nodes = Array.from(
+        ref.current?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled),input,textarea,select,[tabindex="0"]',
+        ) ?? [],
+      ).filter((node) => node.offsetParent !== null);
+      if (event.shiftKey && document.activeElement === nodes[0]) {
+        event.preventDefault();
+        nodes.at(-1)?.focus();
+      }
+      if (!event.shiftKey && document.activeElement === nodes.at(-1)) {
+        event.preventDefault();
+        nodes[0]?.focus();
+      }
+    };
+    window.addEventListener("keydown", handle);
+    return () => {
+      window.removeEventListener("keydown", handle);
+      before?.focus();
+    };
+  }, []);
+  return (
+    <div
+      className="modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
+    >
+      <div
+        className={"modal " + (wide ? "wide" : "")}
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+      >
+        <header className="modal-heading">
+          <div className="eyebrow">
+            <span />
+            {kicker}
+          </div>
+          <button
+            className="icon-button modal-close"
+            aria-label="Close dialog"
+            onClick={close}
+          >
+            <X size={17} />
+          </button>
+          <h2 id="modal-title">{title}</h2>
+          {description && <p>{description}</p>}
+        </header>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function NewTaskDialog({
+  project,
+  defaultHarness,
+  onClose,
+  onCreated,
+  notify,
+}: {
+  project: Project;
+  defaultHarness: Harness;
+  onClose: () => void;
+  onCreated: (task: WorkItem) => void;
+  notify: (s: string) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [harness, setHarness] = useState<Harness>(defaultHarness);
+  const [priority, setPriority] = useState<"high" | "medium" | "low">("medium");
+  const [busy, setBusy] = useState(false);
+  const dictation = useDictation(
+    (text) =>
+      setDescription((value) => [value, text].filter(Boolean).join("\n")),
+    notify,
+  );
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!title.trim() || busy) return;
+    setBusy(true);
+    try {
+      onCreated(
+        await window.memcode.createTask({
+          projectId: project.id,
+          title: title.trim(),
+          description: description.trim(),
+          harness,
+          priority,
+        }),
+      );
+    } catch (error) {
+      notify((error as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title="Give the next idea a place."
+      kicker="NEW WORK ITEM"
+      description="Start with the outcome. Shape the runbook as you go."
+      close={onClose}
+    >
+      <form onSubmit={submit}>
+        <div className="modal-body">
+          <div className="form-project">
+            <Layers3 size={14} />
+            {project.name}
+            <ChevronRight size={12} />
+            <span>New work item</span>
+          </div>
+          <input
+            className="task-title-input"
+            aria-label="Work item title"
+            placeholder="What do you want to build?"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            maxLength={160}
+            autoFocus
+            required
+          />
+          <div className="brief-input-wrap">
+            <textarea
+              aria-label="Work item brief"
+              placeholder="Describe the outcome, context, and what good looks like…"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={20000}
+            />
+            <div className="brief-input-footer">
+              <span>
+                {dictation.phase === "recording"
+                  ? "Listening. Speak naturally."
+                  : dictation.phase === "transcribing"
+                    ? "Transcribing on your local speech server…"
+                    : "A few clear sentences are a good start."}
+              </span>
+              <button
+                type="button"
+                className={"dictation-button " + dictation.phase}
+                onClick={() => void dictation.toggle()}
+                title="Dictate with a local Whisper server"
+                disabled={dictation.phase === "transcribing"}
+              >
+                {dictation.phase === "transcribing" ? (
+                  <Spinner />
+                ) : dictation.phase === "recording" ? (
+                  <Square size={12} />
+                ) : (
+                  <AudioLines size={16} />
+                )}
+              </button>
+            </div>
+          </div>
+          <div className="form-row">
+            <label className="field">
+              <span>Worker harness</span>
+              <select
+                aria-label="Worker harness"
+                value={harness}
+                onChange={(e) => setHarness(e.target.value as Harness)}
+              >
+                <option value="codex">Codex</option>
+                <option value="claude">Claude Code</option>
+                <option value="amp">Amp</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Priority</span>
+              <select
+                aria-label="Priority"
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as typeof priority)}
+              >
+                <option value="high">High priority</option>
+                <option value="medium">Medium priority</option>
+                <option value="low">Low priority</option>
+              </select>
+            </label>
+          </div>
+          <div className="form-note">
+            <GitBranch size={13} />
+            <p>
+              The brief, runbook, conversation and output stay together.
+              Creating work never starts a worker automatically.
+            </p>
+          </div>
+        </div>
+        <footer className="modal-footer">
+          <span>
+            <span className="tiny-local-dot" />
+            Saved to your local workspace
+          </span>
+          <button
+            className="button primary"
+            type="submit"
+            disabled={!title.trim() || busy}
+          >
+            {busy ? <Spinner /> : <Plus size={14} />}Create work item
+          </button>
+        </footer>
+      </form>
+    </Modal>
+  );
+}
+
+export function NewProjectDialog({
+  onClose,
+  onCreated,
+  notify,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  notify: (s: string) => void;
+}) {
+  const [mode, setMode] = useState<"existing" | "new">("existing");
+  const [parent, setParent] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [busy, setBusy] = useState(false);
+  const dictation = useDictation(
+    (text) => setDescription((v) => [v, text].filter(Boolean).join("\n")),
+    notify,
+  );
+  const select = async () => {
+    try {
+      const path = await window.memcode.selectFolder();
+      if (path) {
+        setParent(path);
+        if (mode === "existing")
+          setName(path.split(/[\\/]/).filter(Boolean).at(-1) ?? "Project");
+      }
+    } catch (error) {
+      notify((error as Error).message);
+    }
+  };
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!parent || !name.trim()) return;
+    setBusy(true);
+    try {
+      await window.memcode.createProject({
+        mode,
+        parent,
+        name: name.trim(),
+        description: description.trim(),
+      });
+      onCreated();
+    } catch (error) {
+      notify((error as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title="A place for what comes next."
+      kicker="ADD A PROJECT"
+      description="Bring an existing codebase, or start with an idea."
+      close={onClose}
+    >
+      <form onSubmit={submit}>
+        <div className="modal-body">
+          <div className="project-mode">
+            <button
+              type="button"
+              className={mode === "existing" ? "active" : ""}
+              onClick={() => {
+                setMode("existing");
+                setParent("");
+                setName("");
+              }}
+            >
+              <FolderOpen size={21} />
+              <strong>Existing project</strong>
+              <span>Understand the code. Continue the work.</span>
+              {mode === "existing" && <Check size={13} />}
+            </button>
+            <button
+              type="button"
+              className={mode === "new" ? "active" : ""}
+              onClick={() => {
+                setMode("new");
+                setParent("");
+                setName("");
+              }}
+            >
+              <Sparkles size={21} />
+              <strong>Something new</strong>
+              <span>A clear brief. A fresh local repository.</span>
+              {mode === "new" && <Check size={13} />}
+            </button>
+          </div>
+          <label className="field">
+            <span>
+              {mode === "existing" ? "Project folder" : "Create inside"}
+            </span>
+            <button
+              type="button"
+              className="folder-select"
+              onClick={() => void select()}
+            >
+              <Folder size={15} />
+              <span>{parent || "Choose a folder on this computer"}</span>
+              <ChevronRight size={14} />
+            </button>
+          </label>
+          <label className="field">
+            <span>Project name</span>
+            <input
+              aria-label="Project name"
+              placeholder="Your next great project"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={80}
+              required
+            />
+          </label>
+          <div className="field">
+            <span>What is this project for?</span>
+            <div className="brief-input-wrap">
+              <textarea
+                aria-label="Project purpose"
+                placeholder="Describe who it helps, what it does, and where you want to take it…"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={10000}
+              />
+              <div className="brief-input-footer">
+                <span>
+                  {dictation.phase === "recording"
+                    ? "Listening…"
+                    : dictation.phase === "transcribing"
+                      ? "Transcribing locally…"
+                      : "Your project brief becomes shared context for the work."}
+                </span>
+                <button
+                  type="button"
+                  className={"dictation-button " + dictation.phase}
+                  title="Dictate project purpose"
+                  onClick={() => void dictation.toggle()}
+                  disabled={dictation.phase === "transcribing"}
+                >
+                  {dictation.phase === "transcribing" ? (
+                    <Spinner />
+                  ) : dictation.phase === "recording" ? (
+                    <Square size={12} />
+                  ) : (
+                    <AudioLines size={16} />
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="form-note">
+            <GitBranch size={14} />
+            <p>
+              {mode === "existing"
+                ? "MemCode reads the project through your local Memtrace engine. Existing source files are kept in place."
+                : "We create a new folder, initialize Git, and save your brief. Your first work item starts with defining the project."}
+            </p>
+          </div>
+        </div>
+        <footer className="modal-footer">
+          <button type="button" className="text-button" onClick={onClose}>
+            Keep exploring
+          </button>
+          <button
+            type="submit"
+            className="button primary"
+            disabled={!parent || !name.trim() || busy}
+          >
+            {busy ? <Spinner /> : null}
+            {mode === "new" ? "Create project" : "Open project"}
+            <ArrowRight size={14} />
+          </button>
+        </footer>
+      </form>
+    </Modal>
+  );
+}
+
+export function SettingsDialog({
+  settings,
+  runtime,
+  onClose,
+  onSaved,
+  notify,
+}: {
+  settings: Settings;
+  runtime: RuntimeInfo;
+  onClose: () => void;
+  onSaved: (runtime: RuntimeInfo) => void;
+  notify: (s: string) => void;
+}) {
+  const [draft, setDraft] = useState(settings);
+  const [busy, setBusy] = useState(false);
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      onSaved(await window.memcode.saveSettings(draft));
+      notify("Workspace settings saved.");
+      onClose();
+    } catch (error) {
+      notify((error as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title="Make the workspace yours."
+      kicker="LOCAL SETTINGS"
+      close={onClose}
+    >
+      <form onSubmit={save}>
+        <div className="modal-body settings-body">
+          <div className="settings-section">
+            <div>
+              <GitBranch size={17} />
+              <span>
+                <strong>Memtrace engine</strong>
+                <small>
+                  Connect to the Memtrace CLI installed on this machine.
+                </small>
+              </span>
+              <span
+                className={
+                  "connection-label " +
+                  (runtime.memtraceAvailable ? "available" : "")
+                }
+              >
+                <span />
+                {runtime.memtraceAvailable ? "Detected" : "Not found"}
+              </span>
+            </div>
+            <label className="field">
+              <span>Executable or JavaScript entry point</span>
+              <input
+                aria-label="Memtrace executable"
+                placeholder="Auto-detect from PATH"
+                value={draft.memtracePath}
+                onChange={(e) =>
+                  setDraft({ ...draft, memtracePath: e.target.value })
+                }
+              />
+            </label>
+          </div>
+          <div className="settings-section">
+            <div>
+              <WorkflowIcon />
+              <span>
+                <strong>Worker defaults</strong>
+                <small>
+                  Execution stays local. Your harness controls model
+                  authentication.
+                </small>
+              </span>
+            </div>
+            <div className="form-row">
+              <label className="field">
+                <span>Default harness</span>
+                <select
+                  value={draft.defaultHarness}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      defaultHarness: e.target.value as Harness,
+                    })
+                  }
+                >
+                  <option value="codex">Codex</option>
+                  <option value="claude">Claude Code</option>
+                  <option value="amp">Amp</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Worker slots</span>
+                <select
+                  value={draft.maxWorkers}
+                  onChange={(e) =>
+                    setDraft({ ...draft, maxWorkers: Number(e.target.value) })
+                  }
+                >
+                  {[1, 2, 3, 4, 6, 8].map((n) => (
+                    <option key={n} value={n}>
+                      {n} workers
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="field">
+              <span>Model override</span>
+              <input
+                aria-label="Model override"
+                placeholder="Use the harness’s configured model"
+                value={draft.model}
+                onChange={(e) => setDraft({ ...draft, model: e.target.value })}
+              />
+            </label>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={draft.localModel}
+                onChange={(e) =>
+                  setDraft({ ...draft, localModel: e.target.checked })
+                }
+              />
+              <span>
+                Use a local Ollama model with Codex
+                <small>
+                  Requires a model name and an existing local Ollama
+                  installation.
+                </small>
+              </span>
+            </label>
+          </div>
+          <div className="settings-section">
+            <div>
+              <AudioLines size={17} />
+              <span>
+                <strong>Local dictation</strong>
+                <small>
+                  Audio is sent only to a speech server on this computer.
+                </small>
+              </span>
+              <span className="settings-tag">Whisper</span>
+            </div>
+            <label className="field">
+              <span>Whisper server inference endpoint</span>
+              <input
+                aria-label="Speech endpoint"
+                value={draft.speechEndpoint}
+                onChange={(e) =>
+                  setDraft({ ...draft, speechEndpoint: e.target.value })
+                }
+              />
+            </label>
+            <p className="settings-hint">
+              Connect a running whisper.cpp server. MemCode records audio,
+              converts it to WAV locally, and inserts the transcript into your
+              brief.
+            </p>
+          </div>
+          <div className="storage-note">
+            <ShieldCheck size={14} />
+            <span>
+              Your workspace is stored locally.<code>{runtime.dataPath}</code>
+            </span>
+          </div>
+        </div>
+        <footer className="modal-footer">
+          <button type="button" className="button secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="button primary" disabled={busy}>
+            {busy ? <Spinner /> : <Check size={14} />}Save settings
+          </button>
+        </footer>
+      </form>
+    </Modal>
+  );
+}
+function WorkflowIcon() {
+  return <Code2 size={17} />;
+}
+
+export function SearchDialog({
+  tasks,
+  onClose,
+  open,
+  create,
+}: {
+  tasks: WorkItem[];
+  onClose: () => void;
+  open: (task: WorkItem) => void;
+  create: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [index, setIndex] = useState(0);
+  const found = tasks
+    .filter((t) =>
+      `${t.title} ${t.identifier} ${t.description}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+    )
+    .slice(0, 8);
+  return (
+    <div
+      className="modal-backdrop search-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="search-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Search workspace"
+      >
+        <div className="command-input">
+          <Search size={18} />
+          <input
+            aria-label="Search workspace"
+            placeholder="Find a work item, or start something new…"
+            value={query}
+            autoFocus
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setIndex(0);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setIndex((i) => Math.min(found.length - 1, i + 1));
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setIndex((i) => Math.max(0, i - 1));
+              }
+              if (e.key === "Enter" && found[index]) open(found[index]);
+            }}
+          />
+          <button
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Close search"
+          >
+            <X size={15} />
+          </button>
+        </div>
+        <div className="command-results">
+          <span className="menu-eyebrow">
+            {query ? "MATCHING WORK" : "RECENT WORK"}
+          </span>
+          {found.map((task, i) => (
+            <button
+              className={i === index ? "selected" : ""}
+              key={task.id}
+              onMouseEnter={() => setIndex(i)}
+              onClick={() => open(task)}
+            >
+              <StageIcon stage={task.stage} />
+              <span className="command-id">{task.identifier}</span>
+              <span>{task.title}</span>
+              <ChevronRight size={12} />
+            </button>
+          ))}
+          {!found.length && (
+            <p className="search-no-results">
+              No matching work. Give the idea a new home.
+            </p>
+          )}
+          <div className="menu-divider" />
+          <button onClick={create}>
+            <Plus size={14} />
+            <span>Create a work item</span>
+            <kbd>C</kbd>
+          </button>
+        </div>
+        <footer className="command-footer">
+          <span>
+            <kbd>↑</kbd>
+            <kbd>↓</kbd> to navigate
+          </span>
+          <span>
+            <kbd>↵</kbd> to open
+          </span>
+          <span>
+            <kbd>esc</kbd> to close
+          </span>
+        </footer>
+      </div>
+    </div>
+  );
+}
