@@ -79,6 +79,11 @@ export function restartSafeState(state: AppState): AppState {
         ? {
             ...task,
             stage: "review",
+            messages: task.messages.map((message) =>
+              message.followupState === "queued" && !message.promptedAt
+                ? { ...message, followupState: "paused" }
+                : message,
+            ),
             run: {
               ...task.run,
               state: "stopped",

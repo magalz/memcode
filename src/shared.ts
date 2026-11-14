@@ -93,6 +93,10 @@ export interface Message {
   reviewText?: string;
   /** Included in a successfully spawned worker brief, not proof it was applied. */
   promptedAt?: string;
+  /** Automatic continuation is authorized only by explicit Send. */
+  followupState?: "queued" | "paused" | "included" | "cancelled";
+  queuedAt?: string;
+  queueOrder?: number;
 }
 export interface ChecklistItem {
   id: string;
@@ -289,6 +293,11 @@ export interface PreviewInput {
   bounds: { x: number; y: number; width: number; height: number };
 }
 export interface MemCodeAPI {
+  sendFollowup(
+    taskId: string,
+    text: string,
+    commentIds?: string[],
+  ): Promise<{ messageId: string }>;
   saveReviewComment(input: {
     id?: string;
     taskId: string;

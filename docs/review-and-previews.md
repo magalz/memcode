@@ -10,12 +10,21 @@ saved comment and its quoted target.
 Use **Review comments** to edit or delete unsent notes, select the comments to
 include, and choose **Add to follow-up**. This stages attachments in the composer;
 it still does not send them. The normal send action sends that follow-up and
-starts an available idle worker. If a run is active, the message is saved; resume
-the worker after that run finishes to apply it. Unread follow-ups are retained in
-the next brief even when the active worker produces a long conversation.
+starts an available idle worker. If a run is active, Send queues the follow-up
+for an automatic next pass after the current process and Fleet cleanup finish.
+Multiple queued messages available before the next brief are handled together.
+Unread follow-ups are retained even when the active worker produces a long
+conversation. Queue authorization and the message are saved atomically in the
+local workspace; the renderer does not need to remain on that card.
 Comments already added to a conversation remain in its review history. The same
 workflow applies to Codex, Claude Code and Cursor; review does not select or
 replace the card's assigned harness.
+
+Stop cancels pending automatic delivery while preserving the text. A failed run
+or unresolved Fleet conflict pauses its queue for attention instead of retrying
+indefinitely. An interrupted active run also pauses on restart; a ready queue
+from a clean idle/finished state can continue when the app starts. Queued cards
+wait for worker capacity, and a card never runs two harness processes at once.
 
 This follows the distinction in the official Codex workflows: save inline or
 visual comments, then send a separate instruction to address them:

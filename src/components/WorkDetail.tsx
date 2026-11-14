@@ -205,20 +205,17 @@ export function WorkDetail({
   const send = async () => {
     if (!draft.trim()) return;
     await act(async () => {
-      if (attachedComments.length)
-        await window.memcode.shareReviewComments(
-          task.id,
-          attachedComments,
-          draft.trim(),
-        );
-      else await window.memcode.addMessage(task.id, draft.trim());
+      await window.memcode.sendFollowup(
+        task.id,
+        draft.trim(),
+        attachedComments.length ? attachedComments : undefined,
+      );
       setDraft("");
       setAttachedComments([]);
       if (isActive(task))
         notify(
-          "Follow-up saved. Resume this worker after its current run finishes to apply it.",
+          "Follow-up queued. The worker will pick it up automatically when ready.",
         );
-      else if (!task.example) await window.memcode.startWorker(task.id);
     });
   };
   const toggle = (id: string) =>
@@ -555,7 +552,7 @@ export function WorkDetail({
                         task.example
                           ? "Explore the conversation, or add a note…"
                           : active
-                            ? "Save context for the next worker pass…"
+                            ? "Queue a follow-up for the next worker pass…"
                             : "Add context, ask a follow-up, or describe the next step…"
                       }
                       value={draft}
@@ -603,13 +600,11 @@ export function WorkDetail({
                           className="send-button"
                           title={
                             active
-                              ? "Save follow-up for resume · Ctrl+Enter"
+                              ? "Queue follow-up · Ctrl+Enter"
                               : "Send follow-up · Ctrl+Enter"
                           }
                           aria-label={
-                            active
-                              ? "Save follow-up for resume"
-                              : "Send follow-up"
+                            active ? "Queue follow-up" : "Send follow-up"
                           }
                           disabled={!draft.trim()}
                           onClick={() => void send()}
@@ -1156,6 +1151,15 @@ function MessageBlock({
           {message.role === "user" ? "You" : harnessNames[harness]}
         </strong>
         <Time at={message.at} />
+        {message.followupState && message.followupState !== "included" && (
+          <span className="message-queue-state" role="status">
+            {message.followupState === "queued"
+              ? "Queued"
+              : message.followupState === "paused"
+                ? "Queue paused"
+                : "Queue cancelled"}
+          </span>
+        )}
         {message.role === "assistant" && (
           <span className="message-role">WORKER</span>
         )}

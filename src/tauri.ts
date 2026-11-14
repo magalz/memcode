@@ -44,6 +44,8 @@ export async function installNativeBridge(): Promise<void> {
     (event) => previews.forEach((listener) => listener(event.payload)),
   );
   const api: MemCodeAPI = {
+    sendFollowup: (taskId, text, ids) =>
+      call("review:send", { taskId, text, ids }),
     saveReviewComment: (input) => call("review:save", input),
     deleteReviewComment: (taskId, id) => call("review:delete", { taskId, id }),
     shareReviewComments: (taskId, ids, text) =>

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { AppState } from "../src/shared";
+import type { AppState, WorkItem } from "../src/shared";
 import {
   formatReviewMessage,
   reviewReferenceSchema,
@@ -38,6 +38,10 @@ export function registerReview(
   state: () => AppState,
   changed: () => Promise<void>,
   publish: () => void,
+  queue?: {
+    enqueue: (task: WorkItem, messageId: string) => void;
+    dispatchQueued: () => void;
+  },
 ) {
   const id = z.string().min(1).max(250),
     task = (taskId: string) => {
@@ -115,6 +119,59 @@ export function registerReview(
       publish();
     },
   );
+  const send = async (
+    input: { taskId: string; ids?: string[]; text: string },
+    dispatch = false,
+  ) => {
+    const item = task(input.taskId),
+      ids = [...new Set(input.ids ?? [])],
+      comments = ids.map((id) =>
+        state().reviewComments?.find(
+          (c) => c.id === id && c.taskId === item.id,
+        ),
+      );
+    if (comments.some((c) => !c || c.status !== "saved"))
+      throw Error(
+        "Choose saved comments that have not yet been added to the conversation.",
+      );
+    const notes = comments as ReviewComment[],
+      references = notes.map((c) => c.reference),
+      body = notes.length
+        ? input.text +
+          "\n\n" +
+          notes
+            .map(
+              (c, i) =>
+                `Comment ${i + 1}: ${c.text}\n` +
+                formatReviewMessage("", [c.reference]),
+            )
+            .join("\n\n")
+        : input.text;
+    if (body.length > 100000)
+      throw Error("Select fewer comments for this follow-up.");
+    if (dispatch && !item.example && !queue)
+      throw Error("Worker dispatch is unavailable.");
+    const messageId = randomUUID(),
+      at = new Date().toISOString();
+    item.messages.push({
+      id: messageId,
+      role: "user",
+      text: body,
+      at,
+      references: notes.length ? references : undefined,
+      commentIds: notes.length ? ids : undefined,
+      reviewText: notes.length ? input.text : undefined,
+    });
+    item.updatedAt = at;
+    for (const comment of notes)
+      Object.assign(comment, { status: "shared", messageId, updatedAt: at });
+    // The Send authorization and its message are saved in the same snapshot.
+    if (dispatch && !item.example) queue!.enqueue(item, messageId);
+    await changed();
+    publish();
+    if (dispatch && !item.example) queue!.dispatchQueued();
+    return messageId;
+  };
   register(
     "review:share",
     z
@@ -124,49 +181,17 @@ export function registerReview(
         text: z.string().trim().min(1).max(20000),
       })
       .strict(),
-    async (input) => {
-      const item = task(input.taskId),
-        ids = [...new Set(input.ids as string[])],
-        comments = ids.map((id) =>
-          state().reviewComments?.find(
-            (c) => c.id === id && c.taskId === item.id,
-          ),
-        );
-      if (comments.some((c) => !c || c.status !== "saved"))
-        throw Error(
-          "Choose saved comments that have not yet been added to the conversation.",
-        );
-      const notes = comments as ReviewComment[],
-        references = notes.map((c) => c.reference),
-        body =
-          input.text +
-          "\n\n" +
-          notes
-            .map(
-              (c, i) =>
-                `Comment ${i + 1}: ${c.text}\n` +
-                formatReviewMessage("", [c.reference]),
-            )
-            .join("\n\n");
-      if (body.length > 100000)
-        throw Error("Select fewer comments for this follow-up.");
-      const messageId = randomUUID(),
-        at = new Date().toISOString();
-      item.messages.push({
-        id: messageId,
-        role: "user",
-        text: body,
-        at,
-        references,
-        commentIds: ids,
-        reviewText: input.text,
-      });
-      item.updatedAt = at;
-      for (const comment of notes)
-        Object.assign(comment, { status: "shared", messageId, updatedAt: at });
-      await changed();
-      publish();
-      return messageId;
-    },
+    (input) => send(input),
+  );
+  register(
+    "review:send",
+    z
+      .object({
+        taskId: id,
+        ids: z.array(id).min(1).max(30).optional(),
+        text: z.string().trim().min(1).max(20000),
+      })
+      .strict(),
+    async (input) => ({ messageId: await send(input, true) }),
   );
 }

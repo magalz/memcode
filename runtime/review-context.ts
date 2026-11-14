@@ -17,6 +17,7 @@ export function reviewContext(
   return messages
     .filter((message) => {
       if (
+        (message.role === "user" && message.followupState === "cancelled") ||
         seen.has(message.id) ||
         (!recent.has(message.id) &&
           !(message.role === "user" && !message.promptedAt))
@@ -43,8 +44,14 @@ export function markReviewContext(
       original?.role === "user" &&
       original.text === message.text &&
       original.at === message.at
-    )
+    ) {
       message.promptedAt = promptedAt;
+      if (
+        message.followupState === "queued" ||
+        message.followupState === "paused"
+      )
+        message.followupState = "included";
+    }
   }
 }
 

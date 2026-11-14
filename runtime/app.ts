@@ -78,9 +78,11 @@ export async function createRuntime(
     attachDogfoodProject(store.state, appPath);
   const engine = new MemtraceEngine(() => store.state.settings.memtracePath),
     state = () => store.state;
+  let dispatchQueued = () => {};
   const changed = async () => {
     await store.save();
     emit("workspace:state", store.state);
+    dispatchQueued();
   };
   const browsers = new AgentBrowserManager(state, store.dir, changed, 16, host);
   const terminals = new TerminalManager(state, host);
@@ -102,6 +104,7 @@ export async function createRuntime(
       emit,
       appPath,
     );
+  dispatchQueued = () => workers.dispatchQueued();
   const selectedFolders = new Set<string>(),
     handlers = new Map<string, Handler>();
   const task = (id: string) => {
@@ -471,7 +474,13 @@ export async function createRuntime(
   );
 
   registerPlanning(register, state, project, changed);
-  registerReview(register, state, changed, () => preview.publishComments());
+  registerReview(
+    register,
+    state,
+    changed,
+    () => preview.publishComments(),
+    workers,
+  );
   registerPlanningControls(register, state, project, changed);
   registerIntelligence(register, state, project, changed, engine);
   register("project:select-folder", z.undefined(), async () => {

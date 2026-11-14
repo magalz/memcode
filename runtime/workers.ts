@@ -39,6 +39,11 @@ import {
   markReviewContext,
   retainReviewContext,
 } from "./review-context";
+import {
+  enqueueFollowup,
+  queuedFollowups,
+  settleFollowupQueue,
+} from "./followup-queue";
 
 export function harnessArgs(
   id: WorkItem["harness"],
@@ -156,6 +161,9 @@ export class WorkerManager {
   private workspaces: EpicWorkspace;
   private cancelled = new Set<string>();
   private closing = false;
+  private dispatchScheduled = false;
+  private startingQueued = new Set<string>();
+  private nextQueueOrder = 0;
   private children = new Map<
     string,
     { child: ChildProcess; heartbeat?: NodeJS.Timeout; done: Promise<void> }
@@ -175,13 +183,102 @@ export class WorkerManager {
     private readonly browsers?: AgentBrowserManager,
     private readonly terminals?: TerminalManager,
   ) {
+    for (const task of state().tasks)
+      for (const message of task.messages)
+        this.nextQueueOrder = Math.max(
+          this.nextQueueOrder,
+          message.queueOrder ?? 0,
+        );
     this.workspaces = new EpicWorkspace(state);
     this.fleet = new FleetCoordinator(state, engine, changed, (ids) => {
       void this.pause(ids).catch(() => {});
     });
   }
   async pause(ids: string[]): Promise<void> {
-    await Promise.allSettled(ids.map((id) => this.stop(id)));
+    await Promise.allSettled(ids.map((id) => this.stop(id, "paused")));
+  }
+  /** Called before the send endpoint atomically persists the message and authority. */
+  enqueue(task: WorkItem, messageId: string): void {
+    enqueueFollowup(task, messageId, ++this.nextQueueOrder);
+  }
+  /** Safe to call after persistence, slot changes or task/prerequisite changes. */
+  dispatchQueued(): void {
+    if (this.closing || this.dispatchScheduled) return;
+    this.dispatchScheduled = true;
+    queueMicrotask(() => {
+      this.dispatchScheduled = false;
+      if (this.closing) return;
+      const tasks = this.state()
+        .tasks.filter(
+          (task) => !task.example && queuedFollowups(task).length > 0,
+        )
+        .sort(
+          (a, b) =>
+            (queuedFollowups(a)[0].queueOrder ?? Number.MAX_SAFE_INTEGER) -
+              (queuedFollowups(b)[0].queueOrder ?? Number.MAX_SAFE_INTEGER) ||
+            (
+              queuedFollowups(a)[0].queuedAt ?? queuedFollowups(a)[0].at
+            ).localeCompare(
+              queuedFollowups(b)[0].queuedAt ?? queuedFollowups(b)[0].at,
+            ),
+        );
+      for (const task of tasks) {
+        if (
+          isActive(task) ||
+          this.children.has(task.id) ||
+          this.preparations.has(task.id) ||
+          this.startingQueued.has(task.id)
+        )
+          continue;
+        if (
+          this.state().fleetConflicts.some(
+            (conflict) =>
+              conflict.status === "open" && conflict.taskIds.includes(task.id),
+          )
+        ) {
+          settleFollowupQueue(task, "paused");
+          void this.changed();
+          continue;
+        }
+        if (
+          (task.dependsOn ?? []).some(
+            (id) =>
+              this.state().tasks.find((item) => item.id === id)?.stage !==
+              "done",
+          )
+        )
+          continue;
+        if (
+          this.state().tasks.filter((item) => !item.example && isActive(item))
+            .length >= this.state().settings.maxWorkers
+        )
+          break;
+        const project = this.state().projects.find(
+          (item) => item.id === task.projectId,
+        );
+        if (!project) {
+          settleFollowupQueue(task, "paused");
+          void this.changed();
+          continue;
+        }
+        this.startingQueued.add(task.id);
+        void this.start(task, project)
+          .catch(async (error) => {
+            if (settleFollowupQueue(task, "paused")) {
+              this.message(
+                task,
+                "system",
+                `Queued follow-up paused: ${(error as Error).message}`,
+              );
+              await this.changed();
+            }
+          })
+          .finally(() => {
+            this.startingQueued.delete(task.id);
+            this.dispatchQueued();
+          });
+      }
+    });
   }
   private message(task: WorkItem, role: Message["role"], text: string): void {
     if (
@@ -605,33 +702,40 @@ export class WorkerManager {
           task.run.error =
             error?.message || stderr || `Harness exited with code ${code}`;
         if (stderr) this.message(task, "tool", stderr);
+        let cleanupFailed = false;
         try {
           // Review is backed by the worker's reservation journal, never the epic's combined diff.
           task.diff = undefined;
           await this.collectArtifacts(task, project);
           await this.fleet.after(project, task);
         } catch (e) {
+          cleanupFailed = true;
           this.message(
             task,
             "system",
             `Result collection needs attention: ${(e as Error).message}`,
           );
         }
-        await this.fleet
-          .release(project, task)
-          .catch((error) =>
-            this.message(
-              task,
-              "system",
-              `Fleet release needs attention: ${error.message}`,
-            ),
+        await this.fleet.release(project, task).catch((error) => {
+          cleanupFailed = true;
+          this.message(
+            task,
+            "system",
+            `Fleet release needs attention: ${error.message}`,
           );
+        });
         if (
           this.state().fleetConflicts.some(
             (item) => item.status === "open" && item.taskIds.includes(task.id),
           )
         )
           task.run.state = "blocked";
+        if (
+          task.run.state === "failed" ||
+          task.run.state === "blocked" ||
+          cleanupFailed
+        )
+          settleFollowupQueue(task, "paused");
         this.message(
           task,
           "system",
@@ -646,6 +750,7 @@ export class WorkerManager {
         } finally {
           this.children.delete(task.id);
           finish();
+          this.dispatchQueued();
         }
       };
       child.once("error", (error) => void settle(null, error));
@@ -674,12 +779,19 @@ export class WorkerManager {
       if (cancelled || error instanceof FleetBlocked)
         task.stage = task.run.workspace ? "review" : "planned";
       await this.fleet.release(project, task).catch(() => {});
+      settleFollowupQueue(task, "paused");
       this.message(task, "system", (error as Error).message);
       await this.changed();
+      this.dispatchQueued();
       throw error;
     }
   }
-  async stop(id: string): Promise<void> {
+  async stop(
+    id: string,
+    queueState: "paused" | "cancelled" = "cancelled",
+  ): Promise<void> {
+    const item = this.state().tasks.find((task) => task.id === id);
+    if (item && settleFollowupQueue(item, queueState)) await this.changed();
     const entry = this.children.get(id);
     if (!entry) {
       const resources = this.preparations.get(id);
@@ -796,6 +908,6 @@ export class WorkerManager {
     const ids = new Set([...this.children.keys(), ...this.preparations.keys()]);
     for (const task of this.state().tasks)
       if (task.run.state === "preparing") ids.add(task.id);
-    await Promise.allSettled([...ids].map((id) => this.stop(id)));
+    await Promise.allSettled([...ids].map((id) => this.stop(id, "paused")));
   }
 }

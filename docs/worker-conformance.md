@@ -104,9 +104,42 @@ unchecked comments remain unchecked after workspace refreshes. Unread user
 follow-ups survive both the recent-15-message prompt window and the 250-message
 output retention policy. `promptedAt` means included in a successfully spawned
 brief, not read or applied. Messages received after that snapshot stay pending,
-and preparation/spawn failures do not mark them included. Sending during an
-active run saves the follow-up; the UI explicitly asks the user to resume after
-the current run, rather than promising an automatic second run.
+and preparation/spawn failures do not mark them included. The later automatic
+queue implementation supersedes this run's initial manual-resume behavior:
+explicit Send during an active run now authorizes a next pass after cleanup.
+Saving comments and staging them remain separate from that authorization.
+
+### Automatic continuation while busy
+
+`node --import tsx scripts/live-queued-followups.mjs` verifies genuine two-pass
+delivery with each installed model. The first pass opens a bounded loopback
+browser request whose response is held by the test driver. While the original
+worker is waiting, the driver selects source text, saves a comment, stages it
+and clicks the normal Send action. It checks that the message is queued and the
+original run identity has not changed, then releases the browser response.
+
+In the completed run, **Claude Code (haiku), Cursor (composer-2.5) and Codex
+(gpt-6-luna) all passed**. Each original finished with its source unchanged; a
+distinct second run started automatically, applied the selected edit and
+preserved the other sentence. Each receipt contained the original quote,
+selection offsets and source version. The message was included once. The driver
+never called Resume or `startWorker` for those second passes.
+
+Evidence:
+`../memcode-queue-lab-b494be94/.memcode/evidence/queued-followups.json`.
+The loaded browser gate pages are test fixtures, not ongoing development servers.
+The earlier foreground-command gate was denied by Claude Code's sandbox before
+it could test busy continuation; that failed attempt remains recorded separately
+under `../memcode-queue-lab/.memcode/evidence/queued-followups.json`. The completed
+test used an independent browser workload, without retrying the denied command or
+changing permissions.
+
+The deterministic suite totals 111 passing tests, including actual fixture
+processes for coalescing, FIFO capacity waits, cancellation, process and
+preparation failures, restart handling and messages arriving after a prompt
+snapshot. These are separate from the six real model passes above. The native
+Tauri smoke check and release build also pass. This establishes the exercised
+Windows queue workflow, not general model correctness or every possible workload.
 
 The evidence is generated locally, outside this repository:
 
