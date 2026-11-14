@@ -35,6 +35,9 @@ import type { ContextPack } from "./context/contracts";
 import type { AgentBrowserManager } from "./browser/manager";
 import { workerToolProfile, type WorkerToolProfile } from "./worker-profile";
 import { watchArtifacts } from "./artifact-watch";
+import { WorkerInputs } from "./worker-input";
+import { startHarnessSession } from "./agents";
+import type { AgentEvent } from "./agents/types";
 import {
   claimReviewContext,
   releaseReviewClaims,
@@ -46,6 +49,26 @@ import {
   queuedFollowups,
   settleFollowupQueue,
 } from "./followup-queue";
+
+async function closeWithin(
+  action: Promise<unknown> | undefined,
+  label: string,
+) {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      action,
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} did not close within 10 seconds.`)),
+          10000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export function harnessArgs(
   id: WorkItem["harness"],
@@ -159,6 +182,7 @@ export function eventMessage(
 }
 
 export class WorkerManager {
+  readonly inputs: WorkerInputs;
   readonly fleet: FleetCoordinator;
   private workspaces: EpicWorkspace;
   private cancelled = new Set<string>();
@@ -168,7 +192,12 @@ export class WorkerManager {
   private nextQueueOrder = 0;
   private children = new Map<
     string,
-    { child: ChildProcess; heartbeat?: NodeJS.Timeout; done: Promise<void> }
+    {
+      child: ChildProcess;
+      heartbeat?: NodeJS.Timeout;
+      done: Promise<void>;
+      stop?(): void | Promise<void>;
+    }
   >();
   private preparations = new Map<string, { cancel(): Promise<void> }>();
   constructor(
@@ -184,7 +213,9 @@ export class WorkerManager {
     > = discoverHarnesses,
     private readonly browsers?: AgentBrowserManager,
     private readonly terminals?: TerminalManager,
+    private readonly sessionFactory: typeof startHarnessSession = startHarnessSession,
   ) {
+    this.inputs = new WorkerInputs(state, changed);
     for (const task of state().tasks)
       for (const message of task.messages)
         this.nextQueueOrder = Math.max(
@@ -299,6 +330,68 @@ export class WorkerManager {
       task.messages = retainReviewContext(task.messages);
     task.updatedAt = now();
   }
+  private async hostActivity<T>(
+    task: WorkItem,
+    label: string,
+    action: () => Promise<T>,
+  ): Promise<T> {
+    const runId = task.run.changeRunId;
+    const current = () =>
+      task.run.changeRunId === runId &&
+      isActive(task) &&
+      task.run.state !== "stopping";
+    if (
+      !this.state().workerInputs?.some(
+        (input) => input.taskId === task.id && input.status === "pending",
+      )
+    )
+      task.run.activity = { phase: "tool", label, at: now() };
+    await this.changed();
+    try {
+      const result = await action();
+      const value = result as Record<string, unknown> | null;
+      const waiting =
+        value && ["wait", "adhere", "defer"].includes(String(value.directive));
+      const owner = waiting
+        ? this.state().tasks.find((item) => item.id === value.ownerTaskId)
+        : undefined;
+      if (
+        current() &&
+        !this.state().workerInputs?.some(
+          (input) => input.taskId === task.id && input.status === "pending",
+        )
+      )
+        task.run.activity = {
+          phase: waiting ? "waiting_for_worker" : "working",
+          label: waiting
+            ? `Waiting for ${owner?.identifier ?? "an earlier Fleet worker"} to hand off`
+            : `${label} · completed`,
+          at: now(),
+          ...(owner ? { relatedTaskId: owner.id } : {}),
+        };
+      await this.changed();
+      return result;
+    } catch (error) {
+      if (!current()) throw error;
+      this.message(
+        task,
+        "tool",
+        `${label} failed\n${(error as Error).message}`,
+      );
+      if (
+        !this.state().workerInputs?.some(
+          (input) => input.taskId === task.id && input.status === "pending",
+        )
+      )
+        task.run.activity = {
+          phase: "working",
+          label: `${label} failed · worker notified`,
+          at: now(),
+        };
+      await this.changed();
+      throw error;
+    }
+  }
   async start(task: WorkItem, project: Project): Promise<void> {
     if (this.closing) throw new Error("The workspace is closing.");
     if (task.example || !project.path)
@@ -336,6 +429,13 @@ export class WorkerManager {
       error: undefined,
       startedAt: now(),
       finishedAt: undefined,
+      exitCode: undefined,
+      sessionId: undefined,
+      activity: {
+        phase: "working",
+        label: "Preparing worker context",
+        at: now(),
+      },
     };
     await this.changed();
     let contextSession: ContextSession | undefined;
@@ -521,20 +621,28 @@ export class WorkerManager {
             ...(this.terminals
               ? {
                   terminal: (request) =>
-                    this.terminals!.execute(task.id, request, "worker"),
+                    this.hostActivity(
+                      task,
+                      `Terminal · ${request.action === "start" ? request.label : request.action}`,
+                      () => this.terminals!.execute(task.id, request, "worker"),
+                    ),
                 }
               : {}),
             coordination: (request) =>
-              this.fleet.coordinate(
-                project,
-                task,
-                request,
-                cancelledPreparation.signal,
+              this.hostActivity(task, `Fleet · ${request.action}`, () =>
+                this.fleet.coordinate(
+                  project,
+                  task,
+                  request,
+                  cancelledPreparation.signal,
+                ),
               ),
             ...(this.browsers
               ? {
                   browser: (request) =>
-                    this.browsers!.execute(task.id, request, "worker"),
+                    this.hostActivity(task, `Browser · ${request.action}`, () =>
+                      this.browsers!.execute(task.id, request, "worker"),
+                    ),
                 }
               : {}),
           },
@@ -638,26 +746,100 @@ export class WorkerManager {
         },
       );
       this.browsers?.attach(task.id, task.harness, join(workspace, workerRoot));
-      const child = spawn(
-        command.command,
-        [...command.prefix, ...invocation.args],
-        {
-          cwd: workspace,
-          shell: false,
-          windowsHide: true,
-          detached: process.platform !== "win32",
-          env: {
-            ...childEnv(),
-            ...command.env,
-            ...toolProfile.env,
-            MEMTRACE_AGENT_ID: `memcode:${task.id}`,
-            MEMCODE_TASK_ID: task.id,
-            MEMCODE_EPIC_BRANCH: task.run.branch,
-            MEMCODE_ARTIFACT_DIR: join(workspace, artifactRoot),
-          },
-          stdio: ["pipe", "pipe", "pipe"],
+      let reportedFailure: Error | undefined,
+        eventSave: NodeJS.Timeout | undefined,
+        settled = false;
+      const saveEvent = () => {
+        if (!eventSave)
+          eventSave = setTimeout(() => {
+            eventSave = undefined;
+            void this.changed();
+          }, 100);
+      };
+      const onEvent = (event: AgentEvent) => {
+        if (settled) return;
+        if (event.type === "raw") return;
+        if (event.type === "prompted") {
+          markReviewContext(task.messages, conversation, now());
+          saveEvent();
+          return;
+        }
+        if (event.type === "session") task.run.sessionId = event.sessionId;
+        if (event.type === "message") {
+          const existing = event.messageId
+            ? task.messages.find(
+                (message) => message.streamId === event.messageId,
+              )
+            : event.delta && task.messages.at(-1)?.role === event.role
+              ? task.messages.at(-1)
+              : undefined;
+          if (existing)
+            existing.text = (
+              event.delta ? existing.text + event.text : event.text
+            ).slice(-30000);
+          else if (event.text) {
+            this.message(task, event.role, event.text);
+            if (event.messageId)
+              task.messages.at(-1)!.streamId = event.messageId;
+          }
+        }
+        if (event.type === "error") {
+          this.message(task, "system", event.message);
+          if (event.fatal) reportedFailure = new Error(event.message);
+        }
+        const waiting = this.state().workerInputs?.some(
+          (input) =>
+            input.taskId === task.id &&
+            input.runId === task.run.changeRunId &&
+            input.status === "pending",
+        );
+        if (!waiting)
+          task.run.activity = {
+            phase:
+              event.type === "activity"
+                ? event.phase === "waiting"
+                  ? "working"
+                  : (event.phase ?? "working")
+                : "working",
+            label:
+              event.type === "activity"
+                ? event.label
+                : event.type === "error"
+                  ? event.message
+                  : event.type === "message" && event.role === "tool"
+                    ? "Tool result received"
+                    : "Worker is responding",
+            at: now(),
+            ...(event.type === "activity" && event.toolId
+              ? { toolId: event.toolId }
+              : {}),
+          };
+        saveEvent();
+      };
+      const session = this.sessionFactory(task.harness, {
+        command,
+        cwd: workspace,
+        model: task.route.model,
+        effort: task.route.effort,
+        localModel: this.state().settings.localModel,
+        prompt,
+        briefPath,
+        contextConfig,
+        toolArgs: toolProfile.args,
+        env: {
+          ...childEnv(),
+          ...command.env,
+          ...toolProfile.env,
+          MEMTRACE_AGENT_ID: `memcode:${task.id}`,
+          MEMCODE_TASK_ID: task.id,
+          MEMCODE_EPIC_BRANCH: task.run.branch,
+          MEMCODE_ARTIFACT_DIR: join(workspace, artifactRoot),
         },
-      );
+        onEvent,
+        requestInput: (request, signal) =>
+          this.inputs.ask(task, request, signal),
+      });
+      const child = session.child;
       let finish!: () => void;
       const done = new Promise<void>((resolve) => {
         finish = resolve;
@@ -666,6 +848,7 @@ export class WorkerManager {
         child,
         done,
         heartbeat,
+        stop: () => session.stop(),
       };
       this.children.set(task.id, entry);
       task.run.state = "running";
@@ -675,110 +858,121 @@ export class WorkerManager {
         "system",
         `Story worker joined the epic Fleet.\n${task.run.branch}\nWorkers share this branch and coordinate through Memtrace. Unresolved overlaps pause the fleet for a human decision.`,
       );
-      const lines = createInterface({ input: child.stdout! });
-      lines.on("line", (line) => {
-        try {
-          const event = JSON.parse(line);
-          if (event.type === "thread.started")
-            task.run.sessionId = event.thread_id;
-          const message = eventMessage(event);
-          if (message?.text) {
-            this.message(task, message.role, message.text);
-            void this.changed();
-          }
-        } catch {
-          if (line.trim()) {
-            this.message(task, "tool", line);
-            void this.changed();
-          }
-        }
-      });
       let stderr = "";
-      child.stderr!.on("data", (chunk) => {
-        stderr = (stderr + chunk.toString()).slice(-16000);
-      });
-      let settled = false;
       const settle = async (code: number | null, error?: Error) => {
         if (settled) return;
         settled = true;
-        releaseReviewClaims(task.messages, conversation);
-        stopHeartbeat();
-        await closeArtifacts?.();
-        await closeContext();
-        await pendingHeartbeat?.catch(() => {});
-        lines.close();
-        const stopped = task.run.state === "stopping";
-        task.run.state = stopped
-          ? "stopped"
-          : error || code !== 0
-            ? "failed"
-            : "finished";
-        task.run.exitCode = code ?? undefined;
-        task.run.finishedAt = now();
-        task.stage = "review";
-        if (error || (!stopped && code !== 0))
-          task.run.error =
-            error?.message || stderr || `Harness exited with code ${code}`;
-        if (stderr) this.message(task, "tool", stderr);
-        let cleanupFailed = false;
         try {
-          // Review is backed by the worker's reservation journal, never the epic's combined diff.
-          task.diff = undefined;
-          await this.collectArtifacts(task, project);
-          await this.fleet.after(project, task);
-        } catch (e) {
-          cleanupFailed = true;
-          this.message(
-            task,
-            "system",
-            `Result collection needs attention: ${(e as Error).message}`,
-          );
-        }
-        await this.fleet.release(project, task).catch((error) => {
-          cleanupFailed = true;
-          this.message(
-            task,
-            "system",
-            `Fleet release needs attention: ${error.message}`,
-          );
-        });
-        if (
-          this.state().fleetConflicts.some(
-            (item) => item.status === "open" && item.taskIds.includes(task.id),
-          )
-        )
-          task.run.state = "blocked";
-        if (
-          task.run.state === "failed" ||
-          task.run.state === "blocked" ||
-          cleanupFailed
-        )
-          settleFollowupQueue(task, "paused");
-        this.message(
-          task,
-          "system",
-          stopped
-            ? "Worker stopped. Shared epic changes and this worker’s output are preserved."
-            : task.run.state === "finished"
-              ? "Worker finished. Review the actual changes and checks before marking this work done."
-              : "Worker needs attention. Shared changes and worker logs have been preserved.",
-        );
-        try {
+          clearTimeout(eventSave);
+          this.inputs.cancelTask(task.id);
+          error ??= reportedFailure;
+          task.run.exitCode = code ?? undefined;
+          task.run.activity = {
+            phase: "finishing",
+            label: "Worker turn ended · collecting changes and releasing Fleet",
+            at: now(),
+          };
           await this.changed();
+          releaseReviewClaims(task.messages, conversation);
+          stopHeartbeat();
+          const closeErrors: string[] = [];
+          await closeWithin(closeArtifacts?.(), "Artifact watcher").catch(
+            (error) => closeErrors.push(error.message),
+          );
+          await closeWithin(closeContext(), "Worker tool session").catch(
+            (error) => closeErrors.push(error.message),
+          );
+          await pendingHeartbeat?.catch(() => {});
+          const stopped = task.run.state === "stopping";
+          task.run.state = stopped
+            ? "stopped"
+            : error || code !== 0
+              ? "failed"
+              : "finished";
+          task.run.exitCode = code ?? undefined;
+          task.run.finishedAt = now();
+          task.stage = "review";
+          if (error || (!stopped && code !== 0))
+            task.run.error =
+              error?.message || stderr || `Harness exited with code ${code}`;
+          if (stderr) this.message(task, "tool", stderr);
+          let cleanupFailed = closeErrors.length > 0;
+          if (closeErrors.length)
+            this.message(task, "system", closeErrors.join("\n"));
+          try {
+            // Review is backed by the worker's reservation journal, never the epic's combined diff.
+            task.diff = undefined;
+            await this.collectArtifacts(task, project);
+            await this.fleet.after(project, task);
+          } catch (e) {
+            cleanupFailed = true;
+            this.message(
+              task,
+              "system",
+              `Result collection needs attention: ${(e as Error).message}`,
+            );
+          }
+          await this.fleet.release(project, task).catch((error) => {
+            cleanupFailed = true;
+            this.message(
+              task,
+              "system",
+              `Fleet release needs attention: ${error.message}`,
+            );
+          });
+          if (
+            this.state().fleetConflicts.some(
+              (item) =>
+                item.status === "open" && item.taskIds.includes(task.id),
+            )
+          )
+            task.run.state = "blocked";
+          if (
+            task.run.state === "failed" ||
+            task.run.state === "blocked" ||
+            cleanupFailed
+          )
+            settleFollowupQueue(task, "paused");
+          this.message(
+            task,
+            "system",
+            stopped
+              ? "Worker stopped. Shared epic changes and this worker’s output are preserved."
+              : task.run.state === "finished"
+                ? "Worker finished. Review the actual changes and checks before marking this work done."
+                : "Worker needs attention. Shared changes and worker logs have been preserved.",
+          );
+          try {
+            await this.changed();
+          } finally {
+            this.children.delete(task.id);
+            finish();
+            this.dispatchQueued();
+          }
+        } catch (failure) {
+          task.run.state = task.run.state === "stopping" ? "stopped" : "failed";
+          task.run.finishedAt = now();
+          task.run.error = `Result collection needs attention: ${(failure as Error).message}`;
+          task.stage = "review";
+          settleFollowupQueue(task, "paused");
+          this.message(task, "system", task.run.error);
+          await this.changed().catch(() => {});
         } finally {
+          stopHeartbeat();
+          this.inputs.cancelTask(task.id);
           this.children.delete(task.id);
           finish();
           this.dispatchQueued();
         }
       };
-      child.once("error", (error) => void settle(null, error));
-      child.once("close", (code) => void settle(code));
-      child.once("spawn", () => {
-        markReviewContext(task.messages, conversation, now());
-        void this.changed();
-      });
-      child.stdin!.on("error", () => {});
-      child.stdin!.end(invocation.stdin ?? undefined);
+      void session.completion
+        .then((result) =>
+          settle(
+            result.exitCode,
+            result.error ? new Error(result.error) : undefined,
+          ),
+        )
+        .catch((error) => settle(null, error as Error));
       await this.changed();
     } catch (error) {
       releaseReviewClaims(task.messages, conversation);
@@ -809,6 +1003,7 @@ export class WorkerManager {
     id: string,
     queueState: "paused" | "cancelled" = "cancelled",
   ): Promise<void> {
+    this.inputs.cancelTask(id);
     const item = this.state().tasks.find((task) => task.id === id);
     if (item && settleFollowupQueue(item, queueState)) await this.changed();
     const entry = this.children.get(id);
@@ -836,7 +1031,15 @@ export class WorkerManager {
       return;
     }
     task.run.state = "stopping";
+    task.run.activity = {
+      phase: "finishing",
+      label: "Stopping worker",
+      at: now(),
+    };
     await this.changed();
+    void Promise.resolve()
+      .then(() => entry.stop?.())
+      .catch(() => {});
     if (entry.child.pid) {
       if (process.platform === "win32") {
         const killer = spawn(

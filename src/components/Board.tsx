@@ -319,6 +319,9 @@ export function WorkBoard({
                   </div>
                 </div>
                 <h4>{task.title}</h4>
+                {task.run.activity?.phase === "waiting_for_user" && (
+                  <span className="worker-needs-input">Waiting for you</span>
+                )}
                 <p className="card-description">{task.description}</p>
                 <div className="card-tags">
                   <span className={`category ${task.category.toLowerCase()}`}>

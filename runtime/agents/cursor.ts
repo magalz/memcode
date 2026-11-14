@@ -1,0 +1,676 @@
+import { spawn, execFile } from "node:child_process";
+import { createInterface } from "node:readline";
+import { readFile } from "node:fs/promises";
+import { promisify } from "node:util";
+import { join } from "node:path";
+import type { AgentSession, AgentSessionOptions } from "./types";
+import type {
+  WorkerInputOption,
+  WorkerInputPrompt,
+  WorkerInputResponse,
+} from "../../src/worker-input";
+
+type Json = Record<string, any>;
+type RpcId = string | number;
+const execute = promisify(execFile);
+const record = (value: unknown): Json =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Json)
+    : {};
+const array = (value: unknown): Json[] =>
+  Array.isArray(value) ? value.map(record) : [];
+const text = (value: unknown): string =>
+  typeof value === "string" ? value : "";
+const hasId = (message: Json): boolean =>
+  typeof message.id === "number" || typeof message.id === "string";
+const permissionKind = (kind: string): WorkerInputOption["kind"] =>
+  kind === "allow_once"
+    ? "allow-once"
+    : kind === "allow_always"
+      ? "allow-session"
+      : kind.startsWith("reject")
+        ? "deny"
+        : "other";
+const contentText = (content: unknown): string =>
+  array(content)
+    .map((item) => {
+      if (item.type === "content") return text(item.content?.text);
+      if (item.type === "diff")
+        return `${text(item.path)}\n--- Before\n${text(item.oldText)}\n+++ After\n${text(item.newText)}`;
+      return text(item.text);
+    })
+    .filter(Boolean)
+    .join("\n");
+
+/** ACP advertises canonical variant values, unlike the CLI's shorthand aliases. */
+export function cursorModelValue(
+  requested: string,
+  choices: Json[],
+): string | undefined {
+  const flat = choices.flatMap((choice) =>
+    Array.isArray(choice.options) ? array(choice.options) : [choice],
+  );
+  const exact = flat.find((choice) => choice.value === requested);
+  if (exact) return text(exact.value);
+  const byName = flat.filter(
+    (choice) => text(choice.name).toLowerCase() === requested.toLowerCase(),
+  );
+  if (byName.length === 1) return text(byName[0].value);
+  const fast = requested.endsWith("-fast"),
+    withoutFast = requested.replace(/-fast$/, "");
+  const effort = /^(.*)-(low|medium|high|xhigh|max|none)$/.exec(withoutFast);
+  const base = (effort?.[1] ?? withoutFast).replace(/^cursor-(?=grok-)/, "");
+  const matches = flat.filter((choice) => {
+    const value = text(choice.value),
+      match = /^([^\[]+)\[([^\]]*)\]$/.exec(value);
+    if (
+      !match ||
+      (match[1] !== base && !(base === "auto" && match[1] === "default"))
+    )
+      return false;
+    const parameters = Object.fromEntries(
+      match[2]
+        .split(",")
+        .filter(Boolean)
+        .map((entry) => entry.split("=")),
+    );
+    return (
+      (!fast || parameters.fast === "true") &&
+      (!effort ||
+        [
+          parameters.effort,
+          parameters.reasoning,
+          parameters.reasoning_effort,
+        ].includes(effort[2]))
+    );
+  });
+  return matches.length === 1 ? text(matches[0].value) : undefined;
+}
+
+async function sessionServers(path?: string): Promise<Json[]> {
+  if (!path) return [];
+  const configuration = JSON.parse(await readFile(path, "utf8"));
+  return Object.entries(record(configuration.mcpServers)).map(
+    ([name, value]) => {
+      const server = record(value);
+      if (typeof server.command === "string")
+        return {
+          name,
+          command: server.command,
+          args: Array.isArray(server.args) ? server.args : [],
+          env: Object.entries(record(server.env)).map(([name, value]) => ({
+            name,
+            value: String(value),
+          })),
+          ...(typeof server.cwd === "string" ? { cwd: server.cwd } : {}),
+        };
+      if (typeof server.url === "string")
+        return {
+          name,
+          type: server.type === "sse" ? "sse" : "http",
+          url: server.url,
+          headers: Object.entries(record(server.headers)).map(
+            ([name, value]) => ({ name, value: String(value) }),
+          ),
+        };
+      throw Error(
+        `The Cursor context server ${name} has no supported transport.`,
+      );
+    },
+  );
+}
+
+/** Native ACP keeps stdin open for bound, bidirectional approval replies. */
+export function startCursorSession(options: AgentSessionOptions): AgentSession {
+  // Existing profile/plugin arguments are retained. Execution bypasses and print
+  // formats are deliberately not compatible with an interactive approval client.
+  const toolArgs: string[] = [];
+  for (let i = 0; i < options.toolArgs.length; i++) {
+    const arg = options.toolArgs[i];
+    if (
+      [
+        "--force",
+        "--yolo",
+        "--auto-review",
+        "-f",
+        "-p",
+        "--print",
+        "--stream-partial-output",
+      ].includes(arg)
+    )
+      continue;
+    if (arg === "--output-format") {
+      i++;
+      continue;
+    }
+    if (arg.startsWith("--output-format=")) continue;
+    toolArgs.push(arg);
+  }
+  const child = spawn(
+    options.command.command,
+    [
+      ...options.command.prefix,
+      ...toolArgs,
+      "--workspace",
+      options.cwd,
+      ...(options.model ? ["--model", options.model] : []),
+      "acp",
+    ],
+    {
+      cwd: options.cwd,
+      env: { ...options.env, ...options.command.env },
+      shell: false,
+      windowsHide: true,
+      detached: process.platform !== "win32",
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
+  let sessionId = "",
+    nextId = 0,
+    stderr = "",
+    messageNumber = 0,
+    assistantId: string | undefined,
+    ended = false,
+    stopped = false;
+  let settle!: (value: { exitCode: number | null; error?: string }) => void;
+  const completion = new Promise<{ exitCode: number | null; error?: string }>(
+    (resolve) => {
+      settle = resolve;
+    },
+  );
+  const pending = new Map<
+    RpcId,
+    {
+      method: string;
+      resolve(value: Json): void;
+      reject(error: Error): void;
+      timer?: NodeJS.Timeout;
+    }
+  >();
+  const inputs = new Map<RpcId, () => void>();
+  const toolTitles = new Map<string, string>();
+  const emit = options.onEvent;
+  const flush = () => {
+    assistantId = undefined;
+  };
+  const write = (message: Json) => {
+    if (child.stdin?.writable && !child.stdin.destroyed)
+      child.stdin.write(JSON.stringify(message) + "\n");
+  };
+  const respond = (id: RpcId, result: Json) =>
+    write({ jsonrpc: "2.0", id, result });
+  const request = (
+    method: string,
+    params: Json,
+    timeoutMs = 30_000,
+  ): Promise<Json> =>
+    new Promise((resolve, reject) => {
+      if (ended || stopped) {
+        reject(Error("Cursor session is closed."));
+        return;
+      }
+      const id = ++nextId;
+      const timer = timeoutMs
+        ? setTimeout(() => {
+            pending.delete(id);
+            reject(Error(`Cursor did not answer ${method} in time.`));
+          }, timeoutMs)
+        : undefined;
+      pending.set(id, { method, resolve, reject, timer });
+      write({ jsonrpc: "2.0", id, method, params });
+    });
+  const rejectPending = (reason: string) => {
+    for (const call of pending.values()) {
+      clearTimeout(call.timer);
+      call.reject(Error(reason));
+    }
+    pending.clear();
+  };
+  const shutdown = async () => {
+    for (const cancel of [...inputs.values()]) cancel();
+    if (sessionId && stopped)
+      write({
+        jsonrpc: "2.0",
+        method: "session/cancel",
+        params: { sessionId },
+      });
+    child.stdin?.end();
+    if (child.exitCode !== null || child.signalCode !== null || !child.pid)
+      return;
+    let timer: NodeJS.Timeout | undefined;
+    await Promise.race([
+      new Promise<void>((done) => child.once("close", () => done())),
+      new Promise<void>((done) => {
+        timer = setTimeout(done, 750);
+      }),
+    ]);
+    clearTimeout(timer);
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    if (process.platform === "win32") {
+      await execute(
+        join(
+          process.env.SystemRoot ?? "C:\\Windows",
+          "System32",
+          "taskkill.exe",
+        ),
+        ["/PID", String(child.pid), "/T", "/F"],
+        { windowsHide: true, timeout: 5000, maxBuffer: 16000 },
+      ).catch(() => {
+        child.kill();
+      });
+    } else {
+      try {
+        process.kill(-child.pid, "SIGTERM");
+      } catch {
+        child.kill("SIGTERM");
+      }
+      // The owned process group includes a possible npm launcher/native child.
+      const hard = setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) {
+          try {
+            process.kill(-child.pid!, "SIGKILL");
+          } catch {
+            child.kill("SIGKILL");
+          }
+        }
+      }, 1000);
+      hard.unref();
+      child.once("close", () => clearTimeout(hard));
+    }
+  };
+  const finish = async (value: { exitCode: number | null; error?: string }) => {
+    if (ended) return;
+    ended = true;
+    flush();
+    rejectPending(value.error ?? "Cursor turn completed.");
+    await shutdown();
+    lines.close();
+    settle(value);
+  };
+  const ask = async (
+    id: RpcId,
+    prompt: WorkerInputPrompt,
+    convert: (response: WorkerInputResponse) => Json,
+  ) => {
+    flush();
+    const controller = new AbortController();
+    if (inputs.has(id)) {
+      write({
+        jsonrpc: "2.0",
+        id,
+        error: { code: -32600, message: "Duplicate pending request id." },
+      });
+      return;
+    }
+    const cancel = () => {
+      if (inputs.get(id) !== cancel) return;
+      inputs.delete(id);
+      controller.abort();
+      respond(id, { outcome: { outcome: "cancelled" } });
+    };
+    inputs.set(id, cancel);
+    emit({ type: "activity", label: prompt.title, phase: "waiting" });
+    try {
+      const answer = await options.requestInput(prompt, controller.signal);
+      if (inputs.get(id) !== cancel) return; // A stale answer never targets a reused native id.
+      inputs.delete(id);
+      respond(
+        id,
+        answer.cancelled || stopped
+          ? { outcome: { outcome: "cancelled" } }
+          : convert(answer),
+      );
+      emit({
+        type: "activity",
+        label: inputs.size
+          ? "Cursor needs your input."
+          : "Cursor is continuing…",
+        phase: inputs.size ? "waiting" : "working",
+      });
+    } catch {
+      cancel();
+    }
+  };
+  const permission = (id: RpcId, params: Json) => {
+    const tool = record(params.toolCall),
+      choices = array(params.options);
+    return ask(
+      id,
+      {
+        kind: "approval",
+        title: text(tool.title) || "Cursor needs permission",
+        toolName: text(tool.name) || text(tool.kind) || undefined,
+        description: text(tool.kind)
+          ? `Review this ${tool.kind} action before it runs.`
+          : undefined,
+        details:
+          [
+            contentText(tool.content),
+            tool.rawInput ? JSON.stringify(tool.rawInput, null, 2) : "",
+          ]
+            .filter(Boolean)
+            .join("\n\n") || undefined,
+        options: choices.map((choice) => ({
+          id: text(choice.optionId),
+          label: text(choice.name) || text(choice.optionId),
+          kind: permissionKind(text(choice.kind)),
+        })),
+      },
+      (answer) =>
+        choices.some((choice) => choice.optionId === answer.optionId)
+          ? { outcome: { outcome: "selected", optionId: answer.optionId } }
+          : { outcome: { outcome: "cancelled" } },
+    );
+  };
+  const question = (id: RpcId, params: Json) => {
+    const questions = array(params.questions);
+    return ask(
+      id,
+      {
+        kind: "question",
+        title: text(params.title) || "A question from Cursor",
+        questions: questions.map((question) => ({
+          id: text(question.id),
+          question: text(question.prompt),
+          multiple: question.allowMultiple === true,
+          allowText: false,
+          options: array(question.options).map((choice) => ({
+            id: text(choice.id),
+            label: text(choice.label) || text(choice.id),
+          })),
+        })),
+      },
+      (answer) => {
+        const answers = questions.map((question) => {
+          const raw = answer.answers?.[question.id],
+            selected = typeof raw === "string" ? [raw] : (raw ?? []);
+          const valid =
+            selected.length > 0 &&
+            (question.allowMultiple === true || selected.length === 1) &&
+            selected.every((id) =>
+              array(question.options).some((choice) => choice.id === id),
+            );
+          return valid
+            ? { questionId: question.id, selectedOptionIds: selected }
+            : null;
+        });
+        return answers.some((answer) => !answer)
+          ? { outcome: { outcome: "cancelled" } }
+          : { outcome: { outcome: "answered", answers } };
+      },
+    );
+  };
+  const plan = (id: RpcId, params: Json) =>
+    ask(
+      id,
+      {
+        kind: "plan",
+        title: text(params.name) || "Review Cursor’s plan",
+        description: text(params.overview) || undefined,
+        details: text(params.plan),
+        options: [
+          { id: "accept", label: "Approve plan", kind: "allow-once" },
+          { id: "reject", label: "Request a different plan", kind: "deny" },
+        ],
+      },
+      (answer) => ({
+        outcome:
+          answer.optionId === "accept"
+            ? { outcome: "accepted" }
+            : answer.optionId === "reject"
+              ? { outcome: "rejected", reason: "Plan rejected in MemCode." }
+              : { outcome: "cancelled" },
+      }),
+    );
+
+  const update = (params: Json) => {
+    if (sessionId && params.sessionId && params.sessionId !== sessionId) return;
+    const event = record(params.update);
+    if (event.sessionUpdate === "agent_message_chunk") {
+      const content = record(event.content);
+      const delta =
+        content.type === "text"
+          ? text(content.text)
+          : content.type === "resource_link"
+            ? `[${text(content.name) || text(content.uri)}](${text(content.uri)})`
+            : "";
+      if (delta) {
+        assistantId ??= `cursor:${sessionId}:${++messageNumber}`;
+        emit({
+          type: "message",
+          role: "assistant",
+          text: delta,
+          delta: true,
+          messageId: assistantId,
+        });
+      }
+      emit({
+        type: "activity",
+        label: "Cursor is responding…",
+        phase: "working",
+      });
+    } else if (
+      ["tool_call", "tool_call_update"].includes(event.sessionUpdate)
+    ) {
+      flush();
+      const id = text(event.toolCallId),
+        title =
+          text(event.title) ||
+          text(event.name) ||
+          toolTitles.get(id) ||
+          "Cursor tool";
+      toolTitles.set(id, title);
+      emit({ type: "activity", label: title, toolId: id, phase: "tool" });
+      const output = contentText(event.content).slice(-10000);
+      if (event.status === "failed") {
+        const message = `${title} failed${output ? ": " + output : "."}`;
+        emit({ type: "error", message, fatal: false });
+        emit({ type: "message", role: "tool", text: message });
+      } else if (event.status === "completed" && output)
+        emit({ type: "message", role: "tool", text: `${title}\n${output}` });
+    }
+  };
+  const incoming = (message: Json) => {
+    if (!message.method && hasId(message)) {
+      const call = pending.get(message.id);
+      if (!call) return;
+      pending.delete(message.id);
+      clearTimeout(call.timer);
+      if (message.error)
+        call.reject(
+          Error(
+            `Cursor ${call.method}: ${text(message.error.message) || "ACP request failed."}`,
+          ),
+        );
+      else call.resolve(record(message.result));
+      return;
+    }
+    if (message.method === "session/update") {
+      update(record(message.params));
+      return;
+    }
+    if (!hasId(message)) {
+      if (message.method === "cursor/update_todos") {
+        const todos = array(message.params?.todos);
+        const active = todos.find((todo) => todo.status === "in_progress");
+        if (active)
+          emit({
+            type: "activity",
+            label: text(active.content),
+            phase: "working",
+          });
+      }
+      return;
+    }
+    if (ended || stopped) {
+      respond(message.id, { outcome: { outcome: "cancelled" } });
+      return;
+    }
+    const params = record(message.params);
+    if (sessionId && params.sessionId && params.sessionId !== sessionId) {
+      write({
+        jsonrpc: "2.0",
+        id: message.id,
+        error: { code: -32602, message: "Wrong session." },
+      });
+      return;
+    }
+    if (message.method === "session/request_permission")
+      void permission(message.id, params);
+    else if (message.method === "cursor/ask_question")
+      void question(message.id, params);
+    else if (message.method === "cursor/create_plan")
+      void plan(message.id, params);
+    else
+      write({
+        jsonrpc: "2.0",
+        id: message.id,
+        error: { code: -32601, message: "Unsupported client method." },
+      });
+  };
+  const lines = createInterface({ input: child.stdout! });
+  lines.on("line", (line) => {
+    try {
+      incoming(record(JSON.parse(line)));
+    } catch {
+      emit({
+        type: "error",
+        message: "Cursor emitted an unreadable ACP message.",
+        fatal: false,
+      });
+    }
+  });
+  child.stdin?.on("error", () => {});
+  child.stderr?.on("data", (chunk) => {
+    stderr = (stderr + chunk.toString()).slice(-16000);
+  });
+  child.once("error", (error) => {
+    void finish({ exitCode: null, error: error.message });
+  });
+  child.once("close", (code) => {
+    if (!ended)
+      void finish({
+        exitCode: code,
+        ...(stopped
+          ? {}
+          : {
+              error:
+                stderr.trim() || "Cursor exited before completing this turn.",
+            }),
+      });
+  });
+
+  void (async () => {
+    try {
+      emit({
+        type: "activity",
+        label: "Connecting to Cursor…",
+        phase: "working",
+      });
+      const initialized = await request("initialize", {
+        protocolVersion: 1,
+        clientCapabilities: {
+          fs: { readTextFile: false, writeTextFile: false },
+          terminal: false,
+        },
+        clientInfo: { name: "memcode", version: "0.3.0" },
+      });
+      if (
+        array(initialized.authMethods).some(
+          (method) => method.id === "cursor_login",
+        )
+      )
+        await request("authenticate", { methodId: "cursor_login" });
+      const session = await request("session/new", {
+        cwd: options.cwd,
+        mcpServers: await sessionServers(options.contextConfig),
+      });
+      sessionId = text(session.sessionId);
+      if (!sessionId) throw Error("Cursor did not return a session identity.");
+      emit({ type: "session", sessionId });
+      let config = array(session.configOptions);
+      const model = config.find(
+        (option) => option.category === "model" || option.id === "model",
+      );
+      const requestedModel =
+        model && options.model
+          ? cursorModelValue(options.model, array(model.options))
+          : options.model;
+      if (model && options.model && !requestedModel)
+        throw Error(
+          `Cursor ACP does not advertise the requested model variant ${options.model}. Choose an available model before starting this worker.`,
+        );
+      if (
+        options.model &&
+        (model?.currentValue ?? session.models?.currentModelId) !==
+          requestedModel
+      ) {
+        if (model) {
+          const selected = await request("session/set_config_option", {
+            sessionId,
+            configId: model.id,
+            value: requestedModel,
+          });
+          config = array(selected.configOptions);
+        } else if (session.models)
+          await request("session/set_model", {
+            sessionId,
+            modelId: options.model,
+          });
+      }
+      const effort = config.find(
+        (option) =>
+          option.category === "thought_level" ||
+          /effort|reasoning/i.test(text(option.id)),
+      );
+      const effortChoices = array(effort?.options).flatMap((option) =>
+        Array.isArray(option.options) ? array(option.options) : [option],
+      );
+      const choice = effortChoices.find(
+        (choice) => String(choice.value).toLowerCase() === options.effort,
+      );
+      if (effort && choice && effort.currentValue !== choice.value)
+        await request("session/set_config_option", {
+          sessionId,
+          configId: effort.id,
+          value: choice.value,
+        });
+      if (
+        session.modes?.currentModeId !== "agent" &&
+        array(session.modes?.availableModes).some((mode) => mode.id === "agent")
+      )
+        await request("session/set_mode", { sessionId, modeId: "agent" });
+      emit({ type: "activity", label: "Cursor is working…", phase: "working" });
+      emit({ type: "prompted" });
+      const result = await request(
+        "session/prompt",
+        { sessionId, prompt: [{ type: "text", text: options.prompt }] },
+        0,
+      );
+      const reason = text(result.stopReason);
+      if (reason && !["end_turn", "cancelled"].includes(reason)) {
+        emit({
+          type: "error",
+          message: `Cursor stopped: ${reason}.`,
+          fatal: false,
+        });
+        await finish({ exitCode: 1, error: `Cursor stopped: ${reason}.` });
+      } else await finish({ exitCode: reason === "cancelled" ? null : 0 });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!stopped && !ended) emit({ type: "error", message, fatal: true });
+      await finish({
+        exitCode: stopped ? null : 1,
+        ...(stopped ? {} : { error: message }),
+      });
+    }
+  })();
+  return {
+    child,
+    completion,
+    stop: async () => {
+      stopped = true;
+      await finish({ exitCode: null });
+    },
+  };
+}

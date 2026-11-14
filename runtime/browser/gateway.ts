@@ -55,7 +55,7 @@ export async function runBrowserGateway(config: {
         const response = await fetch(endpoint, {
           method: "POST",
           redirect: "error",
-          signal: AbortSignal.timeout(120000),
+          signal: AbortSignal.timeout(35000),
           headers: {
             Authorization: "Bearer " + config.token,
             "Content-Type": "application/json",

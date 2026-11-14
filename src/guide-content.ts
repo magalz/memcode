@@ -127,6 +127,7 @@ export const guideArticles: GuideArticle[] = [
       "Ask for a focused implementation and appropriate checks. The worker can retrieve code context through MemCode’s Memtrace-backed tools.",
       "Send a follow-up from the composer. If the worker is busy, it queues an automatic next pass after cleanup.",
       "Use the card’s Queue tab to review, edit or cancel requests before they are picked up.",
+      "When a worker asks a question or requests approval, answer the Waiting for you panel at the top of its card. This replies directly to the same agent; it is separate from a queued follow-up.",
     ],
     note: "Saving an annotation and adding it to the composer do not send it. Send is the action that authorizes a worker pass.",
     related: ["queue", "annotations", "comments", "dictation"],

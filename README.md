@@ -39,6 +39,8 @@ MemCode then connects to the installed Memtrace engine to analyze it.
 - A persisted Now / Next / Later roadmap, epics, stories, source scope and cycle-checked prerequisites.
 - Project briefs, editable runbooks, conversations, worker status and change review.
 - Visible follow-up queues with edit/cancel until pickup, plus separate story discussions.
+- Native questions, approval choices and plan review in the card for Codex, Claude Code and Cursor, with replies sent to the same waiting session.
+- Delete stories, epics and cycles with a clear confirmation. Epic/cycle deletion preserves their stories; active workers must stop first.
 - Progressive project → approved worker → epic → story onboarding and a searchable, illustrated Docs tab.
 - Native folder selection and project creation. State stays in the local workspace
   directory (`%APPDATA%\MemCode` on Windows), preserving existing desktop data.

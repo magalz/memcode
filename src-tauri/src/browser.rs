@@ -54,9 +54,11 @@ mod windows {
     }
     fn apply_surface(surface: &Surface) -> Result<(), String> {
         let b = surface.bounds;
-        // Hidden pages paint only during a requested capture, clipped outside
-        // the client area. The selected card never flashes another worker's page.
-        let x = if !surface.visible && surface.capture.is_some() {
+        // Hidden worker pages need compositor frames for native captures and
+        // Playwright's actionability checks. Paint those short operations outside
+        // the client area without flashing another card or taking user focus.
+        let painting = surface.capture.is_some() || surface.busy.borrow().active.is_some();
+        let x = if !surface.visible && painting {
             -b.width - 100.0
         } else {
             b.x
@@ -70,7 +72,7 @@ mod windows {
             .map_err(|e| e.to_string())?;
         surface
             .view
-            .set_visible(surface.visible || surface.capture.is_some())
+            .set_visible(surface.visible || painting)
             .map_err(|e| e.to_string())
     }
     fn finish_capture(id: &str, generation: u64) {
@@ -378,7 +380,7 @@ mod windows {
                 }
             })
             .map_err(|e| e.to_string())?;
-            let result = tokio::time::timeout(std::time::Duration::from_secs(20), rx)
+            let result = tokio::time::timeout(std::time::Duration::from_secs(5), rx)
                 .await
                 .map_err(|_| "Native browser capture timed out".to_string())
                 .and_then(|reply| reply.map_err(|_| "Native browser capture closed".to_string()))
@@ -430,6 +432,8 @@ mod windows {
                                 busy.recent.pop_front();
                             }
                         }
+                        drop(busy);
+                        apply_surface(surface)?;
                         return Ok(Value::Null);
                     }
                     if method != "browser_surface" {

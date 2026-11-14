@@ -14,6 +14,7 @@ import { initialState } from "../src/seed";
 import { git, within } from "../runtime/local";
 import type { MemtraceEngine } from "../runtime/memtrace";
 import { approveFixtureWorker } from "./fixtures/worker-consent";
+import { startPrintFixtureSession } from "./fixtures/print-session";
 
 const at = "2026-11-14T19:00:00.000Z";
 const message = (id: string, role: Message["role"] = "assistant"): Message => ({
@@ -208,6 +209,9 @@ async function workerFixture(commandFails = false, preparationFails = false) {
         ],
       },
     ],
+    undefined,
+    undefined,
+    startPrintFixtureSession,
   );
   return {
     root,

@@ -10,6 +10,7 @@ import { WorkerManager } from "../runtime/workers";
 import type { MemtraceEngine } from "../runtime/memtrace";
 import type { WorkItem } from "../src/shared";
 import { approveFixtureWorker } from "./fixtures/worker-consent";
+import { startPrintFixtureSession } from "./fixtures/print-session";
 
 async function preparingFixture(holdRenewal = false) {
   const root = await mkdtemp(join(tmpdir(), "memcode-preparation-test-"));
@@ -136,6 +137,9 @@ async function preparingFixture(holdRenewal = false) {
         ],
       },
     ],
+    undefined,
+    undefined,
+    startPrintFixtureSession,
   );
   const running = manager.start(task, project).then(
     () => undefined,

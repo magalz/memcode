@@ -16,6 +16,7 @@ import { NativeBrowserPool } from "./native-pool";
 import type { NativeHost } from "../host";
 import { inspectPage, interact } from "./inspect";
 import { BrowserRendering } from "./render";
+import { browserDeadline } from "./capture";
 
 interface Session {
   state: WorkerBrowserState;
@@ -423,7 +424,11 @@ export class AgentBrowserManager {
       const tabId = request.tabId ?? session.selected!;
       if (actor === "worker" && session.state.control === "worker")
         session.selected = tabId;
-      const text = await inspectPage(page);
+      const text = await browserDeadline(
+        inspectPage(page),
+        10000,
+        "Browser DOM observation",
+      );
       session.observed = { revision: String(session.revision), tabId };
       await this.record(
         session,
@@ -431,12 +436,23 @@ export class AgentBrowserManager {
         "Observed " + page.url(),
         request.tabId ?? session.selected,
       );
+      let image;
+      if (request.screenshot) {
+        try {
+          image = await this.image(session, page, "css");
+          if (session.state.error?.startsWith("Screenshot unavailable:"))
+            session.state.error = undefined;
+        } catch (error) {
+          session.state.error =
+            "Screenshot unavailable: " +
+            (error instanceof Error ? error.message : String(error));
+          await this.record(session, actor, session.state.error, tabId);
+        }
+      }
       return {
         state: this.view(session),
         snapshot: { revision: session.observed.revision, text },
-        ...(request.screenshot
-          ? { image: await this.image(session, page, "css") }
-          : {}),
+        ...(image ? { image } : {}),
       };
     } else if (request.action === "frame") {
       const page = session.pages.size ? this.page(session) : undefined;
@@ -453,10 +469,14 @@ export class AgentBrowserManager {
   }
   private async image(session: Session, page: Page, scale: "css" | "device") {
     const actual = this.pool.native
-      ? await page.evaluate(() => ({
-          viewport: { width: innerWidth, height: innerHeight },
-          density: devicePixelRatio,
-        }))
+      ? await browserDeadline(
+          page.evaluate(() => ({
+            viewport: { width: innerWidth, height: innerHeight },
+            density: devicePixelRatio,
+          })),
+          3000,
+          "Browser viewport observation",
+        )
       : undefined;
     const data =
       this.pool instanceof NativeBrowserPool
@@ -465,13 +485,18 @@ export class AgentBrowserManager {
             page,
             scale,
             actual!.viewport,
+            actual!.density,
           )
-        : await this.rendering.capture(
-            session.context!,
-            page,
-            actual?.viewport ?? session.state.viewport,
-            actual?.density ?? session.state.deviceScaleFactor,
-            scale,
+        : await browserDeadline(
+            this.rendering.capture(
+              session.context!,
+              page,
+              actual?.viewport ?? session.state.viewport,
+              actual?.density ?? session.state.deviceScaleFactor,
+              scale,
+            ),
+            10000,
+            "Browser screenshot",
           );
     return {
       mimeType: "image/png" as const,

@@ -12,6 +12,7 @@ import { reviewContext } from "../runtime/review-context";
 import { registerReview } from "../runtime/review";
 import { git, within } from "../runtime/local";
 import type { MemtraceEngine } from "../runtime/memtrace";
+import { startPrintFixtureSession } from "./fixtures/print-session";
 
 const providers: Harness[] = ["claude", "cursor", "codex"];
 const note = (text: string): Message => ({
@@ -173,6 +174,9 @@ async function fixture(
           },
         ],
       })),
+    undefined,
+    undefined,
+    startPrintFixtureSession,
   );
   const runs = async (task: WorkItem) =>
     JSON.parse(

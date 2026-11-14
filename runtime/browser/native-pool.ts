@@ -7,6 +7,7 @@ import type {
 } from "playwright-core";
 import type { NativeHost } from "../host";
 import type { BrowserSession } from "./pool";
+import { browserCapture, browserDeadline } from "./capture";
 
 /** Native WebView2 pages. The user and CDP operate on the same DOM and surface. */
 export class NativeBrowserPool {
@@ -251,14 +252,55 @@ export class NativeBrowserPool {
     page: Page,
     scale: "css" | "device",
     viewport: { width: number; height: number },
+    density = 1,
   ): Promise<string> {
-    const reply = await this.host.call<{ data: string }>("browser_capture", {
-      taskId,
-      nativeId: await this.nativeId(page),
-      scale,
-      ...viewport,
-    });
-    return reply.data;
+    const nativeId = await browserDeadline(
+      this.nativeId(page),
+      3000,
+      "Browser tab lookup",
+    );
+    return browserCapture(
+      async () => {
+        const reply = await this.host.call<{ data: string }>(
+          "browser_capture",
+          {
+            taskId,
+            nativeId,
+            scale,
+            ...viewport,
+          },
+        );
+        if (!reply.data) throw Error("Native browser returned no image.");
+        return reply.data;
+      },
+      async () => {
+        const session = await browserDeadline(
+          page.context().newCDPSession(page),
+          1000,
+          "Browser compositor connection",
+        );
+        try {
+          const result = await browserDeadline(
+            session.send("Page.captureScreenshot", {
+              format: "png",
+              fromSurface: true,
+              captureBeyondViewport: false,
+              clip: {
+                x: 0,
+                y: 0,
+                ...viewport,
+                scale: scale === "css" ? 1 / density : 1,
+              },
+            }),
+            3500,
+            "Browser compositor screenshot",
+          );
+          return result.data;
+        } finally {
+          void session.detach().catch(() => {});
+        }
+      },
+    );
   }
   private async nativeId(page: Page): Promise<string> {
     const cached = this.ids.get(page);

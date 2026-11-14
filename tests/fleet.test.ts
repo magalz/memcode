@@ -10,6 +10,7 @@ import { FleetBlocked, FleetCoordinator } from "../runtime/fleet.ts";
 import type { MemtraceEngine } from "../runtime/memtrace.ts";
 import type { HarnessRuntime, WorkItem } from "../src/shared.ts";
 import { approveFixtureWorker } from "./fixtures/worker-consent";
+import { startPrintFixtureSession } from "./fixtures/print-session";
 
 class TestFleet {
   intents = new Map<string, string[]>();
@@ -159,6 +160,9 @@ async function fixture(sharedScope = false) {
     join(root, "data"),
     async () => ({ command: process.execPath, prefix: [script] }),
     async () => catalog,
+    undefined,
+    undefined,
+    startPrintFixtureSession,
   );
   const cleanup = async () => {
     await manager.close();

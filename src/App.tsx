@@ -380,7 +380,14 @@ export function App() {
         (item) => item.projectId === project.id && item.status === "open",
       ).length,
     },
-    { id: "workers", label: "Workers", icon: Workflow, count: active.length },
+    {
+      id: "workers",
+      label: "Workers",
+      icon: Workflow,
+      count:
+        (state.workerInputs ?? []).filter((input) => input.status === "pending")
+          .length || active.length,
+    },
     { id: "conversations", label: "Conversations", icon: MessageSquare },
     {
       id: "artifacts",
@@ -677,6 +684,35 @@ export function App() {
           )}
           {view === "workers" && (
             <section className="workers-view">
+              {(state.workerInputs ?? [])
+                .filter((input) => input.status === "pending")
+                .map((input) => {
+                  const task = state.tasks.find(
+                    (task) => task.id === input.taskId,
+                  );
+                  return (
+                    task && (
+                      <button
+                        key={input.id}
+                        className="worker-attention-link"
+                        onClick={() => open(task)}
+                      >
+                        <ShieldCheck size={17} />
+                        <span>
+                          <strong>
+                            {input.kind === "approval"
+                              ? "Approval needed"
+                              : "Waiting for your answer"}
+                          </strong>
+                          <small>
+                            {task.identifier} · {task.title} · {input.title}
+                          </small>
+                        </span>
+                        <ArrowUpRight size={15} />
+                      </button>
+                    )
+                  );
+                })}
               <AccountConnections notify={notify} onStatus={setAccount} />
               <WorkerConnections
                 runtime={runtime}

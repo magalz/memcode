@@ -65,6 +65,16 @@ export function stageLabel(stage: Stage): string {
 export function restartSafeState(state: AppState): AppState {
   return {
     ...state,
+    workerInputs: (state.workerInputs ?? []).map((input) =>
+      input.status === "pending"
+        ? {
+            ...input,
+            status: "cancelled",
+            answeredAt: new Date().toISOString(),
+            response: { cancelled: true },
+          }
+        : input,
+    ),
     projects: state.projects.map((project) =>
       ["connecting", "indexing"].includes(project.analysis)
         ? {
@@ -95,6 +105,7 @@ export function restartSafeState(state: AppState): AppState {
             run: {
               ...task.run,
               state: "stopped",
+              activity: undefined,
               error:
                 "MemCode restarted. The shared epic branch may contain unfinished changes.",
             },

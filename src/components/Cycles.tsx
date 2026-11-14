@@ -1,5 +1,6 @@
 import { CycleForm, FinishCycle, AddCycleWork } from "./CycleDialogs";
 import { CycleStories } from "./CycleStories";
+import { DeleteAction } from "./DeleteAction";
 import { useEffect, useState } from "react";
 import {
   ArrowRight,
@@ -342,6 +343,13 @@ function CycleHeader({
                 : "Completed cycle"}
           </span>
           <div className="cycle-heading-actions">
+            <DeleteAction
+              compact
+              kind="cycle"
+              id={cycle.id}
+              name={cycle.name}
+              disabled={workers > 0}
+            />
             {cycle.state !== "completed" && (
               <button
                 className="icon-button"

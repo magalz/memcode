@@ -15,6 +15,7 @@ import {
 import { MemtraceEngine } from "../runtime/memtrace.ts";
 import type { Project, WorkItem } from "../src/shared.ts";
 import { approveFixtureWorker } from "./fixtures/worker-consent";
+import { startPrintFixtureSession } from "./fixtures/print-session";
 
 async function temporary() {
   const root = await mkdtemp(join(tmpdir(), "memcode-test-"));
@@ -208,6 +209,9 @@ test("worker joins its epic branch and returns shared changes plus separate arti
           ],
         },
       ],
+      undefined,
+      undefined,
+      startPrintFixtureSession,
     );
     await manager.start(task, project);
     const deadline = Date.now() + 10000;
@@ -305,6 +309,9 @@ test("stop during qualification prevents a later process launch", async () => {
       return null;
     },
     async () => [],
+    undefined,
+    undefined,
+    startPrintFixtureSession,
   );
   const starting = manager.start(task, project);
   const entered = Date.now() + 3000;

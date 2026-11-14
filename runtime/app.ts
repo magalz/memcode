@@ -7,6 +7,8 @@ import { isActive } from "../src/domain";
 import { LocalStore, exists, git, now, within } from "./local";
 import { MemtraceEngine } from "./memtrace";
 import { ensureProjectRepository } from "./project-repository";
+import { workerResponseSchema } from "./worker-input";
+import { registerDeletion } from "./deletion";
 import { WorkerManager } from "./workers";
 import { PreviewManager, artifactRoots } from "./preview";
 import { localURL } from "./urls";
@@ -372,6 +374,18 @@ export async function createRuntime(
     await workers.start(item, project(item.projectId));
   });
   register("worker:stop", identifier, (id) => workers.stop(id));
+  register(
+    "worker:respond",
+    z
+      .object({
+        taskId: identifier,
+        requestId: identifier,
+        response: workerResponseSchema,
+      })
+      .strict(),
+    ({ taskId, requestId, response }) =>
+      workers.inputs.respond(taskId, requestId, response),
+  );
   register("fleet:refresh", identifier, (id) =>
     workers.fleet.refresh(project(id)),
   );
@@ -507,6 +521,7 @@ export async function createRuntime(
 
   registerPlanning(register, state, project, changed);
   registerOnboarding(register, state, changed);
+  registerDeletion(register, state, changed);
   registerCardComments(
     register,
     state,

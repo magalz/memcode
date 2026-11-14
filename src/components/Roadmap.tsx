@@ -17,6 +17,7 @@ import { isActive } from "../domain";
 import { Empty, PriorityMark, Spinner, StageIcon } from "./UI";
 import { Select } from "./Select";
 import { Modal } from "./Dialogs";
+import { DeleteAction } from "./DeleteAction";
 
 interface Props {
   project: Project;
@@ -304,6 +305,12 @@ export function Roadmap({
                             <Plus size={12} />
                             Add story
                           </button>
+                          <DeleteAction
+                            kind="epic"
+                            id={epic.id}
+                            name={epic.title}
+                            disabled={stories.some(isActive)}
+                          />
                         </div>
                         {unfolded && (
                           <div className="epic-stories">

@@ -12,6 +12,8 @@ import { ReviewComposer } from "./ReviewComposer";
 import { ReviewNotes } from "./ReviewNotes";
 import { FollowupQueue, pendingFollowups } from "./FollowupQueue";
 import { StoryComments } from "./StoryComments";
+import { WorkerInputPanel, WorkerActivityView } from "./WorkerInputPanel";
+import { DeleteAction } from "./DeleteAction";
 import { workerReadiness } from "../worker-availability";
 import "../styles-review.css";
 import "../styles-annotations.css";
@@ -132,6 +134,9 @@ export function WorkDetail({
   act,
   obscured = false,
 }: Props) {
+  const pendingInputs = (state.workerInputs ?? []).filter(
+    (input) => input.taskId === task.id && input.status === "pending",
+  );
   const [tab, setTab] = useState<Tab>("conversation");
   const [draft, setDraft] = useState("");
   const connectionDraft = useRef<
@@ -435,6 +440,15 @@ export function WorkDetail({
             >
               <ExternalLink size={14} />
             </button>
+            <DeleteAction
+              compact
+              kind="story"
+              id={task.id}
+              name={task.title}
+              disabled={isActive(task)}
+              withChildren={tasks.some((item) => item.parentId === task.id)}
+              onDeleted={onClose}
+            />
             <button
               className="icon-button"
               aria-label="Close work item"
@@ -518,6 +532,9 @@ export function WorkDetail({
             </button>
           ))}
         </div>
+        {pendingInputs.map((request) => (
+          <WorkerInputPanel key={request.id} request={request} />
+        ))}
         <div className="detail-body">
           <div className="detail-content">
             {tab === "queue" && (
@@ -606,14 +623,7 @@ export function WorkDetail({
                     </div>
                   )}
                   {task.run.state === "running" && (
-                    <div className="worker-thinking">
-                      <div className="thinking-dots">
-                        <i />
-                        <i />
-                        <i />
-                      </div>
-                      <span>Worker is continuing the implementation</span>
-                    </div>
+                    <WorkerActivityView task={task} />
                   )}
                   {task.run.error && (
                     <div className="run-error">
@@ -1001,7 +1011,13 @@ export function WorkDetail({
                     {task.example
                       ? "Example conversation"
                       : active
-                        ? "Working on the shared epic branch"
+                        ? pendingInputs.length
+                          ? "Waiting for your answer"
+                          : task.run.activity?.phase === "waiting_for_worker"
+                            ? "Waiting for a Fleet handoff"
+                            : task.run.activity?.phase === "finishing"
+                              ? "Finishing the worker turn"
+                              : "Working on the shared epic branch"
                         : task.assignment === "auto"
                           ? connection.connectedCount > 0
                             ? "Routes among your approved workers"

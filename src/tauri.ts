@@ -44,6 +44,11 @@ export async function installNativeBridge(): Promise<void> {
     (event) => previews.forEach((listener) => listener(event.payload)),
   );
   const api: MemCodeAPI = {
+    deleteStory: (id, cascade) => call("story:delete", { id, cascade }),
+    deleteEpic: (id) => call("epic:delete", { id }),
+    deleteCycle: (id) => call("cycle:delete", { id }),
+    respondToWorker: (taskId, requestId, response) =>
+      call("worker:respond", { taskId, requestId, response }),
     updateOnboarding: (patch) => call("onboarding:update", patch),
     updateQueuedFollowup: (taskId, messageId, text, commentEdits) =>
       call("review:queue-update", { taskId, messageId, text, commentEdits }),

@@ -84,6 +84,7 @@ export type RunState =
   | "finished";
 
 export interface Message {
+  streamId?: string;
   pickedUpAt?: string;
   id: string;
   role: "user" | "assistant" | "system" | "tool";
@@ -160,6 +161,7 @@ export interface WorkItem extends TaskPlanningFields {
   updatedAt: string;
   run: {
     state: RunState;
+    activity?: import("./worker-input").WorkerActivity;
     startedAt?: string;
     finishedAt?: string;
     worktree?: string;
@@ -218,6 +220,7 @@ export interface CreateEpic {
   phase: Epic["phase"];
 }
 export interface AppState {
+  workerInputs?: import("./worker-input").WorkerInputRequest[];
   onboarding?: import("./onboarding").OnboardingProgress;
   storyComments?: import("./story-comments").StoryComment[];
   workerConnections?: Partial<
@@ -300,6 +303,17 @@ export interface PreviewInput {
   bounds: { x: number; y: number; width: number; height: number };
 }
 export interface MemCodeAPI {
+  deleteStory(
+    id: string,
+    cascade?: boolean,
+  ): Promise<import("./deletion").DeletionResult>;
+  deleteEpic(id: string): Promise<import("./deletion").DeletionResult>;
+  deleteCycle(id: string): Promise<import("./deletion").DeletionResult>;
+  respondToWorker(
+    taskId: string,
+    requestId: string,
+    response: import("./worker-input").WorkerInputResponse,
+  ): Promise<void>;
   updateOnboarding(
     patch: import("./onboarding").OnboardingPatch,
   ): Promise<import("./onboarding").OnboardingProgress>;
