@@ -34,6 +34,11 @@ import type { ContextPack } from "./context/contracts";
 import type { AgentBrowserManager } from "./browser/manager";
 import { workerToolProfile, type WorkerToolProfile } from "./worker-profile";
 import { watchArtifacts } from "./artifact-watch";
+import {
+  reviewContext,
+  markReviewContext,
+  retainReviewContext,
+} from "./review-context";
 
 export function harnessArgs(
   id: WorkItem["harness"],
@@ -192,7 +197,7 @@ export class WorkerManager {
       at: now(),
     });
     if (task.messages.length > 250)
-      task.messages.splice(1, task.messages.length - 250);
+      task.messages = retainReviewContext(task.messages);
     task.updatedAt = now();
   }
   async start(task: WorkItem, project: Project): Promise<void> {
@@ -454,6 +459,7 @@ export class WorkerManager {
         initialContext = await Promise.race([contextEvidence, aborted]);
         continuing();
       }
+      const conversation = reviewContext(task.messages);
       const prompt = [
         "You are implementing a work item in MemCode, a local coding-worker suite.",
         `Project: ${project.name}\nProject purpose: ${project.description}`,
@@ -484,11 +490,7 @@ export class WorkerManager {
               JSON.stringify(task.evidence)
             : "Memtrace context is not attached. Read and qualify the relevant source before changing it.",
         "Conversation:\n" +
-          task.messages
-            .filter((m) => m.role === "user" || m.role === "assistant")
-            .slice(-15)
-            .map((m) => `${m.role}: ${m.text}`)
-            .join("\n\n"),
+          conversation.map((m) => `${m.role}: ${m.text}`).join("\n\n"),
       ]
         .filter(Boolean)
         .join("\n\n");
@@ -648,6 +650,10 @@ export class WorkerManager {
       };
       child.once("error", (error) => void settle(null, error));
       child.once("close", (code) => void settle(code));
+      child.once("spawn", () => {
+        markReviewContext(task.messages, conversation, now());
+        void this.changed();
+      });
       child.stdin!.on("error", () => {});
       child.stdin!.end(invocation.stdin ?? undefined);
       await this.changed();

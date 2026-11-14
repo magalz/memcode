@@ -69,6 +69,45 @@ A separate live check reopened the user's existing PowerPoint comments, verified
 both highlights, clicked a pin to open its saved note, and checked that focusing
 the comment kept the complete target text within the resized preview.
 
+### Same review flow across adapters
+
+`node --import tsx scripts/live-review-adapters.mjs` runs a separate native
+Review Workflow Lab window with actual installed models. The test creates labelled
+Markdown source fixtures, selects text in the reader and uses the real comment UI.
+For each adapter it saves two comments without sending, deselects both, triggers
+a workspace refresh, selects only one and stages it without sending. Only the
+normal Send action launches the assigned worker with the selected comment.
+
+The 2026-11-14 run passed for all three:
+
+| Adapter     | Model        | Selected edit applied | Unselected sentence preserved | Quote, offsets and source version acknowledged |
+| ----------- | ------------ | --------------------- | ----------------------------- | ---------------------------------------------- |
+| Claude Code | haiku        | Yes                   | Yes                           | Yes                                            |
+| Cursor      | composer-2.5 | Yes                   | Yes                           | Yes                                            |
+| Codex       | gpt-6-luna   | Yes                   | Yes                           | Yes                                            |
+
+Each finished with exit code zero and a saved Markdown receipt. The harness
+assignment stayed unchanged. Cursor's shell assertion was denied; it reported
+that denial and used a successful source-content check instead. The test driver
+independently checked all three resulting files. This is a bounded Markdown
+review test, not a model-by-format Office editing benchmark.
+
+The first test setup exposed an unconnected lab project before any model was
+started; the completed run connects the project to Memtrace before launching.
+Its evidence is in
+`../memcode-review-lab/.memcode/evidence/review-adapters.json`.
+The lab window is left open for inspection; the existing user's workspace is
+not replaced or closed.
+
+The adapter audit also fixed two common continuation defects. Deliberately
+unchecked comments remain unchecked after workspace refreshes. Unread user
+follow-ups survive both the recent-15-message prompt window and the 250-message
+output retention policy. `promptedAt` means included in a successfully spawned
+brief, not read or applied. Messages received after that snapshot stay pending,
+and preparation/spawn failures do not mark them included. Sending during an
+active run saves the follow-up; the UI explicitly asks the user to resume after
+the current run, rather than promising an automatic second run.
+
 The evidence is generated locally, outside this repository:
 
 - `../memcode-browser-lab/.memcode/evidence/verified-lab.json`

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, MessageSquare, Pencil, Trash2, X } from "lucide-react";
 import { reviewLocation } from "../review-labels";
 import type { ReviewComment } from "../review";
@@ -20,15 +20,20 @@ export function ReviewNotes({
   onClose: () => void;
 }) {
   const [selected, setSelected] = useState<string[]>([]),
+    known = useRef(new Set<string>()),
     pending = comments.filter((comment) => comment.status === "saved");
-  useEffect(
-    () =>
-      setSelected((current) => {
-        const ids = current.filter((id) => pending.some((c) => c.id === id));
-        return ids.length ? ids : pending.map((c) => c.id);
-      }),
-    [comments],
-  );
+  useEffect(() => {
+    const ids = new Set(pending.map((comment) => comment.id)),
+      added = [...ids].filter((id) => !known.current.has(id));
+    known.current = ids;
+    setSelected((current) => {
+      const next = [...current.filter((id) => ids.has(id)), ...added];
+      return next.length === current.length &&
+        next.every((id, i) => id === current[i])
+        ? current
+        : next;
+    });
+  }, [comments]);
   return (
     <section
       className="review-comments-panel"

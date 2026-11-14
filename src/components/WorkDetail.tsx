@@ -216,7 +216,7 @@ export function WorkDetail({
       setAttachedComments([]);
       if (isActive(task))
         notify(
-          "Note saved for the next worker pass. The current run continues with its existing brief.",
+          "Follow-up saved. Resume this worker after its current run finishes to apply it.",
         );
       else if (!task.example) await window.memcode.startWorker(task.id);
     });
@@ -603,11 +603,13 @@ export function WorkDetail({
                           className="send-button"
                           title={
                             active
-                              ? "Queue follow-up · Ctrl+Enter"
+                              ? "Save follow-up for resume · Ctrl+Enter"
                               : "Send follow-up · Ctrl+Enter"
                           }
                           aria-label={
-                            active ? "Queue follow-up" : "Send follow-up"
+                            active
+                              ? "Save follow-up for resume"
+                              : "Send follow-up"
                           }
                           disabled={!draft.trim()}
                           onClick={() => void send()}

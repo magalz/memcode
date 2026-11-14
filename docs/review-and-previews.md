@@ -10,8 +10,12 @@ saved comment and its quoted target.
 Use **Review comments** to edit or delete unsent notes, select the comments to
 include, and choose **Add to follow-up**. This stages attachments in the composer;
 it still does not send them. The normal send action sends that follow-up and
-starts an available idle worker. An active run queues the message for its next
-pass. Comments already added to a conversation remain in its review history.
+starts an available idle worker. If a run is active, the message is saved; resume
+the worker after that run finishes to apply it. Unread follow-ups are retained in
+the next brief even when the active worker produces a long conversation.
+Comments already added to a conversation remain in its review history. The same
+workflow applies to Codex, Claude Code and Cursor; review does not select or
+replace the card's assigned harness.
 
 This follows the distinction in the official Codex workflows: save inline or
 visual comments, then send a separate instruction to address them:

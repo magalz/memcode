@@ -91,6 +91,8 @@ export interface Message {
   references?: import("./review").ReviewReference[];
   commentIds?: string[];
   reviewText?: string;
+  /** Included in a successfully spawned worker brief, not proof it was applied. */
+  promptedAt?: string;
 }
 export interface ChecklistItem {
   id: string;
