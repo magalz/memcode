@@ -1,3 +1,4 @@
+import { IntelligenceDetails as DetailResults } from "./IntelligenceDetails";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -18,6 +19,7 @@ import type {
   QualitySnapshot,
 } from "../intelligence";
 import { Spinner } from "./UI";
+import { ResultPager } from "./ResultPager";
 
 export interface IntelligenceProps {
   state: AppState;
@@ -271,6 +273,17 @@ export function FindingList({
 } & IntelligenceProps) {
   const [busy, setBusy] = useState<string | null>(null),
     [impact, setImpact] = useState<IntelligenceDetail | null>(null);
+  const [page, setPage] = useState(0),
+    size = 8,
+    currentPage = Math.min(
+      page,
+      Math.max(0, Math.ceil(findings.length / size) - 1),
+    );
+  const maxima = {
+    cognitive: Math.max(1, ...findings.map((row) => row.cognitive ?? 0)),
+    cyclomatic: Math.max(1, ...findings.map((row) => row.cyclomatic ?? 0)),
+    nesting: Math.max(1, ...findings.map((row) => row.nesting ?? 0)),
+  };
   const request = useRef(0);
   useEffect(() => {
     request.current++;
@@ -365,47 +378,63 @@ export function FindingList({
             <span>Nesting</span>
             <span>Next step</span>
           </div>
-          {findings.map((finding) => (
-            <div className="finding-row" key={finding.key}>
-              <div>
-                <strong>{finding.name}</strong>
-                <code title={finding.file}>
-                  {finding.file}
-                  {finding.line ? ":" + finding.line : ""}
-                </code>
-                {finding.signal === "unreachable" && (
-                  <small>
-                    {finding.confidence ?? "Unknown confidence"} · candidate
-                  </small>
-                )}
-              </div>
-              <span>{countLabel(finding.cognitive)}</span>
-              <span>{countLabel(finding.cyclomatic)}</span>
-              <span>{countLabel(finding.nesting)}</span>
-              <div className="finding-actions">
-                <button
-                  title={`Inspect impact of ${finding.name}`}
-                  disabled={busy === finding.id}
-                  onClick={() => void inspect(finding)}
-                >
-                  <GitBranch size={13} />
-                  <span>Impact</span>
-                </button>
-                <button
-                  title={`Create work for ${finding.name}`}
-                  disabled={busy === finding.id}
-                  onClick={() => void create(finding)}
-                >
-                  {busy === finding.id ? (
-                    <Spinner size={12} />
-                  ) : (
-                    <Plus size={13} />
+          {findings
+            .slice(currentPage * size, (currentPage + 1) * size)
+            .map((finding) => (
+              <div className="finding-row" key={finding.key}>
+                <div>
+                  <strong>{finding.name}</strong>
+                  <code title={finding.file}>
+                    {finding.file}
+                    {finding.line ? ":" + finding.line : ""}
+                  </code>
+                  {finding.signal === "unreachable" && (
+                    <small>
+                      {finding.confidence ?? "Unknown confidence"} · candidate
+                    </small>
                   )}
-                  <span>Plan work</span>
-                </button>
+                </div>
+                {(["cognitive", "cyclomatic", "nesting"] as const).map(
+                  (metric) => (
+                    <span
+                      className={"finding-visual-value " + metric}
+                      key={metric}
+                    >
+                      {countLabel(finding[metric])}
+                      {finding[metric] !== null && (
+                        <i
+                          style={{
+                            width: `${(finding[metric]! / maxima[metric]) * 100}%`,
+                          }}
+                        />
+                      )}
+                    </span>
+                  ),
+                )}
+                <div className="finding-actions">
+                  <button
+                    title={`Inspect impact of ${finding.name}`}
+                    disabled={busy === finding.id}
+                    onClick={() => void inspect(finding)}
+                  >
+                    <GitBranch size={13} />
+                    <span>Impact</span>
+                  </button>
+                  <button
+                    title={`Create work for ${finding.name}`}
+                    disabled={busy === finding.id}
+                    onClick={() => void create(finding)}
+                  >
+                    {busy === finding.id ? (
+                      <Spinner size={12} />
+                    ) : (
+                      <Plus size={13} />
+                    )}
+                    <span>Plan work</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
         </div>
       ) : (
         <div className="intelligence-small-empty">
@@ -419,6 +448,11 @@ export function FindingList({
           </div>
         </div>
       )}
+      <ResultPager
+        page={currentPage}
+        total={findings.length}
+        change={setPage}
+      />
       {impact && (
         <div className="inline-intelligence-detail">
           <button className="text-button" onClick={() => setImpact(null)}>
@@ -430,91 +464,4 @@ export function FindingList({
     </section>
   );
 }
-export function DetailResults({
-  detail,
-  selectFlow,
-}: {
-  detail: IntelligenceDetail;
-  selectFlow?: (id: string) => void;
-}) {
-  const groups = [
-    ...new Set(detail.items.map((item) => item.group ?? "Source evidence")),
-  ];
-  return (
-    <div className="intelligence-detail-results">
-      <div className="intelligence-detail-heading">
-        <h3>{detail.title}</h3>
-        <p>{detail.summary}</p>
-      </div>
-      {groups.map((group) => (
-        <section className="intelligence-detail-group" key={group}>
-          <h4>
-            {group}
-            <span>
-              {
-                detail.items.filter(
-                  (item) => (item.group ?? "Source evidence") === group,
-                ).length
-              }
-            </span>
-          </h4>
-          {detail.items
-            .filter((item) => (item.group ?? "Source evidence") === group)
-            .map((item) => (
-              <div key={item.id} className="intelligence-detail-row">
-                <span className="intelligence-detail-glyph">
-                  {item.action === "flow" ? (
-                    <ArrowRight size={15} />
-                  ) : group === "Modules" ? (
-                    <Layers3 size={15} />
-                  ) : (
-                    <Code2 size={15} />
-                  )}
-                </span>
-                <div>
-                  <strong>{item.title}</strong>
-                  <p>{item.description}</p>
-                  {item.file && (
-                    <code>
-                      {item.file}
-                      {item.line ? ":" + item.line : ""}
-                    </code>
-                  )}
-                </div>
-                {item.badge && (
-                  <span className="detail-data-badge">{item.badge}</span>
-                )}
-                {item.value && (
-                  <span className="detail-data-value">{item.value}</span>
-                )}
-                {item.action === "flow" && selectFlow && (
-                  <button
-                    title={`Inspect ${item.title}`}
-                    onClick={() => selectFlow(item.id)}
-                  >
-                    <ArrowUpRight size={15} />
-                  </button>
-                )}
-              </div>
-            ))}
-        </section>
-      ))}
-      {detail.notes.length > 0 && (
-        <div className="intelligence-detail-notes">
-          <ShieldCheck size={14} />
-          <div>
-            {detail.notes.map((note) => (
-              <p key={note}>{note}</p>
-            ))}
-          </div>
-        </div>
-      )}
-      <footer className="intelligence-detail-footer">
-        Observed {checkpointLabel(detail.capturedAt)}
-        {detail.graphRevision && (
-          <code>Graph {detail.graphRevision.slice(0, 18)}</code>
-        )}
-      </footer>
-    </div>
-  );
-}
+export { IntelligenceDetails as DetailResults } from "./IntelligenceDetails";

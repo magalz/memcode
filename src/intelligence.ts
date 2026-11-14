@@ -84,6 +84,7 @@ export interface IntelligenceItem {
   group?: string;
 }
 export interface IntelligenceDetail {
+  style?: StyleProfile;
   section: IntelligenceSection;
   title: string;
   summary: string;
@@ -91,6 +92,16 @@ export interface IntelligenceDetail {
   notes: string[];
   capturedAt: string;
   graphRevision: string | null;
+}
+export interface StyleLanguage {
+  language: string;
+  samples: number | null;
+  ratios: Record<string, number>;
+}
+export interface StyleProfile {
+  samples: number | null;
+  sampleThreshold: number | null;
+  languages: StyleLanguage[];
 }
 export type QualityMetric =
   | "elevated"

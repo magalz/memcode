@@ -6,6 +6,8 @@
 @import url("./styles-intelligence.css");
 @import url("./styles-board.css");
 @import url("./styles-planning.css");
+@import url("./styles-conversations.css");
+@import url("./styles-insights-visual.css");
 
 :root {
   font-family:

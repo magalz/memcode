@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -14,6 +14,7 @@ import {
 import type { IntelligenceDetail, IntelligenceSection } from "../intelligence";
 import { qualityValue } from "../intelligence";
 import { Empty, Spinner } from "./UI";
+import { StyleProfile } from "./StyleProfile";
 import {
   CaptureButtons,
   countLabel,
@@ -48,6 +49,15 @@ export function CodeInsights(props: IntelligenceProps) {
     [file, setFile] = useState("src/shared.ts");
   const { busy, capture } = useCapture(project, notify);
   const request = useRef(0);
+  const root = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    root.current
+      ?.closest(".workspace-scroll")
+      ?.scrollTo({ top: 0, behavior: "auto" });
+  }, [tab, project.id]);
+  const [findingMode, setFindingMode] = useState<"complexity" | "reachability">(
+    "complexity",
+  );
   const load = async (
     section: IntelligenceSection,
     input?: Record<string, unknown>,
@@ -128,7 +138,7 @@ export function CodeInsights(props: IntelligenceProps) {
     );
   const elevated = qualityValue(snapshot, "elevated");
   return (
-    <div className="code-insights-view">
+    <div className="code-insights-view" ref={root} data-view={tab}>
       <div className="intelligence-toolbar">
         <span className="intelligence-kicker">
           <span />
@@ -136,50 +146,6 @@ export function CodeInsights(props: IntelligenceProps) {
         </span>
         <CaptureButtons project={project} busy={busy} capture={capture} />
       </div>
-      <section className="intelligence-overview">
-        <div className="intelligence-overview-copy">
-          <span>THE CODE, IN CONTEXT</span>
-          <h2>
-            A clearer view.
-            <br />
-            <em>A better next move.</em>
-          </h2>
-          <p>
-            {countLabel(snapshot.metrics.symbols)} source symbols connected by{" "}
-            {countLabel(snapshot.metrics.edges)} structural relationships.
-          </p>
-          <div>
-            <span>
-              <GitBranch size={12} />
-              {snapshot.branch}
-            </span>
-            <span>{countLabel(snapshot.metrics.files)} indexed files</span>
-          </div>
-        </div>
-        <div className="intelligence-overview-data">
-          <div className="intelligence-overview-metrics">
-            <MetricTile
-              label="AST-measured"
-              value={countLabel(snapshot.metrics.measuredFunctions)}
-              caption="Function and method records"
-            />
-            <MetricTile
-              label="Elevated complexity"
-              value={countLabel(elevated)}
-              caption="High + critical engine bands"
-              accent="amber"
-            />
-            <MetricTile
-              label="Cleanup candidates"
-              value={countLabel(snapshot.metrics.deadCodeCandidates)}
-              caption="Verify reachability before removal"
-              accent="cyan"
-            />
-          </div>
-          <Distribution snapshot={snapshot} />
-        </div>
-      </section>
-      <SnapshotEvidence snapshot={snapshot} />
       <div
         className="intelligence-tabs"
         role="tablist"
@@ -198,6 +164,55 @@ export function CodeInsights(props: IntelligenceProps) {
           </button>
         ))}
       </div>
+      {tab === "quality" && (
+        <>
+          <section className="intelligence-overview">
+            <div className="intelligence-overview-copy">
+              <span>THE CODE, IN CONTEXT</span>
+              <h2>
+                A clearer view.
+                <br />
+                <em>A better next move.</em>
+              </h2>
+              <p>
+                {countLabel(snapshot.metrics.symbols)} source symbols connected
+                by {countLabel(snapshot.metrics.edges)} structural
+                relationships.
+              </p>
+              <div>
+                <span>
+                  <GitBranch size={12} />
+                  {snapshot.branch}
+                </span>
+                <span>{countLabel(snapshot.metrics.files)} indexed files</span>
+              </div>
+            </div>
+            <div className="intelligence-overview-data">
+              <div className="intelligence-overview-metrics">
+                <MetricTile
+                  label="AST-measured"
+                  value={countLabel(snapshot.metrics.measuredFunctions)}
+                  caption="Function and method records"
+                />
+                <MetricTile
+                  label="Elevated complexity"
+                  value={countLabel(elevated)}
+                  caption="High + critical engine bands"
+                  accent="amber"
+                />
+                <MetricTile
+                  label="Cleanup candidates"
+                  value={countLabel(snapshot.metrics.deadCodeCandidates)}
+                  caption="Verify reachability before removal"
+                  accent="cyan"
+                />
+              </div>
+              <Distribution snapshot={snapshot} />
+            </div>
+          </section>
+        </>
+      )}
+      <SnapshotEvidence snapshot={snapshot} />
       {tab === "quality" ? (
         <>
           <div className="intelligence-quality-notes">
@@ -229,19 +244,48 @@ export function CodeInsights(props: IntelligenceProps) {
               </span>
             </div>
           </div>
+          <div
+            className="quality-finding-switch"
+            role="group"
+            aria-label="Quality findings"
+          >
+            <button
+              className={findingMode === "complexity" ? "active" : ""}
+              aria-pressed={findingMode === "complexity"}
+              onClick={() => setFindingMode("complexity")}
+            >
+              Complexity hotspots <span>{snapshot.hotspots.length}</span>
+            </button>
+            <button
+              className={findingMode === "reachability" ? "active" : ""}
+              aria-pressed={findingMode === "reachability"}
+              onClick={() => setFindingMode("reachability")}
+            >
+              Reachability candidates <span>{snapshot.deadCode.length}</span>
+            </button>
+            <small>
+              Explore a focused sample, then inspect or plan a change.
+            </small>
+          </div>
           <FindingList
+            key={findingMode}
             {...props}
             snapshot={snapshot}
-            title="Complexity hotspots"
-            description="A bounded list ranked by the engine, with AST cognitive, cyclomatic and nesting measurements."
-            findings={snapshot.hotspots}
-          />
-          <FindingList
-            {...props}
-            snapshot={snapshot}
-            title="Reachability candidates"
-            description="These are investigation leads. Dynamic calls and framework conventions can change the conclusion."
-            findings={snapshot.deadCode}
+            title={
+              findingMode === "complexity"
+                ? "Complexity hotspots"
+                : "Reachability candidates"
+            }
+            description={
+              findingMode === "complexity"
+                ? "AST measurements. Bars compare values within this returned sample."
+                : "Investigation leads; dynamic calls and framework conventions can change the conclusion."
+            }
+            findings={
+              findingMode === "complexity"
+                ? snapshot.hotspots
+                : snapshot.deadCode
+            }
           />
         </>
       ) : (
@@ -294,9 +338,12 @@ export function CodeInsights(props: IntelligenceProps) {
               <Spinner size={20} />
               <p>Reading source-backed context…</p>
             </div>
+          ) : detail?.section === "style" && detail.style ? (
+            <StyleProfile detail={detail} />
           ) : detail ? (
             <DetailResults
               detail={detail}
+              back={() => void load("flows")}
               selectFlow={(id) => void load("flow", { process: id })}
             />
           ) : (

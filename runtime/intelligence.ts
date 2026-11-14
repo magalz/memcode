@@ -16,6 +16,7 @@ import {
 } from "../src/intelligence";
 import type { MemtraceEngine } from "./memtrace";
 import { git, within } from "./local";
+import { styleProfile } from "../src/style-profile";
 
 type Json = Record<string, any>;
 type Register = (
@@ -500,7 +501,7 @@ async function queryDetails(
         : undefined,
   });
 
-  const { title, summary } = await {
+  const view = await {
     architecture: readArchitecture,
     flows: readFlows,
     flow: readFlow,
@@ -558,8 +559,7 @@ async function queryDetails(
     );
   return {
     section,
-    title,
-    summary,
+    ...view,
     items,
     notes: [...new Set(notes)],
     capturedAt: new Date().toISOString(),
@@ -804,7 +804,7 @@ async function readStyle({ scope, query, source, items, notes }: ViewContext) {
     "Style ratios describe available samples and are not enforced governance rules.",
   );
 
-  return { title, summary };
+  return { title, summary, style: styleProfile(result) };
 }
 
 async function readGovernance({

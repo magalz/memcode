@@ -38,6 +38,7 @@ import {
   Time,
 } from "./components/UI";
 import { Workspace } from "./components/Workspace";
+import { Conversations } from "./components/Conversations";
 import { WorkDetail } from "./components/WorkDetail";
 import { Roadmap } from "./components/Roadmap";
 import { FleetDecisions } from "./components/FleetDecisions";
@@ -637,35 +638,7 @@ export function App() {
             </section>
           )}
           {view === "conversations" && (
-            <div className="conversations-grid">
-              {tasks
-                .filter((t) => t.messages.length)
-                .map((task) => (
-                  <button
-                    className="conversation-card"
-                    key={task.id}
-                    onClick={() => open(task)}
-                  >
-                    <div>
-                      <HarnessMark id={task.harness} small />
-                      <span>{task.identifier}</span>
-                      <StageIcon stage={task.stage} />
-                    </div>
-                    <h3>{task.title}</h3>
-                    <p>
-                      {task.messages
-                        .filter((m) => m.role === "assistant")
-                        .at(-1)?.text ?? task.description}
-                    </p>
-                    <footer>
-                      {task.example
-                        ? "Example conversation"
-                        : new Date(task.updatedAt).toLocaleDateString()}
-                      <ArrowUpRight size={14} />
-                    </footer>
-                  </button>
-                ))}
-            </div>
+            <Conversations key={project.id} tasks={tasks} open={open} />
           )}
           {view === "artifacts" &&
             (artifacts.length ? (

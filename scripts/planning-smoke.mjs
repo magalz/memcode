@@ -224,7 +224,61 @@ export async function verifyPlanning(page, call, out) {
   });
   await page.setViewportSize({ width: 1512, height: 1000 });
 
+  await page.locator("nav button").filter({ hasText: "Conversations" }).click();
+  await page
+    .getByRole("button", { name: "Conversation table", exact: true })
+    .click();
+  await expect(page.locator(".conversation-table")).toBeVisible();
+  await page
+    .getByRole("textbox", { name: "Search conversations" })
+    .fill(parent.identifier);
+  await expect(page.locator(".conversation-table tbody tr")).toHaveCount(1);
+  await page.getByRole("textbox", { name: "Search conversations" }).fill("");
+  const conversationHeader = await page
+    .locator(".conversation-table th")
+    .first()
+    .boundingBox();
+  const workspaceScroll = await page
+    .locator(".workspace-scroll")
+    .evaluate((element) => element.scrollTop);
+  await page.locator(".conversation-table-wrap").hover();
+  await page.mouse.wheel(0, 600);
+  await expect
+    .poll(() =>
+      page
+        .locator(".conversation-table-wrap")
+        .evaluate((element) => element.scrollTop),
+    )
+    .toBeGreaterThan(0);
+  assert.equal(
+    await page
+      .locator(".workspace-scroll")
+      .evaluate((element) => element.scrollTop),
+    workspaceScroll,
+  );
+  assert.equal(
+    (await page.locator(".conversation-table th").first().boundingBox()).y,
+    conversationHeader.y,
+  );
+  await page
+    .locator(".conversation-table-wrap")
+    .evaluate((element) => (element.scrollTop = 0));
+  await page.screenshot({
+    path: join(out, "native-conversations-table.png"),
+    animations: "disabled",
+  });
+  await page
+    .getByRole("button", { name: "Conversation cards", exact: true })
+    .click();
+  await expect(page.locator(".conversation-card").first()).toBeVisible();
   await page.locator("nav button").filter({ hasText: "Insights" }).click();
+  await expect(
+    page.getByRole("tab", { name: "Code intelligence", exact: true }),
+  ).toHaveCSS("display", "flex");
+  await page
+    .getByRole("tab", { name: "Code intelligence", exact: true })
+    .focus();
+  await page.keyboard.press("ArrowRight");
   await expect(
     page.getByRole("tab", { name: "Delivery", exact: true }),
   ).toBeVisible();

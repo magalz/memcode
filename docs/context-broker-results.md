@@ -21,6 +21,24 @@ Worker seconds measure CLI launch through exit. They exclude fixture/index prepa
 
 The signature case added optional discounts across `total` and `makeReceipt`. Independent assertions checked old one-argument behavior, forwarding, finite 0..1 validation, RangeError, DKK and cents rounding. The bug case fixed a zero-quantity line charged as one item. Independent assertions checked zero, null and missing quantities, caller behavior, DKK and rounding. All six passed the existing fixture tests and preserved allowed source files. Actual diffs and raw streams remain under the temporary roots named in the JSON reports.
 
+## Observed retrieval behavior
+
+All four broker-assisted Claude coding runs called MemCode `understand` and
+`assess` before editing. Two also called `find`: ten MemCode requests in total.
+The recorded shell calls in those runs performed tests and behavioral checks;
+none performed code search. Six direct `Read` calls inspected the source files
+being edited. This is observed use at the relevant points in those four tasks,
+not an enforced ban on alternative search paths.
+
+Codex and Cursor invoked all three tools in directed conformance checks. Those
+checks establish connectivity and working tool calls; they do not establish
+independent adoption throughout a complete coding task. Their normal production
+launch paths have not been migrated to the broker.
+
+The approximately 60% input reduction compares the deterministic broker with
+the full Memtrace-enabled Claude setup. It is not a comparison with bare Claude
+without Memtrace.
+
 ## Local helper use and limits
 
 The reused model was **onnx-community/Qwen2.5-Coder-0.5B-Instruct**, q4, from an existing Transformers.js 4.3.2 cache. Its ONNX file is 862,087,110 bytes. Remote loading was disabled and all model files were local. No model/package download was performed. The app accepts a configured installed package directory and does not depend on this evaluation worktree path.
