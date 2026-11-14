@@ -7,7 +7,7 @@ and artifacts. Memtrace provides the understanding underneath the experience.
 ## Two starting points
 
 **Existing code:** choose a folder, analyze it with Memtrace, describe an outcome,
-then run a focused worker in an isolated checkout.
+then run coordinated story workers on one shared epic branch.
 
 **New idea:** choose a location, describe the project, create the initial brief and
 runbook, then iteratively turn that into working software. Dictation is another
@@ -19,6 +19,13 @@ React renders the workspace. A narrow preload exposes validated IPC. Electron ma
 owns project files, persistence, process launches, Memtrace MCP and preview views.
 Installed harnesses own model execution; the app normalizes their observable output.
 The browser never receives the desktop bridge.
+
+An epic owns a branch. Its story workers share the project folder on that branch.
+Memtrace Fleet supplies intent, scope reservations, conflict classification and
+escalation. Unresolved overlaps pause the fleet and enter the human decision queue.
+Changes remain in place; recording a decision does not reset files or automatically
+resume a worker. A project switches epic branches only when its fleet is quiet and
+the existing changes have been handled.
 
 There is no mandatory cloud service and no MemCode account. Cloud model use is
 optional through a user's harness. Transcription uses a loopback speech server.

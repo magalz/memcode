@@ -5,7 +5,8 @@ import {
   LoaderCircle,
   Sparkles,
 } from "lucide-react";
-import type { Harness, Stage } from "../shared";
+import type { Harness, Stage, WorkItem } from "../shared";
+import { harnessNames } from "../shared";
 
 export function Mark({ small = false }: { small?: boolean }) {
   return (
@@ -33,25 +34,34 @@ export function HarnessMark({
 }) {
   return (
     <span
-      title={{ codex: "Codex", claude: "Claude Code", amp: "Amp" }[id]}
+      title={harnessNames[id]}
       className={`harness-mark ${id} ${small ? "small" : ""}`}
     >
-      {id === "codex" ? (
-        <svg viewBox="0 0 20 20" fill="none">
-          <path
-            d="m8 4-5 6 5 6m4-12 5 6-5 6m-1-13-2 14"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      ) : id === "claude" ? (
-        <Sparkles size={small ? 11 : 15} />
-      ) : (
-        <span>a</span>
-      )}
+      <img
+        src={`./adapters/${id === "claude" ? "claude-code" : id}.svg`}
+        alt=""
+        draggable={false}
+      />
     </span>
+  );
+}
+
+export function WorkerMark({
+  task,
+  small = false,
+}: {
+  task: WorkItem;
+  small?: boolean;
+}) {
+  return task.assignment === "auto" && !task.route ? (
+    <span
+      title="Automatic assignment"
+      className={"harness-mark auto " + (small ? "small" : "")}
+    >
+      <Sparkles size={small ? 12 : 17} />
+    </span>
+  ) : (
+    <HarnessMark id={task.harness} small={small} />
   );
 }
 

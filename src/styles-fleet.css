@@ -1,0 +1,202 @@
+.fleet-explainer {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 25px 27px;
+  background: #edf5ef;
+  border: 1px solid #dce9df;
+  border-radius: 12px;
+  margin-bottom: 29px;
+}
+.fleet-explainer-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #d3e6d9;
+  border-radius: 11px;
+  background: #f8fcf9;
+  color: #458165;
+  flex-shrink: 0;
+}
+.fleet-explainer > div {
+  flex: 1;
+}
+.fleet-explainer h2 {
+  font-size: 17px;
+  font-weight: 520;
+  letter-spacing: -0.4px;
+  color: #2c513b;
+}
+.fleet-explainer p {
+  font-size: 12px;
+  line-height: 1.9;
+  max-width: 730px;
+  margin-top: 8px;
+  color: #607a68;
+}
+.decision-count {
+  display: inline-grid;
+  place-items: center;
+  font: 10px var(--mono);
+  padding: 4px 6px;
+  border-radius: 5px;
+  background: #f6efe2;
+  color: #9c7e4b;
+  margin-left: 8px;
+}
+.decision-card {
+  border: 1px solid #e6dfcf;
+  border-radius: 11px;
+  background: #fff;
+  margin: 18px 0;
+  overflow: hidden;
+}
+.decision-card > header {
+  display: flex;
+  align-items: start;
+  gap: 14px;
+  padding: 22px 24px;
+  background: #fdfbf7;
+  border-bottom: 1px solid #ece7dc;
+}
+.decision-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: #f7efdf;
+  color: #a68440;
+  flex-shrink: 0;
+}
+.decision-card header > div {
+  flex: 1;
+  min-width: 0;
+}
+.decision-kicker {
+  font: 9px var(--mono);
+  color: #9c875f;
+  letter-spacing: 0.5px;
+}
+.decision-card h3 {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.8;
+  color: #45533f;
+  margin-top: 8px;
+}
+.decision-branch {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 10px var(--mono);
+  color: #70846a;
+  max-width: 240px;
+  overflow-wrap: anywhere;
+}
+.decision-body {
+  padding: 21px 24px;
+}
+.decision-workers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.decision-workers button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 1px solid #e1e9dd;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #536c56;
+  background: #fbfdf9;
+}
+.decision-workers button > span {
+  font: 9px var(--mono);
+  color: #8ca082;
+}
+.decision-scope {
+  font-size: 11px;
+  color: #71836c;
+  margin: 20px 0;
+}
+.decision-scope summary {
+  cursor: pointer;
+}
+.decision-scope code {
+  display: block;
+  font: 10px/1.9 var(--mono);
+  color: #7e8c78;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+.decision-card textarea {
+  min-height: 95px;
+  width: 100%;
+  padding: 13px;
+  border: 1px solid #dce6d8;
+  border-radius: 7px;
+  resize: vertical;
+  font: 12px/1.9 inherit;
+  color: #3f5745;
+  background: #fcfefb;
+}
+.decision-body > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 17px;
+}
+.decision-note {
+  font-size: 10px;
+  line-height: 1.8;
+  color: #83927b;
+  margin-top: 16px;
+}
+.decision-history {
+  margin-top: 30px;
+  border-top: 1px solid #e2eadc;
+  padding-top: 20px;
+}
+.decision-history > summary {
+  font-size: 12px;
+  color: #71866a;
+  cursor: pointer;
+}
+.decision-card.resolved {
+  border-color: #dbe9dc;
+}
+.decision-card.resolved > header {
+  background: #f6faf4;
+}
+.decision-card.resolved .decision-icon {
+  background: #e9f3e7;
+  color: #4c8b60;
+}
+.shared-diff-note,
+.fleet-paused-banner {
+  font-size: 11px;
+  line-height: 1.8;
+  padding: 13px 22px;
+  background: #f7f4eb;
+  color: #8a794e;
+  border-bottom: 1px solid #e9e2d1;
+}
+.fleet-paused-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+}
+.fleet-paused-banner > button {
+  color: #7f673a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  font-size: 11px;
+}

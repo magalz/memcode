@@ -124,7 +124,7 @@ test("serialized atomic saves preserve the latest workspace", async () => {
   }
 });
 
-test("worker runs in a private worktree and returns review plus real artifacts", async () => {
+test("worker joins its epic branch and returns shared changes plus separate artifacts", async () => {
   const temp = await temporary();
   let manager: WorkerManager | undefined;
   try {
@@ -145,7 +145,7 @@ test("worker runs in a private worktree and returns review plus real artifacts",
     const stub = join(temp.root, "fixture-harness.mjs");
     await writeFile(
       stub,
-      `import {writeFile} from 'node:fs/promises';let prompt='';for await(const chunk of process.stdin)prompt+=chunk;await writeFile('result.txt','A real fixture change');await writeFile('.memcode/artifacts/report.html','<h1>Fixture artifact</h1>');console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'Fixture complete. No production model was called.'}}));`,
+      `import {writeFile} from 'node:fs/promises';import {join} from 'node:path';let prompt='';for await(const chunk of process.stdin)prompt+=chunk;await writeFile('result.txt','A real fixture change');await writeFile(join(process.env.MEMCODE_ARTIFACT_DIR,'report.html'),'<h1>Fixture artifact</h1>');console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'Fixture complete. No production model was called.'}}));`,
     );
     const state = initialState();
     const project: Project = {
@@ -154,7 +154,8 @@ test("worker runs in a private worktree and returns review plus real artifacts",
       description: "A fixture",
       path: repo,
       branch: "main",
-      analysis: "idle",
+      analysis: "ready",
+      repoId: "fixture",
       createdAt: new Date().toISOString(),
     };
     const task: WorkItem = {
@@ -166,15 +167,45 @@ test("worker runs in a private worktree and returns review plus real artifacts",
       messages: [],
       stage: "planned",
       run: { state: "idle" },
+      scope: ["result.txt"],
     };
     state.projects.push(project);
     state.tasks.push(task);
     manager = new WorkerManager(
       () => state,
       async () => {},
-      new MemtraceEngine(() => ""),
+      {
+        analyze: async () => "fixture",
+        qualify: async () => ({
+          state: "unavailable",
+          symbols: [],
+          incomplete: true,
+          note: "Fixture",
+          measuredAt: new Date().toISOString(),
+        }),
+        call: async (_project: unknown, name: string) =>
+          name === "fleet_acquire_lease"
+            ? { state: "granted", lease_id: "fixture-lease" }
+            : {},
+      } as unknown as MemtraceEngine,
       join(temp.root, "data"),
       async () => ({ command: process.execPath, prefix: [stub] }),
+      async () => [
+        {
+          id: "codex",
+          name: "Fixture Codex",
+          available: true,
+          path: stub,
+          models: [
+            {
+              id: "fixture-model",
+              label: "Fixture",
+              tier: "extreme",
+              source: "alias",
+            },
+          ],
+        },
+      ],
     );
     await manager.start(task, project);
     const deadline = Date.now() + 10000;
@@ -191,16 +222,100 @@ test("worker runs in a private worktree and returns review plus real artifacts",
       await new Promise((r) => setTimeout(r, 50));
     assert.equal(task.run.state, "finished");
     assert.equal(task.stage, "review");
-    assert.equal(await exists(join(repo, "result.txt")), false);
+    assert.equal(task.run.workspace, repo);
+    assert.equal(task.run.worktree, undefined);
     assert.equal(
-      await readFile(join(task.run.worktree!, "result.txt"), "utf8"),
+      await readFile(join(repo, "result.txt"), "utf8"),
       "A real fixture change",
     );
     assert.match(task.diff!, /result.txt/);
     assert.equal(state.artifacts.filter((a) => a.taskId === task.id).length, 1);
-    assert.equal(await git(repo, ["status", "--porcelain"]), "");
+    assert.match(await git(repo, ["status", "--porcelain"]), /result.txt/);
+    assert.equal(
+      await git(repo, ["branch", "--show-current"]),
+      task.run.branch,
+    );
+    assert.equal(
+      (await git(repo, ["worktree", "list", "--porcelain"]))
+        .split("\n")
+        .filter((line) => line.startsWith("worktree ")).length,
+      1,
+    );
   } finally {
     await manager?.close();
     await temp.cleanup();
   }
+});
+
+test("stop during qualification prevents a later process launch", async () => {
+  const temp = await temporary();
+  const repo = join(temp.root, "repo");
+  await mkdir(repo);
+  await git(repo, ["init", "--initial-branch=main"]);
+  await writeFile(join(repo, "README.md"), "Fixture");
+  await git(repo, ["add", "README.md"]);
+  await git(repo, [
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@local.invalid",
+    "commit",
+    "-m",
+    "Fixture",
+  ]);
+  const state = initialState();
+  const project = {
+    ...state.projects[0],
+    path: repo,
+    example: false,
+    analysis: "ready" as const,
+    repoId: "fixture",
+  };
+  const task: WorkItem = {
+    ...state.tasks[0],
+    example: false,
+    run: { state: "idle" as const },
+    stage: "planned" as const,
+  };
+  state.tasks = [task];
+  let release!: (value: any) => void;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  let launched = false;
+  const engine = {
+    qualify: () => pending,
+    analyze: async () => "fixture",
+  } as unknown as MemtraceEngine;
+  const manager = new WorkerManager(
+    () => state,
+    async () => {},
+    engine,
+    "unused",
+    async () => {
+      launched = true;
+      return null;
+    },
+    async () => [],
+  );
+  const starting = manager.start(task, project);
+  const entered = Date.now() + 3000;
+  while (!task.run.workspace && Date.now() < entered)
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(task.run.state, "preparing");
+  await manager.stop(task.id);
+  assert.equal(task.run.state, "stopping");
+  release({
+    state: "unavailable",
+    symbols: [],
+    incomplete: true,
+    note: "Fixture",
+    measuredAt: new Date().toISOString(),
+  });
+  await assert.rejects(starting, /cancelled/);
+  assert.equal(launched, false);
+  assert.equal(task.run.state, "stopped");
+  assert.equal(task.stage, "review");
+  await manager.close();
+  await temp.cleanup();
 });

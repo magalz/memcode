@@ -1,0 +1,210 @@
+import { access, readdir, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { delimiter, dirname, isAbsolute, join } from "node:path";
+import { homedir } from "node:os";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+export interface Command {
+  command: string;
+  prefix: string[];
+  env?: Record<string, string>;
+}
+export async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function childEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  const key =
+    Object.keys(env).find((k) => k.toLowerCase() === "path") ?? "PATH";
+  const parts = [
+    ...new Set(
+      (env[key] ?? "")
+        .split(delimiter)
+        .map((p) => p.replace(/^"|"$/g, ""))
+        .filter(Boolean),
+    ),
+  ];
+  const kept: string[] = [];
+  for (const part of parts)
+    if ([...kept, part].join(delimiter).length < 7000) kept.push(part);
+  env[key] = kept.join(delimiter);
+  return env;
+}
+
+async function direct(
+  candidates: string[],
+  env?: Record<string, string>,
+): Promise<Command | null> {
+  for (const path of candidates)
+    if (await exists(path)) return { command: path, prefix: [], env };
+  return null;
+}
+
+async function cursorRuntime(): Promise<Command | null> {
+  const root = join(homedir(), "AppData", "Local", "cursor-agent", "versions");
+  try {
+    const candidates = await Promise.all(
+      (await readdir(root, { withFileTypes: true }))
+        .filter((e) => e.isDirectory())
+        .map(async (entry) => {
+          const path = join(root, entry.name);
+          return { path, modified: (await stat(path)).mtimeMs };
+        }),
+    );
+    for (const { path } of candidates.sort((a, b) => b.modified - a.modified))
+      if (
+        (await exists(join(path, "node.exe"))) &&
+        (await exists(join(path, "index.js")))
+      )
+        return {
+          command: join(path, "node.exe"),
+          prefix: [join(path, "index.js")],
+          env: { CURSOR_INVOKED_AS: "agent" },
+        };
+  } catch {
+    /* The standalone Cursor agent may not be installed. */
+  }
+  return null;
+}
+
+async function claudeRuntime(): Promise<Command | null> {
+  const home = homedir();
+  const bash = await direct([
+    "C:\\Program Files\\Git\\bin\\bash.exe",
+    join(home, "scoop", "apps", "git", "current", "bin", "bash.exe"),
+  ]);
+  return direct(
+    [
+      join(
+        home,
+        ".local",
+        "bin",
+        process.platform === "win32" ? "claude.exe" : "claude",
+      ),
+      join(home, ".claude", "local", "claude.exe"),
+      join(home, ".claude", "bin", "claude.exe"),
+    ],
+    bash ? { CLAUDE_CODE_GIT_BASH_PATH: bash.command } : undefined,
+  );
+}
+
+async function codexAppx(): Promise<Command | null> {
+  if (process.platform !== "win32") return null;
+  const root = join(
+    process.env.ProgramFiles ?? "C:\\Program Files",
+    "WindowsApps",
+  );
+  try {
+    const entries = (await readdir(root))
+      .filter((name) => name.startsWith("OpenAI.Codex_"))
+      .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+    const found = await direct(
+      entries.map((name) => join(root, name, "app", "resources", "codex.exe")),
+    );
+    if (found) return found;
+  } catch {
+    /* WindowsApps enumeration can be denied for normal users. */
+  }
+  try {
+    const { stdout } = await promisify(execFile)(
+      join(
+        process.env.SystemRoot ?? "C:\\Windows",
+        "System32",
+        "WindowsPowerShell",
+        "v1.0",
+        "powershell.exe",
+      ),
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Get-AppxPackage -Name OpenAI.Codex | Select-Object -ExpandProperty InstallLocation",
+      ],
+      { windowsHide: true, timeout: 5000, env: childEnv(), encoding: "utf8" },
+    );
+    return direct(
+      stdout
+        .trim()
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .map((path) => join(path, "app", "resources", "codex.exe")),
+    );
+  } catch {
+    return null;
+  }
+}
+
+export async function findCommand(
+  name: string,
+  configured = "",
+): Promise<Command | null> {
+  if (configured) {
+    if (!isAbsolute(configured) || !(await exists(configured))) return null;
+    if (/\.(cjs|mjs|js)$/i.test(configured))
+      return {
+        command: process.execPath,
+        prefix: [configured],
+        env: { ELECTRON_RUN_AS_NODE: "1" },
+      };
+    if (process.platform === "win32" && !/\.exe$/i.test(configured))
+      return null;
+    return { command: configured, prefix: [] };
+  }
+  if (name === "cursor") {
+    const runtime = await cursorRuntime();
+    if (runtime) return runtime;
+  }
+  if (name === "claude") {
+    const runtime = await claudeRuntime();
+    if (runtime) return runtime;
+  }
+  const dirs = [
+    ...new Set(
+      (process.env.PATH ?? process.env.Path ?? "")
+        .split(delimiter)
+        .map((d) => d.replace(/^"|"$/g, ""))
+        .filter(Boolean),
+    ),
+  ];
+  for (const dir of dirs) {
+    const names = name === "cursor" ? ["cursor-agent", "agent"] : [name];
+    for (const candidate of names) {
+      const path = join(
+        dir,
+        candidate + (process.platform === "win32" ? ".exe" : ""),
+      );
+      if ((await exists(path)) && (await stat(path)).isFile())
+        return {
+          command: path,
+          prefix: [],
+          ...(name === "cursor" ? { env: { CURSOR_INVOKED_AS: "agent" } } : {}),
+        };
+    }
+    const packageEntry =
+      name === "memtrace"
+        ? "memtrace/bin/memtrace.js"
+        : name === "claude"
+          ? "@anthropic-ai/claude-code/cli.js"
+          : name === "codex"
+            ? "@openai/codex/bin/codex.js"
+            : null;
+    if (packageEntry)
+      for (const base of [dir, dirname(dir)]) {
+        const path = join(base, "node_modules", packageEntry);
+        if (await exists(path))
+          return {
+            command: process.execPath,
+            prefix: [path],
+            env: { ELECTRON_RUN_AS_NODE: "1" },
+          };
+      }
+  }
+  return name === "codex" ? codexAppx() : null;
+}

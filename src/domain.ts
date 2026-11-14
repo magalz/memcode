@@ -31,6 +31,28 @@ export function isActive(task: WorkItem): boolean {
   );
 }
 
+export function validateDependencies(
+  tasks: WorkItem[],
+  owner: WorkItem,
+  dependencies: string[],
+): void {
+  const seen = new Set<string>();
+  const pending = [...dependencies];
+  while (pending.length) {
+    const id = pending.pop()!;
+    if (id === owner.id)
+      throw new Error("This dependency would create a story cycle.");
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const task = tasks.find(
+      (t) => t.id === id && t.projectId === owner.projectId,
+    );
+    if (!task)
+      throw new Error("Prerequisite stories must belong to the same project.");
+    pending.push(...(task.dependsOn ?? []));
+  }
+}
+
 export function stageLabel(stage: Stage): string {
   return {
     planned: "Planned",
@@ -61,7 +83,7 @@ export function restartSafeState(state: AppState): AppState {
               ...task.run,
               state: "stopped",
               error:
-                "MemCode restarted. The preserved worktree may contain an unfinished change.",
+                "MemCode restarted. The shared epic branch may contain unfinished changes.",
             },
           }
         : task,

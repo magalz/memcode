@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { MemCodeAPI } from "../src/shared";
 
 const api: MemCodeAPI = {
+  refreshFleet: (projectId) => ipcRenderer.invoke("fleet:refresh", projectId),
+  resolveFleetConflict: (id, resolution, winnerTaskId) =>
+    ipcRenderer.invoke("fleet:resolve", { id, resolution, winnerTaskId }),
   load: () => ipcRenderer.invoke("workspace:load"),
   onState: (listener) => {
     const fn = (_event: unknown, state: Parameters<typeof listener>[0]) =>
@@ -14,6 +17,10 @@ const api: MemCodeAPI = {
   selectProject: (id) => ipcRenderer.invoke("project:select", id),
   analyzeProject: (id) => ipcRenderer.invoke("project:analyze", id),
   createTask: (input) => ipcRenderer.invoke("task:create", input),
+  createEpic: (input) => ipcRenderer.invoke("epic:create", input),
+  updateEpic: (id, patch) => ipcRenderer.invoke("epic:update", { id, patch }),
+  installDogfoodBacklog: (projectId) =>
+    ipcRenderer.invoke("roadmap:install", projectId),
   updateTask: (id, patch) => ipcRenderer.invoke("task:update", { id, patch }),
   addMessage: (id, text) => ipcRenderer.invoke("task:message", { id, text }),
   qualifyTask: (id) => ipcRenderer.invoke("task:qualify", id),
@@ -30,7 +37,7 @@ const api: MemCodeAPI = {
     return () => ipcRenderer.removeListener("preview:event", fn);
   },
   readArtifact: (id) => ipcRenderer.invoke("artifact:read", id),
-  openWorktree: (id) => ipcRenderer.invoke("worker:open-folder", id),
+  openWorkerWorkspace: (id) => ipcRenderer.invoke("worker:open-folder", id),
   transcribe: (wav) => ipcRenderer.invoke("speech:transcribe", wav),
   windowAction: (action) => ipcRenderer.invoke("window:action", action),
 };

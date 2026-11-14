@@ -21,21 +21,27 @@ npm run build
 npm start
 ```
 
-The first launch opens a clearly labelled example workspace. Use **Add a project**
+Development checkouts open the real MemCode dogfood project with **9 epics and 38
+stories**. A separate **Design preview** project is clearly labelled as example data.
+Use **Add a project**
 to choose an existing folder or start a new Git repository from a project brief.
 MemCode then connects to the installed Memtrace engine to analyze it.
 
 ## The first working version
 
 - A board and grouped list sharing one work-item model, with filtering and search.
+- A persisted Now / Next / Later roadmap, epics, stories, source scope and cycle-checked prerequisites.
 - Project briefs, editable runbooks, conversations, worker status and change review.
 - Native folder selection and project creation. State stays in Electron userData.
-- Local CLI worker adapters for Codex, Claude Code and Amp, detected on PATH.
-- A private Git worktree per work item; process-tree stop and preserved partial work.
+- Local CLI worker adapters for **Codex, Claude Code and Cursor Agent**, including Windows standalone/runtime discovery.
+- Official bundled SVG marks with provenance in [adapter sources](public/adapters/SOURCES.md).
+- Automatic routing to a concrete harness, model and reasoning effort, with manual overrides and visible reasons.
+- One Git branch per epic, with story workers sharing the project folder.
+- Memtrace Fleet scope reservations, intent heartbeats, overlap checks and a persisted human decision queue.
 - Memtrace MCP indexing, relevant-symbol context and measured quality/impact inputs.
-- Cooperative Fleet preflight, declared feature intent and independent heartbeats.
+- Cooperative Fleet preflight, typed declared intent and independent heartbeats.
 - HTML/image previews in a sandboxed `WebContentsView` without the app preload.
-- Artifact discovery under `.memcode/artifacts/`, text previews and browser screenshots.
+- Separate output folders under `.memcode/workers/<story-id>/artifacts/`, text previews and browser screenshots.
 - Dictation via an existing local whisper.cpp server; audio is converted to WAV locally.
 
 Execution, project state, coordination and artifacts stay on this computer. A harness
@@ -50,10 +56,18 @@ Install/configure [Memtrace](https://memtrace.io/docs) separately. The app disco
 point. It connects with the MCP SDK and scopes indexing to the selected repository.
 Engine authentication and licensing remain Memtrace's responsibility.
 
-The local Codex installation was used to verify its CLI contract. Claude and Amp
-adapters are implemented but need conformance testing against installed versions;
-they are not detected on the initial development machine. No cloud coding session
-is launched merely by opening the app or creating a work item.
+All three local runtimes were detected on the development machine. Codex model IDs
+come from its local model cache; Cursor models come from `--list-models`; Claude
+supports its documented CLI aliases. Provider authentication, entitlements and actual
+execution are confirmed at launch. Cross-provider conformance remains an explicit
+roadmap story. Opening the app or creating a story never launches a coding session.
+
+Automatic assignment uses AST cognitive/cyclomatic complexity, nesting, observed
+primary-anchor blast radius, affected processes and module roots. Unknown values
+remain unknown and block the fast tier. The four capability envelopes adapt the
+previous orchestrator's policy; their thresholds and model-to-tier mappings are
+**provisional**, not calibrated probabilities. Task length is not a complexity input.
+The route records source/graph revisions and explains incomplete coverage.
 
 For local speech, run a whisper.cpp server and set its `/inference` endpoint in
 Settings. No speech model is bundled or automatically downloaded. The microphone
@@ -68,14 +82,30 @@ passed or automatically publishes a change. Review the actual diff and evidence.
 There is no automatic Git merge, push or deployment.
 
 Fleet scope comes from qualification seeds and is explicitly incomplete where the
-graph says so. The initial typed intent describes feature implementation; it is not
-a post-diff semantic classification. Fleet is cooperative coordination, not hard
-write fencing. Worktrees keep edits separate; the user owns integration.
+graph says so. Typed intents describe the declared story category; refactor/fix
+subtypes are coarse defaults, not a post-diff semantic classification. Story workers
+share the epic branch and its files. The host acquires and renews Fleet reservations,
+checks intent overlaps and polls escalations. Unresolved overlaps pause affected work
+and appear in **Decisions**. A human can choose who proceeds or ask for reconciliation.
+Decisions are recorded without resetting files or automatically restarting workers.
+Fleet coordination depends on clients honoring the protocol; it is not hard filesystem
+write fencing. The developer owns reconciliation and acceptance of shared changes.
 
 The app is a single local owner with serialized atomic JSON persistence. Distributed
-durability, calibrated model routing, enforced write leases, independent acceptance
+durability, calibrated model routing, authoritative write fencing, independent acceptance
 checks and broader adapter validation are future iterations, tracked in the dogfood
 backlog. See [the product brief](docs/PRODUCT.md) and [design rules](docs/DESIGN.md).
+
+## Dogfood
+
+Open **MemCode → Roadmap**. Expand an epic, pick a ready story, and use **Plan
+worker** to inspect its measured route. Commit existing project changes before
+activating an epic branch, then launch story workers. Other workers on the same epic
+join that branch. Finish or stop that fleet before switching this project to another
+epic. Review each conversation, runbook and output alongside the **combined epic
+diff**; a shared diff is not verified per-worker attribution. The next
+bounded dogfood story adds routing regression tests. **Sync build plan** adds
+missing stories without replacing edited briefs, dependencies or progress.
 
 ## Checks
 
@@ -86,7 +116,8 @@ npm run build
 npm run test:smoke
 ```
 
-Tests use a fixture harness to exercise real Git worktrees and artifact collection
+Tests use fixture harnesses to exercise actual concurrent worker processes on one
+epic branch, separate artifact ownership, overlap pausing and human resolution,
 without calling a model. The desktop smoke test uses a separate temporary profile.
 
 This is a separate local Git repository. No remote repository has been published;

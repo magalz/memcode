@@ -1,3 +1,4 @@
+import { harnessNames } from "../shared";
 import {
   Plus,
   MoreHorizontal,
@@ -12,7 +13,7 @@ import { useState } from "react";
 import type { Stage, WorkItem } from "../shared";
 import { stages } from "../shared";
 import { isActive, progress, stageLabel } from "../domain";
-import { Empty, HarnessMark, PriorityMark, StageIcon } from "./UI";
+import { Empty, WorkerMark, PriorityMark, StageIcon } from "./UI";
 
 interface Props {
   tasks: WorkItem[];
@@ -87,12 +88,10 @@ export function WorkBoard({ tasks, mode, open, create, move }: Props) {
                     <span>{task.title}</span>
                   </span>
                   <span className="row-harness">
-                    <HarnessMark id={task.harness} small />
-                    {task.harness === "claude"
-                      ? "Claude"
-                      : task.harness === "codex"
-                        ? "Codex"
-                        : "Amp"}
+                    <WorkerMark task={task} small />
+                    {task.assignment === "auto" && !task.route
+                      ? "Automatic"
+                      : harnessNames[task.harness]}
                   </span>
                   <span>
                     <PriorityMark value={task.priority} />
@@ -208,13 +207,11 @@ export function WorkBoard({ tasks, mode, open, create, move }: Props) {
                   </div>
                   <div className="card-footer">
                     <div className="worker-identity">
-                      <HarnessMark id={task.harness} small />
+                      <WorkerMark task={task} small />
                       <span>
-                        {task.harness === "codex"
-                          ? "Codex"
-                          : task.harness === "claude"
-                            ? "Claude"
-                            : "Amp"}
+                        {task.assignment === "auto" && !task.route
+                          ? "Automatic"
+                          : harnessNames[task.harness]}
                       </span>
                       {isActive(task) && <span className="live-dot" />}
                     </div>

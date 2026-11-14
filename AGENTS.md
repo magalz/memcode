@@ -21,7 +21,10 @@ do not copy the Memtrace backend into this repository.
 - Keep Node capabilities in Electron main; expose typed, validated IPC methods.
 - Isolate browser/artifact content from the app and its preload.
 - Never interpolate prompts into shell commands. Spawn with argument arrays.
-- Run workers in isolated Git worktrees; preserve patches on stop/failure.
+- An epic owns one Git branch. Story workers share the project checkout on that
+  branch and coordinate through Memtrace Fleet. Do not create per-worker branches
+  or worktrees. Preserve shared changes on stop/failure. Pause affected workers
+  and expose unresolved conflicts for a human decision.
 - Prefer small modules and native APIs over extra frameworks.
 - Run `npm run typecheck`, `npm test`, `npm run build` and the Electron smoke
   check for relevant changes. Inspect the actual desktop UI for visual changes.

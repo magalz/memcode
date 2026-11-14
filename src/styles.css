@@ -1,4 +1,7 @@
 @import url("./styles-detail.css");
+@import url("./styles-select.css");
+@import url("./styles-roadmap.css");
+@import url("./styles-fleet.css");
 
 :root {
   font-family:
@@ -987,16 +990,19 @@ kbd {
   color: #496251;
   border: 1px solid #dce5dd;
 }
-.harness-mark svg {
+.harness-mark svg,
+.harness-mark img {
   width: 17px;
   height: 17px;
+  object-fit: contain;
 }
 .harness-mark.small {
   width: 20px;
   height: 20px;
   border-radius: 5px;
 }
-.harness-mark.small svg {
+.harness-mark.small svg,
+.harness-mark.small img {
   width: 12px;
   height: 12px;
 }
@@ -1004,6 +1010,14 @@ kbd {
   background: #ecf3ed;
   color: #4c7560;
   border-color: #d9e7dd;
+}
+.harness-mark.codex img {
+  width: 25px;
+  height: 25px;
+}
+.harness-mark.codex.small img {
+  width: 18px;
+  height: 18px;
 }
 .harness-mark.claude {
   background: #f9ece2;

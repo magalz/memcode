@@ -1,3 +1,6 @@
+import { harnessNames } from "../shared";
+import { Select } from "./Select";
+import { StoryMetadata, WorkerAssignment } from "./WorkerAssignment";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowDown,
@@ -39,6 +42,8 @@ import type {
   Stage,
   WorkItem,
   Message,
+  Epic,
+  FleetConflict,
 } from "../shared";
 import { stages } from "../shared";
 import { isActive, progress, stageLabel } from "../domain";
@@ -46,6 +51,7 @@ import { useDictation } from "../useDictation";
 import {
   Empty,
   HarnessMark,
+  WorkerMark,
   Mark,
   PriorityMark,
   Spinner,
@@ -60,6 +66,10 @@ interface Props {
   project: Project;
   artifacts: Artifact[];
   runtime: RuntimeInfo;
+  epics: Epic[];
+  conflicts: FleetConflict[];
+  onDecisions: () => void;
+  tasks: WorkItem[];
   onClose: () => void;
   notify: (s: string) => void;
   act: Act;
@@ -71,6 +81,10 @@ export function WorkDetail({
   project,
   artifacts,
   runtime,
+  epics,
+  conflicts,
+  onDecisions,
+  tasks,
   onClose,
   notify,
   act,
@@ -80,6 +94,17 @@ export function WorkDetail({
   const [draft, setDraft] = useState("");
   const [check, setCheck] = useState("");
   const [busy, setBusy] = useState(false);
+  const plan = () =>
+    void act(async () => {
+      setBusy(true);
+      try {
+        if (project.analysis !== "ready")
+          await window.memcode.analyzeProject(project.id);
+        await window.memcode.qualifyTask(task.id);
+      } finally {
+        setBusy(false);
+      }
+    });
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [text, setText] = useState("");
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -203,10 +228,10 @@ export function WorkDetail({
             )}
             <button
               className="icon-button"
-              title="Open private worktree"
-              disabled={!task.run.worktree}
+              title="Open epic workspace"
+              disabled={!task.run.workspace && !task.run.worktree}
               onClick={() =>
-                void act(() => window.memcode.openWorktree(task.id))
+                void act(() => window.memcode.openWorkerWorkspace(task.id))
               }
             >
               <ExternalLink size={14} />
@@ -233,13 +258,13 @@ export function WorkDetail({
           <div className="detail-properties">
             <label className={"status-select " + task.stage}>
               <StageIcon stage={task.stage} />
-              <select
+              <Select
                 aria-label="Work item status"
                 value={task.stage}
-                onChange={(e) =>
+                onValueChange={(e) =>
                   void act(() =>
                     window.memcode.updateTask(task.id, {
-                      stage: e.target.value as Stage,
+                      stage: e as Stage,
                     }),
                   )
                 }
@@ -249,19 +274,19 @@ export function WorkDetail({
                     {stageLabel(stage)}
                   </option>
                 ))}
-              </select>
+              </Select>
               <ChevronDown size={10} />
             </label>
             <span className="property-divider" />
             <label className="property-select">
               <PriorityMark value={task.priority} />
-              <select
+              <Select
                 aria-label="Work item priority"
                 value={task.priority}
-                onChange={(e) =>
+                onValueChange={(e) =>
                   void act(() =>
                     window.memcode.updateTask(task.id, {
-                      priority: e.target.value as WorkItem["priority"],
+                      priority: e as WorkItem["priority"],
                     }),
                   )
                 }
@@ -269,7 +294,7 @@ export function WorkDetail({
                 <option value="high">High priority</option>
                 <option value="medium">Medium priority</option>
                 <option value="low">Low priority</option>
-              </select>
+              </Select>
             </label>
             <span className="property-divider" />
             <span className="detail-local">
@@ -313,9 +338,7 @@ export function WorkDetail({
                   {task.run.state === "preparing" && (
                     <div className="worker-thinking">
                       <Spinner />
-                      <span>
-                        Preparing source context and an isolated worktree…
-                      </span>
+                      <span>Connecting source context and the epic Fleet…</span>
                     </div>
                   )}
                   {task.run.state === "running" && (
@@ -365,15 +388,12 @@ export function WorkDetail({
                     />
                     <div className="composer-controls">
                       <div>
-                        <HarnessMark id={task.harness} small />
+                        <WorkerMark task={task} small />
                         <span>
-                          {task.harness === "codex"
-                            ? "Codex"
-                            : task.harness === "claude"
-                              ? "Claude Code"
-                              : "Amp"}
+                          {task.assignment === "auto" && !task.route
+                            ? "Automatic assignment"
+                            : harnessNames[task.harness]}
                         </span>
-                        <ChevronDown size={9} />
                         {dictation.phase !== "idle" && (
                           <span className="recording-label">
                             {dictation.phase === "recording"
@@ -494,6 +514,11 @@ export function WorkDetail({
             {tab === "changes" &&
               (task.diff ? (
                 <div className="diff-view">
+                  <p className="shared-diff-note">
+                    Combined changes on the epic branch. Other Fleet workers may
+                    have contributed to this diff; per-worker attribution has
+                    not been verified.
+                  </p>
                   <div className="diff-summary">
                     <GitBranch size={14} />
                     <span>{task.run.branch}</span>
@@ -526,7 +551,7 @@ export function WorkDetail({
                   title="The change will tell its story."
                   description={
                     task.example
-                      ? "In a real session, the worker’s actual worktree diff appears here for review."
+                      ? "In a real session, the epic branch’s combined diff appears here for review."
                       : "When the worker finishes, its tracked and new-file changes appear here. A successful exit alone never marks the work done."
                   }
                 />
@@ -590,7 +615,7 @@ export function WorkDetail({
                 <Empty
                   icon={<Files size={27} />}
                   title="Keep the output close."
-                  description="Reports, images and HTML files saved by the worker under .memcode/artifacts/ will appear here."
+                  description="Reports, images and HTML files saved by the worker under .memcode/workers/<story-id>/artifacts/ will appear here."
                 />
               ))}
             {tab === "browser" && (
@@ -603,65 +628,53 @@ export function WorkDetail({
             )}
           </div>
           <aside className="work-inspector">
+            {conflicts.length > 0 && (
+              <div className="fleet-paused-banner">
+                <span>Fleet paused for your decision</span>
+                <button onClick={onDecisions}>
+                  Review
+                  <ArrowUpRight size={12} />
+                </button>
+              </div>
+            )}
             <section className="inspector-section">
               <div className="inspector-label">
-                ASSIGNED WORKER
+                WORKER ASSIGNMENT
                 <span>
                   {task.example ? "PREVIEW" : active ? "ACTIVE" : "LOCAL"}
                 </span>
               </div>
               <div className="assigned-worker">
-                <HarnessMark id={task.harness} />
+                <WorkerMark task={task} />
                 <div>
                   <strong>
-                    {task.harness === "codex"
-                      ? "Codex"
-                      : task.harness === "claude"
-                        ? "Claude Code"
-                        : "Amp"}
+                    {task.assignment === "auto" && !task.route
+                      ? "Automatic"
+                      : harnessNames[task.harness]}
                   </strong>
                   <span>
                     {task.example
                       ? "Example conversation"
                       : active
-                        ? "Working in an isolated checkout"
-                        : available
-                          ? "Installed and available"
-                          : "Harness not detected"}
+                        ? "Working on the shared epic branch"
+                        : task.assignment === "auto" && !task.route
+                          ? "Selected from measured source scope"
+                          : available
+                            ? "Installed and available"
+                            : "Harness not detected"}
                   </span>
                 </div>
                 <span className={active ? "live-dot" : "quiet-dot"} />
               </div>
-              <label className="inspector-field">
-                <span>Harness</span>
-                <select
-                  aria-label="Assigned harness"
-                  value={task.harness}
-                  disabled={active}
-                  onChange={(e) =>
-                    void act(() =>
-                      window.memcode.updateTask(task.id, {
-                        harness: e.target.value as WorkItem["harness"],
-                      }),
-                    )
-                  }
-                >
-                  <option value="codex">Codex</option>
-                  <option value="claude">Claude Code</option>
-                  <option value="amp">Amp</option>
-                </select>
-              </label>
-              <div className="inspector-field">
-                <span>Model</span>
-                <span>Harness configuration</span>
-              </div>
-              <div className="inspector-field">
-                <span>Execution</span>
-                <span>
-                  <span className="tiny-local-dot" />
-                  This computer
-                </span>
-              </div>
+              <WorkerAssignment
+                task={task}
+                runtime={runtime}
+                busy={busy}
+                plan={plan}
+                update={(patch) =>
+                  void act(() => window.memcode.updateTask(task.id, patch))
+                }
+              />
               {active ? (
                 <button
                   className="button stop-worker"
@@ -681,10 +694,10 @@ export function WorkDetail({
                 <button
                   className="button start-worker"
                   onClick={() => void run()}
-                  disabled={busy}
+                  disabled={busy || conflicts.length > 0}
                 >
                   {busy ? <Spinner /> : <Play size={12} />}{" "}
-                  {task.run.worktree ? "Continue worker" : "Start worker"}
+                  {task.run.workspace ? "Resume story" : "Start worker"}
                   <ArrowUpRight size={12} />
                 </button>
               )}
@@ -694,6 +707,14 @@ export function WorkDetail({
                 </p>
               )}
             </section>
+            <StoryMetadata
+              task={task}
+              epics={epics}
+              tasks={tasks}
+              update={(patch) =>
+                void act(() => window.memcode.updateTask(task.id, patch))
+              }
+            />
             <section className="inspector-section context-section">
               <div className="inspector-label">
                 CODE CONTEXT
@@ -801,7 +822,7 @@ export function WorkDetail({
               </div>
               <div className="agreement-row">
                 <Check size={12} />
-                <span>Private worktree for implementation</span>
+                <span>Shared epic branch with Fleet coordination</span>
               </div>
               <div className="agreement-row">
                 <Check size={12} />
@@ -812,10 +833,12 @@ export function WorkDetail({
                   <GitBranch size={12} />
                   <span>{task.run.branch}</span>
                   <button
-                    title="Open worktree folder"
+                    title="Open epic workspace"
                     className="icon-button"
                     onClick={() =>
-                      void act(() => window.memcode.openWorktree(task.id))
+                      void act(() =>
+                        window.memcode.openWorkerWorkspace(task.id),
+                      )
                     }
                   >
                     <ArrowUpRight size={12} />
@@ -884,13 +907,7 @@ function MessageBlock({
           <HarnessMark id={harness} small />
         )}
         <strong>
-          {message.role === "user"
-            ? "You"
-            : harness === "codex"
-              ? "Codex"
-              : harness === "claude"
-                ? "Claude Code"
-                : "Amp"}
+          {message.role === "user" ? "You" : harnessNames[harness]}
         </strong>
         <Time at={message.at} />
         {message.role === "assistant" && (
@@ -919,6 +936,13 @@ function PreviewPane({
   const [title, setTitle] = useState(artifact?.name ?? "Local browser");
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(!!artifact);
+  const [popover, setPopover] = useState(false);
+  useEffect(() => {
+    const changed = (event: Event) =>
+      setPopover((event as CustomEvent<boolean>).detail);
+    window.addEventListener("memcode:popover", changed);
+    return () => window.removeEventListener("memcode:popover", changed);
+  }, []);
   useEffect(() => {
     if (artifact) setLoaded(true);
   }, [artifact?.id]);
@@ -932,7 +956,7 @@ function PreviewPane({
     [],
   );
   useEffect(() => {
-    if (!loaded || obscured) {
+    if (!loaded || obscured || popover) {
       void window.memcode.hidePreview();
       return;
     }
@@ -963,7 +987,7 @@ function PreviewPane({
       window.removeEventListener("scroll", show, true);
       void window.memcode.hidePreview();
     };
-  }, [loaded, url, artifact?.id, obscured]);
+  }, [loaded, url, artifact?.id, obscured, popover]);
   const action = async (value: "back" | "forward" | "reload" | "capture") => {
     try {
       await window.memcode.previewAction(value);

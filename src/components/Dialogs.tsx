@@ -1,3 +1,4 @@
+import { Select } from "./Select";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -26,11 +27,12 @@ import type {
   RuntimeInfo,
   Settings,
   WorkItem,
+  Epic,
 } from "../shared";
 import { useDictation } from "../useDictation";
 import { HarnessMark, Mark, PriorityMark, Spinner, StageIcon } from "./UI";
 
-function Modal({
+export function Modal({
   title,
   kicker,
   description,
@@ -80,6 +82,16 @@ function Modal({
     >
       <div
         className={"modal " + (wide ? "wide" : "")}
+        onKeyDown={(event) => {
+          if (
+            event.key === "Escape" &&
+            !document.querySelector('[data-memcode-select-open="true"]')
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+            close();
+          }
+        }}
         ref={ref}
         role="dialog"
         aria-modal="true"
@@ -109,12 +121,16 @@ function Modal({
 export function NewTaskDialog({
   project,
   defaultHarness,
+  epics,
+  initialEpicId,
   onClose,
   onCreated,
   notify,
 }: {
   project: Project;
   defaultHarness: Harness;
+  epics: Epic[];
+  initialEpicId?: string;
   onClose: () => void;
   onCreated: (task: WorkItem) => void;
   notify: (s: string) => void;
@@ -122,6 +138,9 @@ export function NewTaskDialog({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [harness, setHarness] = useState<Harness>(defaultHarness);
+  const [assignment, setAssignment] = useState("auto");
+  const [epicId, setEpicId] = useState(initialEpicId ?? "none");
+  const [kind, setKind] = useState<NonNullable<WorkItem["kind"]>>("feature");
   const [priority, setPriority] = useState<"high" | "medium" | "low">("medium");
   const [busy, setBusy] = useState(false);
   const dictation = useDictation(
@@ -140,6 +159,9 @@ export function NewTaskDialog({
           title: title.trim(),
           description: description.trim(),
           harness,
+          assignment: assignment === "auto" ? "auto" : "manual",
+          epicId: epicId === "none" ? null : epicId,
+          kind,
           priority,
         }),
       );
@@ -208,28 +230,63 @@ export function NewTaskDialog({
           </div>
           <div className="form-row">
             <label className="field">
-              <span>Worker harness</span>
-              <select
+              <span>Worker assignment</span>
+              <Select
                 aria-label="Worker harness"
-                value={harness}
-                onChange={(e) => setHarness(e.target.value as Harness)}
+                value={assignment === "auto" ? "auto" : harness}
+                onValueChange={(value) => {
+                  setAssignment(value);
+                  if (value !== "auto") setHarness(value as Harness);
+                }}
               >
+                <option value="auto">Automatic · Memtrace route</option>
                 <option value="codex">Codex</option>
                 <option value="claude">Claude Code</option>
-                <option value="amp">Amp</option>
-              </select>
+                <option value="cursor">Cursor</option>
+              </Select>
             </label>
             <label className="field">
               <span>Priority</span>
-              <select
+              <Select
                 aria-label="Priority"
                 value={priority}
-                onChange={(e) => setPriority(e.target.value as typeof priority)}
+                onValueChange={(e) => setPriority(e as typeof priority)}
               >
                 <option value="high">High priority</option>
                 <option value="medium">Medium priority</option>
                 <option value="low">Low priority</option>
-              </select>
+              </Select>
+            </label>
+          </div>
+          <div className="form-row">
+            <label className="field">
+              <span>Epic</span>
+              <Select
+                aria-label="Story epic"
+                value={epicId}
+                onValueChange={setEpicId}
+              >
+                <option value="none">Project work · default epic</option>
+                {epics.map((epic) => (
+                  <option key={epic.id} value={epic.id}>
+                    {epic.identifier} · {epic.title}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="field">
+              <span>Type of work</span>
+              <Select
+                aria-label="Type of work"
+                value={kind}
+                onValueChange={(value) => setKind(value as typeof kind)}
+              >
+                <option value="feature">Feature</option>
+                <option value="fix">Fix</option>
+                <option value="refactor">Refactor</option>
+                <option value="test">Verification</option>
+                <option value="research">Research</option>
+              </Select>
             </label>
           </div>
           <div className="form-note">
@@ -513,26 +570,26 @@ export function SettingsDialog({
             <div className="form-row">
               <label className="field">
                 <span>Default harness</span>
-                <select
+                <Select
                   value={draft.defaultHarness}
-                  onChange={(e) =>
+                  onValueChange={(e) =>
                     setDraft({
                       ...draft,
-                      defaultHarness: e.target.value as Harness,
+                      defaultHarness: e as Harness,
                     })
                   }
                 >
                   <option value="codex">Codex</option>
                   <option value="claude">Claude Code</option>
-                  <option value="amp">Amp</option>
-                </select>
+                  <option value="cursor">Cursor</option>
+                </Select>
               </label>
               <label className="field">
                 <span>Worker slots</span>
-                <select
+                <Select
                   value={draft.maxWorkers}
-                  onChange={(e) =>
-                    setDraft({ ...draft, maxWorkers: Number(e.target.value) })
+                  onValueChange={(e) =>
+                    setDraft({ ...draft, maxWorkers: Number(e) })
                   }
                 >
                   {[1, 2, 3, 4, 6, 8].map((n) => (
@@ -540,14 +597,14 @@ export function SettingsDialog({
                       {n} workers
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             </div>
             <label className="field">
               <span>Model override</span>
               <input
                 aria-label="Model override"
-                placeholder="Use the harness’s configured model"
+                placeholder="Automatic · match measured task complexity"
                 value={draft.model}
                 onChange={(e) => setDraft({ ...draft, model: e.target.value })}
               />

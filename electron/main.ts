@@ -4,12 +4,16 @@ import { basename, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { AppState, Project, WorkItem } from "../src/shared";
-import { canMoveTask, isActive } from "../src/domain";
+import { canMoveTask, isActive, validateDependencies } from "../src/domain";
 import { LocalStore, exists, git, now, within } from "./local";
 import { MemtraceEngine } from "./memtrace";
 import { WorkerManager } from "./workers";
 import { PreviewManager } from "./preview";
 import { localURL } from "./urls";
+import { planRoute } from "./router";
+import { discoverHarnesses } from "./catalog";
+import { registerPlanning, attachDogfoodProject } from "./planning";
+import { ensureTaskEpic } from "./epic-workspace";
 
 app.setName("MemCode");
 if (process.env.MEMCODE_DATA_DIR)
@@ -21,13 +25,16 @@ let closing = false;
 const identifier = z.string().min(1).max(200);
 const nonempty = z.string().trim().min(1);
 const stage = z.enum(["planned", "working", "review", "done"]);
-const harness = z.enum(["codex", "claude", "amp"]);
+const harness = z.enum(["codex", "claude", "cursor"]);
+const kind = z.enum(["feature", "fix", "refactor", "research", "test"]);
 const priority = z.enum(["high", "medium", "low"]);
 
 async function start(): Promise<void> {
   Menu.setApplicationMenu(null);
   const store = new LocalStore(app.getPath("userData"));
   await store.load();
+  if (!app.isPackaged && (await exists(join(app.getAppPath(), ".git"))))
+    attachDogfoodProject(store.state, app.getAppPath());
   const engine = new MemtraceEngine(() => store.state.settings.memtracePath);
   const state = () => store.state;
   const changed = async () => {
@@ -213,6 +220,7 @@ async function start(): Promise<void> {
           stage: "planned",
           priority: "high",
           harness: store.state.settings.defaultHarness,
+          assignment: "auto",
           category: "Planning",
           checklist: [
             {
@@ -243,6 +251,7 @@ async function start(): Promise<void> {
           createdAt: now(),
           updatedAt: now(),
         };
+        ensureTaskEpic(store.state, brief);
         store.state.tasks.push(brief);
       }
       await changed();
@@ -251,6 +260,7 @@ async function start(): Promise<void> {
     },
   );
   register("project:analyze", identifier, analyze);
+  registerPlanning(register, state, project, changed);
   register(
     "task:create",
     z.object({
@@ -259,9 +269,19 @@ async function start(): Promise<void> {
       description: z.string().max(20000),
       priority,
       harness,
+      assignment: z.enum(["auto", "manual"]).optional(),
+      epicId: identifier.nullable().optional(),
+      kind: kind.optional(),
     }),
     async (input) => {
       const parent = project(input.projectId);
+      if (
+        input.epicId &&
+        !store.state.epics.some(
+          (epic) => epic.id === input.epicId && epic.projectId === parent.id,
+        )
+      )
+        throw new Error("Choose an epic from this project.");
       const count =
         store.state.tasks
           .filter((t) => t.projectId === parent.id)
@@ -272,6 +292,8 @@ async function start(): Promise<void> {
           ) + 1;
       const item: WorkItem = {
         ...input,
+        assignment: input.assignment ?? "auto",
+        kind: input.kind ?? "feature",
         id: randomUUID(),
         identifier: `MC-${String(count).padStart(3, "0")}`,
         category: "Work",
@@ -302,6 +324,7 @@ async function start(): Promise<void> {
         updatedAt: now(),
         ...(parent.example ? { example: true } : {}),
       };
+      ensureTaskEpic(store.state, item);
       store.state.tasks.push(item);
       await changed();
       return item;
@@ -318,6 +341,12 @@ async function start(): Promise<void> {
           stage: stage.optional(),
           priority: priority.optional(),
           harness: harness.optional(),
+          assignment: z.enum(["auto", "manual"]).optional(),
+          modelOverride: z.string().max(200).nullable().optional(),
+          epicId: identifier.nullable().optional(),
+          dependsOn: z.array(identifier).max(100).optional(),
+          scope: z.array(z.string().max(1000)).max(20).optional(),
+          kind: kind.optional(),
           checklist: z
             .array(
               z.object({
@@ -333,12 +362,52 @@ async function start(): Promise<void> {
     }),
     async ({ id, patch }) => {
       const item = task(id);
+      if (
+        patch.stage === "done" &&
+        store.state.fleetConflicts.some(
+          (conflict) =>
+            conflict.status === "open" &&
+            conflict.projectId === item.projectId &&
+            (conflict.epicId === item.epicId ||
+              conflict.taskIds.includes(item.id)),
+        )
+      )
+        throw new Error(
+          "Resolve the Fleet decision before accepting this story.",
+        );
       if (patch.stage && !canMoveTask(item, patch.stage))
         throw new Error(
           "Stop or finish the active worker before moving this work item.",
         );
       if (patch.harness && isActive(item))
         throw new Error("Stop the worker before changing its harness.");
+      if (
+        isActive(item) &&
+        (patch.assignment ||
+          patch.modelOverride !== undefined ||
+          patch.scope ||
+          patch.kind)
+      )
+        throw new Error(
+          "The active worker keeps its current route and scope. Stop it before changing the assignment.",
+        );
+      if (patch.dependsOn)
+        validateDependencies(store.state.tasks, item, patch.dependsOn);
+      if (
+        patch.epicId &&
+        !store.state.epics.some(
+          (e) => e.id === patch.epicId && e.projectId === item.projectId,
+        )
+      )
+        throw new Error("Choose an epic from this project.");
+      if (
+        patch.assignment ||
+        patch.harness ||
+        patch.modelOverride !== undefined ||
+        patch.scope ||
+        patch.kind
+      )
+        item.route = undefined;
       Object.assign(item, patch, { updatedAt: now() });
       await changed();
     },
@@ -355,11 +424,22 @@ async function start(): Promise<void> {
   );
   register("task:qualify", identifier, async (id) => {
     const item = task(id);
+    if (isActive(item))
+      throw new Error(
+        "This worker is active. Its current route stays bound to the running attempt.",
+      );
     if (item.example)
       throw new Error(
         "Example context is not measured. Connect a project to gather real evidence.",
       );
     item.evidence = await engine.qualify(project(item.projectId), item);
+    item.route = planRoute(
+      item,
+      item.evidence,
+      await discoverHarnesses(),
+      store.state.settings,
+    );
+    item.harness = item.route.harness;
     await changed();
   });
   register("worker:start", identifier, async (id) => {
@@ -367,11 +447,31 @@ async function start(): Promise<void> {
     await workers.start(item, project(item.projectId));
   });
   register("worker:stop", identifier, (id) => workers.stop(id));
+  register("fleet:refresh", identifier, (id) =>
+    workers.fleet.refresh(project(id)),
+  );
+  register(
+    "fleet:resolve",
+    z.object({
+      id: identifier,
+      resolution: nonempty.max(10000),
+      winnerTaskId: identifier.optional(),
+    }),
+    async ({ id, resolution, winnerTaskId }) => {
+      const conflict = store.state.fleetConflicts.find(
+        (item) => item.id === id,
+      );
+      if (!conflict) throw new Error("Fleet decision not found.");
+      await workers.pause(conflict.taskIds);
+      await workers.fleet.resolve(id, resolution, winnerTaskId);
+    },
+  );
   register("worker:open-folder", identifier, async (id) => {
     const item = task(id);
-    if (!item.run.worktree)
-      throw new Error("This work item has no worker checkout yet.");
-    const result = await shell.openPath(item.run.worktree);
+    const workspace = item.run.workspace ?? item.run.worktree;
+    if (!workspace)
+      throw new Error("This story has no active epic workspace yet.");
+    const result = await shell.openPath(workspace);
     if (result) throw new Error(result);
   });
   register(
@@ -431,6 +531,17 @@ async function start(): Promise<void> {
     const item = task(artifact.taskId);
     const roots = [
       join(store.dir, "examples"),
+      ...(item.run.workspace
+        ? [
+            join(
+              item.run.workspace,
+              ".memcode",
+              "workers",
+              item.id,
+              "artifacts",
+            ),
+          ]
+        : []),
       ...(item.run.worktree
         ? [join(item.run.worktree, ".memcode", "artifacts")]
         : []),
@@ -565,7 +676,7 @@ async function createExampleArtifacts(store: LocalStore): Promise<void> {
   const text = join(root, "workspace-notes.md");
   await writeFile(
     text,
-    "# MemCode workspace notes\n\nThis is an example artifact.\n\n- MemCode is an independent Electron app.\n- Memtrace supplies code intelligence and Fleet coordination.\n- Local harnesses implement work in private worktrees.\n- Conversations, runbooks, changes and artifacts stay together.\n- A finished worker produces a review candidate.\n",
+    "# MemCode workspace notes\n\nThis is an example artifact.\n\n- MemCode is an independent Electron app.\n- Memtrace supplies code intelligence and Fleet coordination.\n- Story workers share an epic branch with Memtrace Fleet coordination.\n- Conversations, runbooks, changes and artifacts stay together.\n- A finished worker produces a review candidate.\n",
   );
   store.state.artifacts.push({
     id: "example-notes",

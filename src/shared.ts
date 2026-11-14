@@ -1,6 +1,50 @@
 export const stages = ["planned", "working", "review", "done"] as const;
 export type Stage = (typeof stages)[number];
-export type Harness = "codex" | "claude" | "amp";
+export type Harness = "codex" | "claude" | "cursor";
+export const harnessNames: Record<Harness, string> = {
+  codex: "Codex",
+  claude: "Claude Code",
+  cursor: "Cursor",
+};
+export type ModelTier = "fast" | "balanced" | "frontier" | "extreme";
+export type ReasoningEffort = "low" | "medium" | "high" | "xhigh";
+export interface ModelOption {
+  id: string;
+  label: string;
+  tier: ModelTier;
+  source: "cache" | "cli" | "alias";
+  efforts?: string[];
+}
+export interface HarnessRuntime {
+  id: Harness;
+  name: string;
+  available: boolean;
+  path: string | null;
+  models: ModelOption[];
+  note?: string;
+}
+export interface RouteDecision {
+  policyVersion: "memcode-envelope-v2";
+  tier: ModelTier;
+  harness: Harness;
+  model: string;
+  effort: ReasoningEffort;
+  mode: "automatic" | "manual";
+  status: "measured" | "provisional";
+  reasons: string[];
+  plannedAt: string;
+  inputs: {
+    cognitive: number | null;
+    cyclomatic: number | null;
+    nesting: number | null;
+    affected: number | null;
+    processes: number | null;
+    moduleRoots: number;
+    incomplete: boolean;
+    sourceRevision?: string;
+    graphRevision?: string;
+  };
+}
 export type Priority = "high" | "medium" | "low";
 export type RunState =
   | "idle"
@@ -8,6 +52,7 @@ export type RunState =
   | "running"
   | "stopping"
   | "stopped"
+  | "blocked"
   | "failed"
   | "finished";
 
@@ -38,10 +83,17 @@ export interface Evidence {
     name: string;
     file: string;
     line: number;
+    nodeId?: string;
     cognitive?: number;
     cyclomatic?: number;
+    nesting?: number;
+    metricSource?: "ast" | "estimated";
   }>;
   affected?: number;
+  affectedProcesses?: number;
+  affectedFiles?: number;
+  sourceRevision?: string;
+  graphRevision?: string;
   incomplete: boolean;
   note: string;
   measuredAt: string;
@@ -56,6 +108,14 @@ export interface WorkItem {
   priority: Priority;
   category: string;
   harness: Harness;
+  assignment?: "auto" | "manual";
+  modelOverride?: string | null;
+  route?: RouteDecision;
+  epicId?: string | null;
+  dependsOn?: string[];
+  scope?: string[];
+  sourceKey?: string;
+  kind?: "feature" | "fix" | "refactor" | "research" | "test";
   checklist: ChecklistItem[];
   messages: Message[];
   createdAt: string;
@@ -65,6 +125,8 @@ export interface WorkItem {
     startedAt?: string;
     finishedAt?: string;
     worktree?: string;
+    workspace?: string;
+    baseline?: string;
     branch?: string;
     exitCode?: number;
     error?: string;
@@ -94,22 +156,38 @@ export interface Settings {
   localModel: boolean;
   maxWorkers: number;
 }
+export interface Epic {
+  branch?: string;
+  baseRevision?: string;
+  id: string;
+  projectId: string;
+  identifier: string;
+  title: string;
+  description: string;
+  phase: "now" | "next" | "later";
+  color: "mint" | "cyan" | "lavender" | "amber";
+  order: number;
+  sourceKey?: string;
+}
+export interface CreateEpic {
+  projectId: string;
+  title: string;
+  description: string;
+  phase: Epic["phase"];
+}
 export interface AppState {
   version: 1;
   projects: Project[];
   tasks: WorkItem[];
+  epics: Epic[];
+  fleetConflicts: FleetConflict[];
   artifacts: Artifact[];
   activeProjectId: string;
   settings: Settings;
 }
 export interface RuntimeInfo {
   appVersion: string;
-  harnesses: Array<{
-    id: Harness;
-    name: string;
-    available: boolean;
-    path: string | null;
-  }>;
+  harnesses: HarnessRuntime[];
   memtraceAvailable: boolean;
   dataPath: string;
 }
@@ -119,6 +197,9 @@ export interface CreateTask {
   description: string;
   priority: Priority;
   harness: Harness;
+  assignment?: "auto" | "manual";
+  epicId?: string | null;
+  kind?: WorkItem["kind"];
 }
 export interface ProjectInput {
   mode: "existing" | "new";
@@ -133,6 +214,12 @@ export interface PreviewInput {
   bounds: { x: number; y: number; width: number; height: number };
 }
 export interface MemCodeAPI {
+  refreshFleet(projectId: string): Promise<void>;
+  resolveFleetConflict(
+    id: string,
+    resolution: string,
+    winnerTaskId?: string,
+  ): Promise<void>;
   load(): Promise<{ state: AppState; runtime: RuntimeInfo }>;
   onState(listener: (state: AppState) => void): () => void;
   selectFolder(): Promise<string | null>;
@@ -140,12 +227,31 @@ export interface MemCodeAPI {
   selectProject(id: string): Promise<void>;
   analyzeProject(id: string): Promise<void>;
   createTask(input: CreateTask): Promise<WorkItem>;
+  createEpic(input: CreateEpic): Promise<Epic>;
+  updateEpic(
+    id: string,
+    patch: Partial<Pick<Epic, "title" | "description" | "phase">>,
+  ): Promise<void>;
+  installDogfoodBacklog(
+    projectId: string,
+  ): Promise<{ epics: number; stories: number }>;
   updateTask(
     id: string,
     patch: Partial<
       Pick<
         WorkItem,
-        "title" | "description" | "stage" | "priority" | "harness" | "checklist"
+        | "title"
+        | "description"
+        | "stage"
+        | "priority"
+        | "harness"
+        | "checklist"
+        | "assignment"
+        | "modelOverride"
+        | "epicId"
+        | "dependsOn"
+        | "scope"
+        | "kind"
       >
     >,
   ): Promise<void>;
@@ -163,9 +269,28 @@ export interface MemCodeAPI {
     listener: (event: { url: string; title: string; error?: string }) => void,
   ): () => void;
   readArtifact(id: string): Promise<string>;
-  openWorktree(id: string): Promise<void>;
+  openWorkerWorkspace(id: string): Promise<void>;
   transcribe(wav: ArrayBuffer): Promise<string>;
   windowAction(action: "minimize" | "maximize" | "close"): Promise<void>;
+}
+
+export interface FleetConflict {
+  id: string;
+  projectId: string;
+  epicId?: string;
+  branch: string;
+  taskIds: string[];
+  agentIds: string[];
+  scope: string[];
+  severity: "B" | "C" | "unknown";
+  source: "preflight" | "publish" | "episode" | "remote" | "runtime";
+  summary: string;
+  status: "open" | "resolved";
+  createdAt: string;
+  escalationId?: string;
+  resolution?: string;
+  winnerTaskId?: string;
+  resolvedAt?: string;
 }
 
 declare global {

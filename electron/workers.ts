@@ -1,5 +1,11 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdir, readFile, readdir, realpath } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  writeFile,
+} from "node:fs/promises";
 import { join, extname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
@@ -9,11 +15,17 @@ import type {
   Project,
   Message,
   Artifact,
+  HarnessRuntime,
+  ReasoningEffort,
 } from "../src/shared";
 import { isActive } from "../src/domain";
 import { childEnv, findCommand, git, now, exists, within } from "./local";
 import type { Command } from "./local";
 import type { MemtraceEngine } from "./memtrace";
+import { discoverHarnesses } from "./catalog";
+import { planRoute } from "./router";
+import { EpicWorkspace } from "./epic-workspace";
+import { FleetCoordinator, FleetBlocked } from "./fleet";
 
 export function harnessArgs(
   id: WorkItem["harness"],
@@ -21,6 +33,8 @@ export function harnessArgs(
   prompt: string,
   model: string,
   local: boolean,
+  effort: ReasoningEffort = "medium",
+  briefPath = ".memcode/brief.md",
 ): { args: string[]; stdin?: string } {
   if (id === "codex")
     return {
@@ -32,6 +46,8 @@ export function harnessArgs(
         "-C",
         cwd,
         ...(model ? ["-m", model] : []),
+        "-c",
+        `model_reasoning_effort="${effort}"`,
         ...(local ? ["--oss", "--local-provider", "ollama"] : []),
         "-",
       ],
@@ -45,21 +61,32 @@ export function harnessArgs(
     return {
       args: [
         "-p",
-        prompt,
         "--output-format",
         "stream-json",
         "--verbose",
+        "--permission-mode",
+        "acceptEdits",
+        "--effort",
+        effort,
         ...(model ? ["--model", model] : []),
       ],
+      stdin: prompt,
     };
-  return {
-    args: [
-      "--execute",
-      prompt,
-      "--stream-json",
-      ...(model ? ["--model", model] : []),
-    ],
-  };
+  if (id === "cursor")
+    return {
+      args: [
+        "--print",
+        "--trust",
+        "--model",
+        model,
+        "--output-format",
+        "stream-json",
+        "--workspace",
+        cwd,
+        `Read ${briefPath} for this work item. Follow its scope and return a reviewable implementation.`,
+      ],
+    };
+  throw new Error("Unsupported worker harness.");
 }
 
 export function eventMessage(
@@ -107,6 +134,10 @@ export function eventMessage(
 }
 
 export class WorkerManager {
+  readonly fleet: FleetCoordinator;
+  private workspaces: EpicWorkspace;
+  private cancelled = new Set<string>();
+  private closing = false;
   private children = new Map<
     string,
     { child: ChildProcess; heartbeat?: NodeJS.Timeout; done: Promise<void> }
@@ -119,7 +150,18 @@ export class WorkerManager {
     private readonly resolveCommand: (
       name: string,
     ) => Promise<Command | null> = findCommand,
-  ) {}
+    private readonly catalog: () => Promise<
+      HarnessRuntime[]
+    > = discoverHarnesses,
+  ) {
+    this.workspaces = new EpicWorkspace(state);
+    this.fleet = new FleetCoordinator(state, engine, changed, (ids) => {
+      void this.pause(ids).catch(() => {});
+    });
+  }
+  async pause(ids: string[]): Promise<void> {
+    await Promise.allSettled(ids.map((id) => this.stop(id)));
+  }
   private message(task: WorkItem, role: Message["role"], text: string): void {
     task.messages.push({
       id: randomUUID(),
@@ -132,6 +174,7 @@ export class WorkerManager {
     task.updatedAt = now();
   }
   async start(task: WorkItem, project: Project): Promise<void> {
+    if (this.closing) throw new Error("The workspace is closing.");
     if (task.example || !project.path)
       throw new Error(
         "Connect a local project to start real workers. The example workspace never runs agents.",
@@ -145,15 +188,20 @@ export class WorkerManager {
       throw new Error(
         "All worker slots are occupied. Wait for a worker or increase the limit in Settings.",
       );
-    if (active > 0 && project.analysis !== "ready")
+    const pending = (task.dependsOn ?? [])
+      .map((id) => this.state().tasks.find((t) => t.id === id))
+      .filter((item) => !item || item.stage !== "done");
+    if (pending.length)
       throw new Error(
-        "Connect Memtrace before starting concurrent workers. A single isolated worker can run without shared context.",
+        "Complete the prerequisite stories before starting this worker.",
       );
-    const command = await this.resolveCommand(task.harness);
-    if (!command)
-      throw new Error(
-        `${task.harness} is not installed or is not on PATH. Choose an available harness in the work item.`,
-      );
+    this.cancelled.delete(task.id);
+    const continuing = () => {
+      if (this.closing || this.cancelled.has(task.id))
+        throw new Error(
+          "Worker preparation was cancelled. Any checkout is preserved.",
+        );
+    };
     task.run = {
       ...task.run,
       state: "preparing",
@@ -163,49 +211,60 @@ export class WorkerManager {
     };
     await this.changed();
     try {
-      if (project.analysis === "ready") {
-        task.evidence = await this.engine.qualify(project, task);
-        await this.engine.preflight(project, task, `memcode:${task.id}`);
-      }
-      if (!task.run.worktree || !(await exists(task.run.worktree))) {
-        if (await git(project.path, ["status", "--porcelain"]))
-          throw new Error(
-            "The project has uncommitted changes. Commit or stash them before starting an isolated worker. Your files have not been changed.",
+      if (project.analysis !== "ready" || !project.repoId)
+        throw new Error("Connect Memtrace before starting a Fleet worker.");
+      const activation = await this.workspaces.activate(task, project);
+      continuing();
+      if (activation.changedBranch) {
+        project.analysis = "indexing";
+        await this.changed();
+        try {
+          project.repoId = await this.engine.analyze(
+            project,
+            (note) => {
+              project.analysisNote = note;
+              void this.changed();
+            },
+            true,
           );
-        await git(project.path, ["rev-parse", "--verify", "HEAD"]);
-        const runId = randomUUID().slice(0, 8);
-        const worktree = join(
-          this.dataDir,
-          "worktrees",
-          project.id,
-          `${task.identifier}-${runId}`,
-        );
-        await mkdir(join(this.dataDir, "worktrees", project.id), {
-          recursive: true,
-        });
-        const branch = `memcode/${task.identifier.toLowerCase()}-${runId}`;
-        await git(project.path, [
-          "worktree",
-          "add",
-          "-b",
-          branch,
-          worktree,
-          "HEAD",
-        ]);
-        task.run.worktree = worktree;
-        task.run.branch = branch;
+          project.analysis = "ready";
+        } catch (error) {
+          project.analysis = "error";
+          throw error;
+        }
       }
-      const agentId = `memcode:${task.id}`;
-      if (project.analysis === "ready")
-        await this.engine.publish(project, task, agentId);
-      const worktree = task.run.worktree!;
-      await mkdir(join(worktree, ".memcode", "artifacts"), { recursive: true });
+      await this.changed();
+      task.evidence = await this.engine.qualify(project, task);
+      continuing();
+      task.route = planRoute(
+        task,
+        task.evidence,
+        await this.catalog(),
+        this.state().settings,
+      );
+      task.harness = task.route.harness;
+      const command = await this.resolveCommand(task.harness);
+      continuing();
+      if (!command)
+        throw new Error(
+          "The selected local harness is no longer available. Refresh its runtime or choose another worker.",
+        );
+      await this.changed();
+      await this.fleet.before(project, task);
+      const workspace = task.run.workspace!;
+      continuing();
+      const workerRoot = join(".memcode", "workers", task.id);
+      const artifactRoot = join(workerRoot, "artifacts");
+      await mkdir(join(workspace, artifactRoot), { recursive: true });
       const prompt = [
         "You are implementing a work item in MemCode, a local coding-worker suite.",
         `Project: ${project.name}\nProject purpose: ${project.description}`,
         `Work item ${task.identifier}: ${task.title}\n${task.description}`,
-        "Work only in this private worktree. Do not commit, push, deploy, or modify other checkouts. Preserve user work. Follow repository AGENTS.md. Run checks appropriate to the change and state which checks actually ran. Return a review candidate, not a claim of guaranteed correctness.",
-        "Put shareable HTML reports, screenshots and other artifacts under .memcode/artifacts/.",
+        task.scope?.length
+          ? "Declared source scope:\n" + task.scope.join("\n")
+          : "",
+        `You share this checkout with other Fleet story workers on epic branch ${task.run.branch}. Your agent identity is memcode:${task.id}. Never switch branches, reset, stash, commit, push, deploy, or undo another worker's changes. Follow AGENTS.md and Memtrace Fleet: read branch context, declare intent before each edit, re-read shared source, record episodes, and honor wait/defer directives. If scope expands or an overlap cannot be reconciled, stop and ask for a human decision. The host reserves the declared scope; it does not fence arbitrary filesystem writes. Run appropriate checks and report what actually ran.`,
+        `Put your reports, screenshots and artifacts only under ${artifactRoot.replaceAll("\\", "/")}. Preserve other workers' output.`,
         task.checklist.length
           ? "Runbook:\n" +
             task.checklist
@@ -225,22 +284,34 @@ export class WorkerManager {
       ]
         .filter(Boolean)
         .join("\n\n");
+      const briefPath = join(workerRoot, "brief.md").replaceAll("\\", "/");
+      await writeFile(join(workspace, briefPath), prompt, "utf8");
       const invocation = harnessArgs(
         task.harness,
-        worktree,
+        workspace,
         prompt,
-        this.state().settings.model,
+        task.route.model,
         this.state().settings.localModel,
+        task.route.effort,
+        briefPath,
       );
+      continuing();
       const child = spawn(
         command.command,
         [...command.prefix, ...invocation.args],
         {
-          cwd: worktree,
+          cwd: workspace,
           shell: false,
           windowsHide: true,
           detached: process.platform !== "win32",
-          env: { ...childEnv(), ...command.env },
+          env: {
+            ...childEnv(),
+            ...command.env,
+            MEMTRACE_AGENT_ID: `memcode:${task.id}`,
+            MEMCODE_TASK_ID: task.id,
+            MEMCODE_EPIC_BRANCH: task.run.branch,
+            MEMCODE_ARTIFACT_DIR: join(workspace, artifactRoot),
+          },
           stdio: ["pipe", "pipe", "pipe"],
         },
       );
@@ -259,23 +330,50 @@ export class WorkerManager {
       this.message(
         task,
         "system",
-        `Worker started in an isolated worktree.\n${task.run.branch}\n${project.analysis === "ready" ? "Memtrace context attached. Fleet intents are cooperative; changes stay private until you review them." : "Memtrace context is not attached. This run uses a single isolated worker."}`,
+        `Story worker joined the epic Fleet.\n${task.run.branch}\nWorkers share this branch and coordinate through Memtrace. Unresolved overlaps pause the fleet for a human decision.`,
       );
-      if (project.analysis === "ready" && task.evidence?.symbols.length) {
-        entry.heartbeat = setInterval(
-          () =>
-            void this.engine
-              .publish(project, task, agentId)
-              .catch(async (error) => {
-                this.message(
+      {
+        let checking = false;
+        entry.heartbeat = setInterval(() => {
+          if (checking) return;
+          checking = true;
+          void (async () => {
+            if (
+              (await git(workspace, ["branch", "--show-current"])) !==
+              task.run.branch
+            )
+              throw new Error(
+                "The shared epic branch changed while workers were running.",
+              );
+            await this.fleet.heartbeat(project, task);
+          })()
+            .catch(async (error) => {
+              if (!(error instanceof FleetBlocked))
+                await this.fleet.failure(
+                  project,
                   task,
-                  "system",
-                  `Fleet heartbeat failed: ${error.message}. Stopping the worker to preserve coordination.`,
+                  `Fleet coordination needs attention: ${error.message}`,
                 );
-                await this.stop(task.id);
-              }),
-          40_000,
-        );
+              this.message(
+                task,
+                "system",
+                `Fleet heartbeat failed: ${error.message}. Stopping the worker to preserve coordination.`,
+              );
+              await this.pause(
+                this.state()
+                  .tasks.filter(
+                    (other) =>
+                      other.projectId === project.id &&
+                      other.epicId === task.epicId &&
+                      isActive(other),
+                  )
+                  .map((other) => other.id),
+              );
+            })
+            .finally(() => {
+              checking = false;
+            });
+        }, 5_000);
       }
       const lines = createInterface({ input: child.stdout! });
       lines.on("line", (line) => {
@@ -305,7 +403,6 @@ export class WorkerManager {
         settled = true;
         clearInterval(entry.heartbeat);
         lines.close();
-        this.children.delete(task.id);
         const stopped = task.run.state === "stopping";
         task.run.state = stopped
           ? "stopped"
@@ -320,10 +417,9 @@ export class WorkerManager {
             error?.message || stderr || `Harness exited with code ${code}`;
         if (stderr) this.message(task, "tool", stderr);
         try {
-          task.diff = await this.diff(worktree);
+          task.diff = await this.diff(workspace, task.run.baseline);
           await this.collectArtifacts(task, project);
-          if (project.analysis === "ready" && task.diff)
-            await this.engine.episode(project, task, agentId);
+          if (task.diff) await this.fleet.after(project, task);
         } catch (e) {
           this.message(
             task,
@@ -331,18 +427,34 @@ export class WorkerManager {
             `Result collection needs attention: ${(e as Error).message}`,
           );
         }
+        await this.fleet
+          .release(project, task)
+          .catch((error) =>
+            this.message(
+              task,
+              "system",
+              `Fleet release needs attention: ${error.message}`,
+            ),
+          );
+        if (
+          this.state().fleetConflicts.some(
+            (item) => item.status === "open" && item.taskIds.includes(task.id),
+          )
+        )
+          task.run.state = "blocked";
         this.message(
           task,
           "system",
           stopped
-            ? "Worker stopped. The worktree and any partial changes are preserved."
+            ? "Worker stopped. Shared epic changes and this worker’s output are preserved."
             : task.run.state === "finished"
               ? "Worker finished. Review the actual changes and checks before marking this work done."
-              : "Worker needs attention. Logs and the worktree have been preserved.",
+              : "Worker needs attention. Shared changes and worker logs have been preserved.",
         );
         try {
           await this.changed();
         } finally {
+          this.children.delete(task.id);
           finish();
         }
       };
@@ -352,8 +464,17 @@ export class WorkerManager {
       child.stdin!.end(invocation.stdin ?? undefined);
       await this.changed();
     } catch (error) {
-      task.run.state = "failed";
-      task.run.error = (error as Error).message;
+      const cancelled = this.cancelled.delete(task.id) || this.closing;
+      task.run.state =
+        error instanceof FleetBlocked
+          ? "blocked"
+          : cancelled
+            ? "stopped"
+            : "failed";
+      task.run.error = cancelled ? undefined : (error as Error).message;
+      if (cancelled || error instanceof FleetBlocked)
+        task.stage = task.run.workspace ? "review" : "planned";
+      await this.fleet.release(project, task).catch(() => {});
       this.message(task, "system", (error as Error).message);
       await this.changed();
       throw error;
@@ -361,8 +482,24 @@ export class WorkerManager {
   }
   async stop(id: string): Promise<void> {
     const entry = this.children.get(id);
-    if (!entry) return;
+    if (!entry) {
+      const preparing = this.state().tasks.find(
+        (task) => task.id === id && task.run.state === "preparing",
+      );
+      if (preparing) {
+        this.cancelled.add(id);
+        preparing.run.state = "stopping";
+        await this.changed();
+      }
+      return;
+    }
     const task = this.state().tasks.find((t) => t.id === id)!;
+    if (
+      task.run.state === "stopping" ||
+      entry.child.exitCode !== null ||
+      entry.child.signalCode !== null
+    )
+      return;
     task.run.state = "stopping";
     await this.changed();
     if (entry.child.pid) {
@@ -388,23 +525,36 @@ export class WorkerManager {
         }
       }
     }
-    await Promise.race([
-      entry.done,
-      new Promise<void>((_, reject) =>
-        setTimeout(
-          () =>
-            reject(
-              new Error(
-                "Stop requested, but termination is not confirmed. The worker remains blocked from new runs.",
+    let timeout: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        entry.done,
+        new Promise<void>((_, reject) => {
+          timeout = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  "Stop requested, but termination is not confirmed. The worker remains blocked from new runs.",
+                ),
               ),
-            ),
-          15_000,
-        ),
-      ),
-    ]);
+            15000,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
-  private async diff(cwd: string): Promise<string> {
-    let diff = await git(cwd, ["diff", "--no-ext-diff", "--no-color", "HEAD"]);
+  private async diff(cwd: string, baseline = "HEAD"): Promise<string> {
+    let diff = await git(cwd, [
+      "diff",
+      "--no-ext-diff",
+      "--no-color",
+      baseline,
+      "--",
+      ".",
+      ":!.memcode",
+    ]);
     const untracked = (
       await git(cwd, ["ls-files", "--others", "--exclude-standard"])
     )
@@ -423,7 +573,13 @@ export class WorkerManager {
     task: WorkItem,
     project: Project,
   ): Promise<void> {
-    const root = join(task.run.worktree!, ".memcode", "artifacts");
+    const root = join(
+      task.run.workspace!,
+      ".memcode",
+      "workers",
+      task.id,
+      "artifacts",
+    );
     const entries = await readdir(root, { withFileTypes: true });
     for (const file of entries.slice(0, 50)) {
       if (!file.isFile()) continue;
@@ -452,6 +608,9 @@ export class WorkerManager {
     }
   }
   async close(): Promise<void> {
+    this.closing = true;
+    for (const task of this.state().tasks)
+      if (task.run.state === "preparing") this.cancelled.add(task.id);
     await Promise.allSettled(
       [...this.children.keys()].map((id) => this.stop(id)),
     );

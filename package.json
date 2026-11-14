@@ -1,6 +1,6 @@
 {
   "name": "memcode",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "The local Fleet Agentic Worker Suite, powered by Memtrace.",
   "type": "module",

@@ -30,9 +30,9 @@ const exampleTasks: Array<[string, string, Stage, Harness, string, string]> = [
     "04",
     "Connect local harness sessions",
     "working",
-    "amp",
+    "cursor",
     "Runtime",
-    "Launch installed coding tools in isolated worktrees. Preserve their output, conversation and artifacts in the work item.",
+    "Run installed coding tools as story workers on a shared epic branch. Memtrace Fleet coordinates their scope and raises unresolved conflicts for a human decision.",
   ],
   [
     "05",
@@ -118,7 +118,7 @@ export function initialState(): AppState {
     projects: [
       {
         id: "example",
-        name: "MemCode",
+        name: "Design preview",
         description:
           "A local workspace for ideas, agents, and the work between them.",
         path: null,
@@ -129,6 +129,8 @@ export function initialState(): AppState {
       },
     ],
     tasks: exampleTasks.map(task),
+    epics: [],
+    fleetConflicts: [],
     artifacts: [],
     activeProjectId: "example",
     settings: {

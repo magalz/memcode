@@ -1,0 +1,129 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { planRoute, qualifyTier, routingInputs } from "../electron/router.ts";
+import { initialState } from "../src/seed.ts";
+import type { Evidence, HarnessRuntime } from "../src/shared.ts";
+
+export const measured: Evidence = {
+  state: "measured",
+  symbols: [
+    {
+      name: "render",
+      file: "src/components/View.tsx",
+      line: 1,
+      cognitive: 4,
+      cyclomatic: 3,
+      nesting: 2,
+      metricSource: "ast",
+    },
+  ],
+  affected: 2,
+  affectedProcesses: 1,
+  incomplete: false,
+  note: "Test fixture, not a production measurement",
+  measuredAt: "2026-11-14T00:00:00Z",
+};
+export const catalog: HarnessRuntime[] = ["codex", "claude", "cursor"].map(
+  (id) => ({
+    id: id as HarnessRuntime["id"],
+    name: id,
+    available: true,
+    path: "fixture",
+    models: (["fast", "balanced", "frontier", "extreme"] as const).map(
+      (tier) => ({ id: `${id}-${tier}`, label: tier, tier, source: "alias" }),
+    ),
+  }),
+);
+
+test("each envelope admits its exact boundary and escalates above it", () => {
+  const base = {
+    ...routingInputs(measured),
+    cognitive: 15,
+    cyclomatic: 12,
+    nesting: 3,
+    affected: 8,
+    processes: 1,
+    moduleRoots: 1,
+  };
+  assert.equal(qualifyTier(base), "fast");
+  assert.equal(qualifyTier({ ...base, cognitive: 16 }), "balanced");
+  assert.equal(
+    qualifyTier({
+      ...base,
+      cognitive: 90,
+      cyclomatic: 75,
+      nesting: 5,
+      affected: 50,
+      processes: 6,
+    }),
+    "balanced",
+  );
+  assert.equal(qualifyTier({ ...base, cognitive: 91 }), "frontier");
+  assert.equal(
+    qualifyTier({
+      ...base,
+      cognitive: 300,
+      cyclomatic: 180,
+      nesting: 9,
+      affected: 150,
+      processes: 14,
+      moduleRoots: 2,
+    }),
+    "frontier",
+  );
+  assert.equal(qualifyTier({ ...base, affected: 151 }), "extreme");
+});
+test("unknown scope and estimated metrics never qualify for the fast tier", () => {
+  assert.equal(qualifyTier(routingInputs()), "balanced");
+  const estimated = {
+    ...measured,
+    symbols: measured.symbols.map((symbol) => ({
+      ...symbol,
+      metricSource: "estimated" as const,
+    })),
+  };
+  assert.equal(routingInputs(estimated).cognitive, null);
+  assert.equal(qualifyTier(routingInputs(estimated)), "balanced");
+  assert.equal(
+    qualifyTier({ ...routingInputs(measured), incomplete: true }),
+    "balanced",
+  );
+});
+test("automatic UI work receives a concrete Cursor model and effort", () => {
+  const state = initialState(),
+    task = {
+      ...state.tasks[0],
+      assignment: "auto" as const,
+      scope: ["src/components/View.tsx"],
+    };
+  const route = planRoute(task, measured, catalog, state.settings);
+  assert.equal(route.harness, "cursor");
+  assert.equal(route.model, "cursor-fast");
+  assert.equal(route.effort, "low");
+  assert.equal(route.mode, "automatic");
+});
+test("unavailable catalogs produce an actionable failure rather than a fabricated route", () => {
+  const state = initialState();
+  assert.throws(
+    () =>
+      planRoute(
+        { ...state.tasks[0], assignment: "auto" },
+        measured,
+        [],
+        state.settings,
+      ),
+    /No eligible installed harness/,
+  );
+});
+test("local inference requires an explicit installed model name", () => {
+  const state = initialState();
+  assert.throws(
+    () =>
+      planRoute(state.tasks[0], measured, catalog, {
+        ...state.settings,
+        localModel: true,
+        model: "",
+      }),
+    /Ollama model name/,
+  );
+});

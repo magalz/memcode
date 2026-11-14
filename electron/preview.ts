@@ -32,6 +32,17 @@ export class PreviewManager {
       const roots = [
         join(this.dataDir, "examples"),
         join(this.dataDir, "captures"),
+        ...(task?.run.workspace
+          ? [
+              join(
+                task.run.workspace,
+                ".memcode",
+                "workers",
+                task.id,
+                "artifacts",
+              ),
+            ]
+          : []),
         ...(task?.run.worktree
           ? [join(task.run.worktree, ".memcode", "artifacts")]
           : []),

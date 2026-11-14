@@ -1,3 +1,7 @@
+import { childEnv, findCommand } from "./commands";
+export { childEnv, findCommand, exists } from "./commands";
+export type { Command } from "./commands";
+import { discoverHarnesses } from "./catalog";
 import {
   access,
   mkdir,
@@ -34,95 +38,6 @@ export function within(root: string, target: string): boolean {
   );
 }
 
-export async function exists(path: string): Promise<boolean> {
-  try {
-    await access(path, constants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export interface Command {
-  command: string;
-  prefix: string[];
-  env?: Record<string, string>;
-}
-
-export function childEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-  // cmd.exe drops overlong PATH values. Keep executable discovery deterministic.
-  const pathKey =
-    Object.keys(env).find((key) => key.toLowerCase() === "path") ?? "PATH";
-  const parts = [
-    ...new Set(
-      (env[pathKey] ?? "")
-        .split(delimiter)
-        .map((part) => part.replace(/^"|"$/g, ""))
-        .filter(Boolean),
-    ),
-  ];
-  const kept: string[] = [];
-  for (const part of parts)
-    if ([...kept, part].join(delimiter).length < 7000) kept.push(part);
-  env[pathKey] = kept.join(delimiter);
-  return env;
-}
-
-export async function findCommand(
-  name: string,
-  configured = "",
-): Promise<Command | null> {
-  if (configured) {
-    if (!isAbsolute(configured) || !(await exists(configured))) return null;
-    if (/\.(?:cjs|mjs|js)$/i.test(configured))
-      return {
-        command: process.execPath,
-        prefix: [configured],
-        env: { ELECTRON_RUN_AS_NODE: "1" },
-      };
-    if (process.platform === "win32" && !/\.exe$/i.test(configured))
-      return null;
-    return { command: configured, prefix: [] };
-  }
-  const dirs = [
-    ...new Set(
-      (process.env.PATH ?? process.env.Path ?? "")
-        .split(delimiter)
-        .map((x) => x.replace(/^"|"$/g, ""))
-        .filter(Boolean),
-    ),
-  ];
-  for (const dir of dirs) {
-    const binary = join(
-      dir,
-      name + (process.platform === "win32" ? ".exe" : ""),
-    );
-    if ((await exists(binary)) && (await stat(binary)).isFile())
-      return { command: binary, prefix: [] };
-    const packageEntry =
-      name === "memtrace"
-        ? "memtrace/bin/memtrace.js"
-        : name === "claude"
-          ? "@anthropic-ai/claude-code/cli.js"
-          : name === "amp"
-            ? "@ampcode/cli/dist/main.js"
-            : null;
-    if (packageEntry) {
-      for (const base of [dir, dirname(dir)]) {
-        const entry = join(base, "node_modules", packageEntry);
-        if (await exists(entry))
-          return {
-            command: process.execPath,
-            prefix: [entry],
-            env: { ELECTRON_RUN_AS_NODE: "1" },
-          };
-      }
-    }
-  }
-  return null;
-}
-
 export class LocalStore {
   state: AppState = initialState();
   private writes: Promise<void> = Promise.resolve();
@@ -139,7 +54,22 @@ export class LocalStore {
         !Array.isArray(saved.tasks)
       )
         throw new Error("Unsupported workspace data");
-      this.state = restartSafeState(saved);
+      this.state = {
+        ...restartSafeState(saved),
+        epics: saved.epics ?? [],
+        fleetConflicts: saved.fleetConflicts ?? [],
+        settings: { ...initialState().settings, ...saved.settings },
+      };
+      const example = this.state.projects.find((project) => project.example);
+      if (String(this.state.settings.defaultHarness) === "amp")
+        this.state.settings.defaultHarness = "cursor";
+      if (example) example.name = "Design preview";
+      for (const task of this.state.tasks)
+        if (String(task.harness) === "amp") {
+          task.harness = "cursor";
+          task.route = undefined;
+          task.modelOverride = null;
+        }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT")
         throw new Error(
@@ -163,19 +93,9 @@ export class LocalStore {
     return pending;
   }
   async runtime(): Promise<RuntimeInfo> {
-    const harnesses = await Promise.all(
-      (["codex", "claude", "amp"] as Harness[]).map(async (id) => {
-        const command = await findCommand(id);
-        return {
-          id,
-          name: { codex: "Codex", claude: "Claude Code", amp: "Amp" }[id],
-          available: !!command,
-          path: command?.command ?? null,
-        };
-      }),
-    );
+    const harnesses = await discoverHarnesses();
     return {
-      appVersion: "0.1.0",
+      appVersion: "0.2.0",
       harnesses,
       memtraceAvailable: !!(await findCommand(
         "memtrace",

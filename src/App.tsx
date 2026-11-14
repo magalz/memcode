@@ -1,3 +1,4 @@
+import { harnessNames } from "./shared";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
@@ -24,8 +25,10 @@ import {
   PanelLeft,
   Plus,
   Radio,
+  Route,
   Search,
   Settings2,
+  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   Square,
@@ -45,6 +48,8 @@ import {
 } from "./components/UI";
 import { WorkBoard } from "./components/Board";
 import { WorkDetail } from "./components/WorkDetail";
+import { Roadmap } from "./components/Roadmap";
+import { FleetDecisions } from "./components/FleetDecisions";
 import {
   NewProjectDialog,
   NewTaskDialog,
@@ -52,7 +57,51 @@ import {
   SettingsDialog,
 } from "./components/Dialogs";
 
-type View = "board" | "workers" | "conversations" | "artifacts" | "activity";
+type View =
+  | "board"
+  | "roadmap"
+  | "fleet"
+  | "workers"
+  | "conversations"
+  | "artifacts"
+  | "activity";
+const pageCopy: Record<View, [string, string, string]> = {
+  fleet: [
+    "HUMAN IN THE LOOP",
+    "A clear decision. A moving fleet.",
+    "Resolve the overlaps, preserve the work, and choose what continues.",
+  ],
+  board: [
+    "THE BIG PICTURE",
+    "Your fleet, in focus.",
+    "Ideas become clear work. Your agents take it from there.",
+  ],
+  roadmap: [
+    "FROM IDEA TO IMPLEMENTATION",
+    "A direction for every story.",
+    "Shape the epics. Bank the work. Build it with your fleet.",
+  ],
+  workers: [
+    "YOUR LOCAL FLEET",
+    "A place for every worker.",
+    "Follow the work, the context, and what needs you next.",
+  ],
+  conversations: [
+    "THINK TOGETHER",
+    "Good work starts here.",
+    "Pick up the thread without losing the bigger picture.",
+  ],
+  artifacts: [
+    "THE WORK, MADE VISIBLE",
+    "From work to something real.",
+    "Browser previews, reports and files, right where the work happened.",
+  ],
+  activity: [
+    "WORKSPACE PULSE",
+    "Every step, connected.",
+    "A local history of the work moving through your fleet.",
+  ],
+};
 
 export function App() {
   const [state, setState] = useState<AppState | null>(null);
@@ -60,6 +109,7 @@ export function App() {
   const [view, setView] = useState<View>("board");
   const [mode, setMode] = useState<"board" | "list">("board");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [storyEpic, setStoryEpic] = useState<string | undefined>();
   const [dialog, setDialog] = useState<
     "task" | "project" | "settings" | "search" | null
   >(null);
@@ -93,6 +143,12 @@ export function App() {
       .then((result) => {
         setState(result.state);
         setRuntime(result.runtime);
+        if (
+          result.state.epics.some(
+            (epic) => epic.projectId === result.state.activeProjectId,
+          )
+        )
+          setView("roadmap");
       })
       .catch((error) => setFatal(error.message));
     return window.memcode.onState(setState);
@@ -104,6 +160,11 @@ export function App() {
   }, [toast]);
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        document.querySelector('[data-memcode-select-open="true"]')
+      )
+        return;
       const input =
         event.target instanceof HTMLElement &&
         ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName);
@@ -151,6 +212,7 @@ export function App() {
     state.projects.find((p) => p.id === state.activeProjectId) ??
     state.projects[0];
   const tasks = tasksForProject(state, project.id);
+  const epics = state.epics.filter((epic) => epic.projectId === project.id);
   const filtered = tasks.filter(
     (task) =>
       (priority === "all" || task.priority === priority) &&
@@ -172,7 +234,10 @@ export function App() {
     setSelectedId(task.id);
     setDialog(null);
   };
-  const create = () => setDialog("task");
+  const create = (epicId?: string) => {
+    setStoryEpic(epicId);
+    setDialog("task");
+  };
   const move = (id: string, stage: Stage) =>
     void act(() => window.memcode.updateTask(id, { stage }));
   const navItems: Array<{
@@ -182,6 +247,15 @@ export function App() {
     count?: number;
   }> = [
     { id: "board", label: "Workspace", icon: LayoutGrid },
+    { id: "roadmap", label: "Roadmap", icon: Route, count: epics.length },
+    {
+      id: "fleet",
+      label: "Decisions",
+      icon: ShieldCheck,
+      count: state.fleetConflicts.filter(
+        (item) => item.projectId === project.id && item.status === "open",
+      ).length,
+    },
     { id: "workers", label: "Workers", icon: Workflow, count: active.length },
     { id: "conversations", label: "Conversations", icon: MessageSquare },
     {
@@ -365,7 +439,7 @@ export function App() {
               <Settings2 size={15} />
               <span>Settings</span>
             </button>
-            <span className="version">v0.1</span>
+            <span className="version">v{runtime.appVersion}</span>
             <button
               title="Open product guide"
               onClick={() =>
@@ -412,44 +486,38 @@ export function App() {
             <div>
               <div className="eyebrow">
                 <span />
-                {view === "board"
-                  ? "THE BIG PICTURE"
-                  : view === "workers"
-                    ? "YOUR LOCAL FLEET"
-                    : view === "conversations"
-                      ? "THINK TOGETHER"
-                      : view === "artifacts"
-                        ? "THE WORK, MADE VISIBLE"
-                        : "WORKSPACE PULSE"}
+                {pageCopy[view][0]}
               </div>
-              <h1>
-                {view === "board"
-                  ? "Your fleet, in focus."
-                  : view === "workers"
-                    ? "A place for every worker."
-                    : view === "conversations"
-                      ? "Good work starts here."
-                      : view === "artifacts"
-                        ? "From work to something real."
-                        : "Every step, connected."}
-              </h1>
-              <p>
-                {view === "board"
-                  ? "Ideas become clear work. Your agents take it from there."
-                  : view === "workers"
-                    ? "Follow the work, the context, and what needs you next."
-                    : view === "conversations"
-                      ? "Pick up the thread without losing the bigger picture."
-                      : view === "artifacts"
-                        ? "Browser previews, reports and files, right where the work happened."
-                        : "A local history of the work moving through your fleet."}
-              </p>
+              <h1>{pageCopy[view][1]}</h1>
+              <p>{pageCopy[view][2]}</p>
             </div>
-            <button className="button primary" onClick={create}>
+            <button className="button primary" onClick={() => create()}>
               <Plus size={15} />
-              New work item<kbd>C</kbd>
+              {view === "roadmap" ? "New story" : "New work item"}
+              <kbd>C</kbd>
             </button>
           </div>
+          {view === "roadmap" && (
+            <Roadmap
+              project={project}
+              epics={epics}
+              tasks={tasks}
+              open={open}
+              addStory={create}
+              notify={notify}
+            />
+          )}
+          {view === "fleet" && (
+            <FleetDecisions
+              project={project}
+              conflicts={state.fleetConflicts.filter(
+                (item) => item.projectId === project.id,
+              )}
+              tasks={tasks}
+              open={open}
+              notify={notify}
+            />
+          )}
           {view === "board" && (
             <>
               <section className="focus-panel">
@@ -552,7 +620,7 @@ export function App() {
                     <div className="stacked-harnesses">
                       <HarnessMark id="codex" small />
                       <HarnessMark id="claude" small />
-                      <HarnessMark id="amp" small />
+                      <HarnessMark id="cursor" small />
                     </div>
                     <span>
                       {project.example
@@ -691,8 +759,8 @@ export function App() {
                       {harness.id === "codex"
                         ? "Focused implementation with streamed conversation and changes."
                         : harness.id === "claude"
-                          ? "Your Claude Code setup, in a dedicated local worktree."
-                          : "Your Amp setup, with the result kept alongside the work."}
+                          ? "Claude Code, coordinated with the other workers on your epic branch."
+                          : "Cursor Agent, with measured model routing and shared-branch Fleet coordination."}
                     </p>
                     <div>
                       <span>
@@ -706,7 +774,7 @@ export function App() {
                         }{" "}
                         active workers
                       </span>
-                      <button className="text-button" onClick={create}>
+                      <button className="text-button" onClick={() => create()}>
                         Create work
                         <ArrowUpRight size={12} />
                       </button>
@@ -731,8 +799,8 @@ export function App() {
                         <strong>{task.title}</strong>
                         <small>
                           {task.identifier} ·{" "}
-                          {task.run.worktree
-                            ? "Isolated worktree"
+                          {task.run.workspace
+                            ? "Shared epic branch"
                             : task.example
                               ? "Example session"
                               : "Ready to start a worker"}
@@ -758,7 +826,7 @@ export function App() {
                   title="A clear space to get started."
                   description="Create a work item and choose an installed harness. Its session will appear here."
                   action={
-                    <button className="button primary" onClick={create}>
+                    <button className="button primary" onClick={() => create()}>
                       <Plus size={14} />
                       Create work item
                     </button>
@@ -853,7 +921,7 @@ export function App() {
                 title="The output belongs with the work."
                 description="When a harness produces a report, image or preview in its artifact folder, you can open it here and in the work item."
                 action={
-                  <button className="button primary" onClick={create}>
+                  <button className="button primary" onClick={() => create()}>
                     <Plus size={14} />
                     Create work item
                   </button>
@@ -908,6 +976,23 @@ export function App() {
           project={state.projects.find((p) => p.id === selected.projectId)!}
           artifacts={state.artifacts.filter((a) => a.taskId === selected.id)}
           runtime={runtime}
+          conflicts={state.fleetConflicts.filter(
+            (item) =>
+              item.projectId === selected.projectId &&
+              item.status === "open" &&
+              (item.taskIds.includes(selected.id) ||
+                item.epicId === selected.epicId),
+          )}
+          onDecisions={() => {
+            setSelectedId(null);
+            setView("fleet");
+          }}
+          epics={state.epics.filter(
+            (epic) => epic.projectId === selected.projectId,
+          )}
+          tasks={state.tasks.filter(
+            (task) => task.projectId === selected.projectId,
+          )}
           onClose={() => setSelectedId(null)}
           notify={notify}
           act={act}
@@ -918,6 +1003,8 @@ export function App() {
         <NewTaskDialog
           project={project}
           defaultHarness={state.settings.defaultHarness}
+          epics={epics}
+          initialEpicId={storyEpic}
           onClose={() => setDialog(null)}
           onCreated={(task) => {
             setDialog(null);

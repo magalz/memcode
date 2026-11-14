@@ -1,0 +1,87 @@
+import { Sparkles, ArrowRight, GitBranch } from "lucide-react";
+import type { WorkItem } from "../shared";
+import { harnessNames } from "../shared";
+import { Spinner } from "./UI";
+
+export function RoutingCard({
+  task,
+  busy,
+  plan,
+}: {
+  task: WorkItem;
+  busy: boolean;
+  plan: () => void;
+}) {
+  const route = task.route;
+  if (!route)
+    return (
+      <div className="routing-empty">
+        <span>
+          <Sparkles size={14} />A model chosen for the work.
+        </span>
+        <p>
+          Measure the source scope, then choose a harness, model and effort.
+        </p>
+        <button onClick={plan} disabled={busy || task.example}>
+          {busy ? <Spinner size={12} /> : <GitBranch size={12} />}Plan worker
+          <ArrowRight size={12} />
+        </button>
+      </div>
+    );
+  return (
+    <div className="routing-card">
+      <div className="routing-card-head">
+        <span>
+          <Sparkles size={12} />
+          {route.mode === "automatic" ? "Memtrace route" : "Assigned route"}
+        </span>
+        <span className={"tier-label " + route.tier}>{route.tier}</span>
+      </div>
+      <div className="routing-model">
+        <strong>{route.model}</strong>
+        <span>
+          {harnessNames[route.harness]} · {route.effort} effort
+        </span>
+      </div>
+      <div className="routing-measures">
+        <div>
+          <strong>{route.inputs.cognitive ?? "—"}</strong>
+          <span>Cognitive</span>
+        </div>
+        <div>
+          <strong>{route.inputs.cyclomatic ?? "—"}</strong>
+          <span>Cyclomatic</span>
+        </div>
+        <div>
+          <strong>
+            {route.inputs.affected === null
+              ? "—"
+              : `${route.inputs.affected}${route.inputs.incomplete ? "+" : ""}`}
+          </strong>
+          <span>Impact</span>
+        </div>
+      </div>
+      <details className="routing-reasons">
+        <summary>
+          Why this model?
+          <span>
+            {route.status === "provisional" ? "Partial scope" : "Measured"}
+          </span>
+        </summary>
+        <ul>
+          {route.reasons.map((reason) => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+        <p>
+          Prototype envelope policy · {route.policyVersion}. Structural
+          measurements are deterministic; suitability thresholds are not
+          calibrated.
+        </p>
+        {route.inputs.sourceRevision && (
+          <code>Source {route.inputs.sourceRevision.slice(0, 10)}</code>
+        )}
+      </details>
+    </div>
+  );
+}
