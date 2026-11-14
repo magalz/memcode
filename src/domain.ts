@@ -74,8 +74,16 @@ export function restartSafeState(state: AppState): AppState {
           }
         : project,
     ),
-    tasks: state.tasks.map((task) =>
-      !task.example && isActive(task)
+    tasks: state.tasks.map((original) => {
+      const task = {
+        ...original,
+        messages: original.messages.map((message) => {
+          if (message.promptedAt || !message.pickedUpAt) return message;
+          const { pickedUpAt, ...rest } = message;
+          return rest;
+        }),
+      };
+      return !task.example && isActive(task)
         ? {
             ...task,
             stage: "review",
@@ -91,7 +99,7 @@ export function restartSafeState(state: AppState): AppState {
                 "MemCode restarted. The shared epic branch may contain unfinished changes.",
             },
           }
-        : task,
-    ),
+        : task;
+    }),
   };
 }

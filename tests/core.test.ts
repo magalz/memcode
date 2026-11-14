@@ -14,6 +14,7 @@ import {
 } from "../runtime/workers.ts";
 import { MemtraceEngine } from "../runtime/memtrace.ts";
 import type { Project, WorkItem } from "../src/shared.ts";
+import { approveFixtureWorker } from "./fixtures/worker-consent";
 
 async function temporary() {
   const root = await mkdtemp(join(tmpdir(), "memcode-test-"));
@@ -148,6 +149,7 @@ test("worker joins its epic branch and returns shared changes plus separate arti
       `import {writeFile} from 'node:fs/promises';import {join} from 'node:path';let prompt='';for await(const chunk of process.stdin)prompt+=chunk;await writeFile('result.txt','A real fixture change');await writeFile(join(process.env.MEMCODE_ARTIFACT_DIR,'report.html'),'<h1>Fixture artifact</h1>');console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'Fixture complete. No production model was called.'}}));`,
     );
     const state = initialState();
+    approveFixtureWorker(state, "codex");
     const project: Project = {
       id: "test-project",
       name: "Test",
@@ -195,7 +197,7 @@ test("worker joins its epic branch and returns shared changes plus separate arti
           id: "codex",
           name: "Fixture Codex",
           available: true,
-          path: stub,
+          path: process.execPath,
           models: [
             {
               id: "fixture-model",
@@ -269,6 +271,7 @@ test("stop during qualification prevents a later process launch", async () => {
     "Fixture",
   ]);
   const state = initialState();
+  approveFixtureWorker(state, "codex");
   const project = {
     ...state.projects[0],
     path: repo,

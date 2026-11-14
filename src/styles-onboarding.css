@@ -1,0 +1,206 @@
+.guide-flow {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.guide-flow-node {
+  animation: guide-appear 0.5s both;
+}
+.guide-flow-line {
+  stroke-dasharray: 455;
+  stroke-dashoffset: 455;
+  animation: guide-connect 1.2s 0.15s ease forwards;
+}
+.onboarding-welcome {
+  padding: 0 30px 28px;
+}
+.guide-welcome-notes {
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  margin: 25px 0 18px;
+  font-size: 11px;
+  color: #56715f;
+}
+.guide-welcome-notes span {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.onboarding-welcome > p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+  max-width: 460px;
+  margin: 20px 0 25px;
+}
+.onboarding-welcome > footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.onboarding-spotlight {
+  position: fixed;
+  pointer-events: none;
+  z-index: 95;
+  border: 1px solid #25bda3;
+  border-radius: 10px;
+  box-shadow: 0 0 0 4px #38c9aa16;
+  transition: all 0.25s ease;
+}
+.onboarding-guide {
+  position: fixed;
+  bottom: 28px;
+  right: 30px;
+  width: 340px;
+  z-index: 110;
+  background: #fcfefb;
+  border: 1px solid #c7d9ca;
+  border-radius: 12px;
+  box-shadow: 0 12px 48px #0823181c;
+  overflow: hidden;
+  animation: guide-appear 0.25s ease;
+}
+.onboarding-guide.suspended,
+.app-shell:has(.modal-backdrop) .onboarding-guide {
+  visibility: hidden;
+  pointer-events: none;
+}
+.onboarding-guide > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 19px 9px;
+}
+.onboarding-guide > header > span {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  color: #5a8d76;
+  font: 8px var(--mono);
+  letter-spacing: 1.4px;
+}
+.guide-progress {
+  display: flex;
+  gap: 5px;
+  padding: 5px 20px 0;
+}
+.guide-progress i {
+  flex: 1;
+  height: 2px;
+  background: #e6ece1;
+}
+.guide-progress i.complete {
+  background: #31b694;
+}
+.guide-step-copy {
+  padding: 21px 22px 18px;
+  animation: guide-appear 0.2s;
+}
+.guide-step-copy > small {
+  font: 8px var(--mono);
+  letter-spacing: 1px;
+  color: #92a18b;
+}
+.guide-step-copy h2 {
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: -0.7px;
+  font-weight: 500;
+  margin: 12px 0;
+}
+.guide-step-copy p {
+  font-size: 12px;
+  line-height: 1.85;
+  color: #71826f;
+  margin: 0 0 20px;
+}
+.guide-step-copy > .button {
+  width: 100%;
+  justify-content: space-between;
+  font-size: 11px;
+}
+.guide-use-existing {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  font-size: 10px;
+  color: #4e8c6c;
+  padding: 13px 0 0;
+  text-align: left;
+  max-width: 100%;
+  overflow: hidden;
+}
+.onboarding-guide > footer {
+  padding: 12px 21px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid #e3ebdd;
+  background: #f8fbf5;
+  font-size: 9px;
+  color: #95a18a;
+}
+.onboarding-guide > footer button {
+  font-size: 9px;
+  color: #4c8d74;
+}
+.guide-restart {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 13px;
+  font-size: 11px;
+  color: #426f56;
+  border: 1px solid #dce7d7;
+  border-radius: 6px;
+  background: #f9fcf6;
+  margin: 10px 0 20px;
+}
+.guide-flow-node {
+  transform-origin: center;
+}
+.onboarding-guide .icon-button {
+  width: 24px;
+  height: 24px;
+}
+@keyframes guide-appear {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes guide-connect {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-flow-node,
+  .guide-flow-line,
+  .guide-step-copy,
+  .onboarding-guide {
+    animation: none;
+  }
+  .guide-flow-line {
+    stroke-dashoffset: 0;
+  }
+  .onboarding-spotlight {
+    transition: none;
+  }
+}
+@media (max-width: 1050px) {
+  .onboarding-guide {
+    width: 300px;
+    right: 18px;
+    bottom: 18px;
+  }
+  .guide-welcome-notes {
+    flex-direction: column;
+    gap: 13px;
+  }
+}

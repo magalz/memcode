@@ -9,6 +9,7 @@ import { WorkerManager } from "../runtime/workers.ts";
 import { FleetBlocked, FleetCoordinator } from "../runtime/fleet.ts";
 import type { MemtraceEngine } from "../runtime/memtrace.ts";
 import type { HarnessRuntime, WorkItem } from "../src/shared.ts";
+import { approveFixtureWorker } from "./fixtures/worker-consent";
 
 class TestFleet {
   intents = new Map<string, string[]>();
@@ -94,6 +95,7 @@ async function fixture(sharedScope = false) {
     await writeFile(join(repo, directory, "runtime.lock"), "Local engine data");
   }
   const state = initialState();
+  approveFixtureWorker(state, "codex");
   state.tasks = [];
   state.epics = [];
   state.fleetConflicts = [];
@@ -144,7 +146,7 @@ async function fixture(sharedScope = false) {
       id: "codex",
       name: "Fixture Codex",
       available: true,
-      path: script,
+      path: process.execPath,
       models: [
         { id: "fixture", label: "Fixture", tier: "extreme", source: "alias" },
       ],

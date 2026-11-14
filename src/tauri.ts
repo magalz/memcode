@@ -44,6 +44,28 @@ export async function installNativeBridge(): Promise<void> {
     (event) => previews.forEach((listener) => listener(event.payload)),
   );
   const api: MemCodeAPI = {
+    updateOnboarding: (patch) => call("onboarding:update", patch),
+    updateQueuedFollowup: (taskId, messageId, text, commentEdits) =>
+      call("review:queue-update", { taskId, messageId, text, commentEdits }),
+    cancelQueuedFollowup: (taskId, messageId) =>
+      call("review:queue-cancel", { taskId, messageId }),
+    storyCommentIdentity: () => call("story-comment:identity"),
+    addStoryComment: (taskId, text, parentId) =>
+      call("story-comment:add", { taskId, text, parentId }),
+    editStoryComment: (taskId, id, text) =>
+      call("story-comment:edit", { taskId, id, text }),
+    deleteStoryComment: (taskId, id) =>
+      call("story-comment:delete", { taskId, id }),
+    workerConnectionStatus: () => call("connection:status"),
+    connectWorker: (harness, approved) =>
+      call("connection:approve", { harness, approved }),
+    disconnectWorker: (harness) => call("connection:disconnect", { harness }),
+    accountStatus: () => call("account:status"),
+    signInMemtrace: () => call("account:sign-in"),
+    speechStatus: () => call("speech:status"),
+    prepareSpeech: () => call("speech:prepare"),
+    installSpeech: () => call("speech:install"),
+    stopSpeech: () => call("speech:stop"),
     sendFollowup: (taskId, text, ids) =>
       call("review:send", { taskId, text, ids }),
     saveReviewComment: (input) => call("review:save", input),

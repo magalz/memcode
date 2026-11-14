@@ -31,9 +31,11 @@ import type {
   Cycle,
 } from "../shared";
 import { useDictation } from "../useDictation";
+import { taskDraftTitle } from "../task-draft";
 import { HarnessMark, Mark, PriorityMark, Spinner, StageIcon } from "./UI";
 import { estimateOptions } from "../planning/types";
 import { ContextSettings } from "./ContextSettings";
+import { DictationSettings } from "./DictationSettings";
 
 export function Modal({
   title,
@@ -170,13 +172,14 @@ export function NewTaskDialog({
   );
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!title.trim() || busy) return;
+    const resolvedTitle = taskDraftTitle(title, description);
+    if (!resolvedTitle || busy) return;
     setBusy(true);
     try {
       onCreated(
         await window.memcode.createTask({
           projectId: project.id,
-          title: title.trim(),
+          title: resolvedTitle,
           description: description.trim(),
           harness,
           assignment: assignment === "auto" ? "auto" : "manual",
@@ -216,16 +219,33 @@ export function NewTaskDialog({
               {parent ? `Child of ${parent.identifier}` : "New work item"}
             </span>
           </div>
-          <input
-            className="task-title-input"
-            aria-label="Work item title"
-            placeholder="What do you want to build?"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            maxLength={160}
-            autoFocus
-            required
-          />
+          <div className="task-title-group">
+            <label className="task-title-field">
+              <span>
+                Title <small>or use your brief</small>
+              </span>
+              <input
+                className="task-title-input"
+                aria-label="Work item title"
+                placeholder="A short name for this task"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                maxLength={160}
+                autoFocus
+                aria-describedby="task-title-help"
+              />
+            </label>
+            <p id="task-title-help" className="task-title-help">
+              {!title.trim() && taskDraftTitle("", description) ? (
+                <>
+                  Title from brief:{" "}
+                  <strong>{taskDraftTitle("", description)}</strong>
+                </>
+              ) : (
+                "Add a title or describe the task below."
+              )}
+            </p>
+          </div>
           <div className="brief-input-wrap">
             <textarea
               aria-label="Work item brief"
@@ -236,20 +256,22 @@ export function NewTaskDialog({
             />
             <div className="brief-input-footer">
               <span>
-                {dictation.phase === "recording"
-                  ? "Listening. Speak naturally."
-                  : dictation.phase === "transcribing"
-                    ? "Transcribing on your local speech server…"
-                    : "A few clear sentences are a good start."}
+                {dictation.phase === "idle"
+                  ? "A few clear sentences are a good start."
+                  : dictation.label}
               </span>
               <button
                 type="button"
                 className={"dictation-button " + dictation.phase}
                 onClick={() => void dictation.toggle()}
-                title="Dictate with a local Whisper server"
-                disabled={dictation.phase === "transcribing"}
+                title={dictation.label}
+                disabled={
+                  dictation.phase === "preparing" ||
+                  dictation.phase === "transcribing"
+                }
               >
-                {dictation.phase === "transcribing" ? (
+                {dictation.phase === "preparing" ||
+                dictation.phase === "transcribing" ? (
                   <Spinner />
                 ) : dictation.phase === "recording" ? (
                   <Square size={12} />
@@ -320,42 +342,45 @@ export function NewTaskDialog({
               </Select>
             </label>
           </div>
-          <div className="form-row">
-            <label className="field">
-              <span>Cycle</span>
-              <Select
-                aria-label="New story cycle"
-                value={cycleId}
-                onValueChange={setCycleId}
-              >
-                <option value="none">Backlog · no cycle</option>
-                {cycles
-                  .filter((cycle) => cycle.state !== "completed")
-                  .map((cycle) => (
-                    <option key={cycle.id} value={cycle.id}>
-                      {cycle.name}
+          <details className="new-story-extra">
+            <summary>Planning · optional</summary>
+            <div className="form-row">
+              <label className="field">
+                <span>Cycle</span>
+                <Select
+                  aria-label="New story cycle"
+                  value={cycleId}
+                  onValueChange={setCycleId}
+                >
+                  <option value="none">Backlog · no cycle</option>
+                  {cycles
+                    .filter((cycle) => cycle.state !== "completed")
+                    .map((cycle) => (
+                      <option key={cycle.id} value={cycle.id}>
+                        {cycle.name}
+                      </option>
+                    ))}
+                </Select>
+              </label>
+              <label className="field">
+                <span>
+                  Estimate <small>Manual story points</small>
+                </span>
+                <Select
+                  aria-label="New story estimate"
+                  value={estimate}
+                  onValueChange={setEstimate}
+                >
+                  <option value="none">Not estimated</option>
+                  {estimateOptions.map((value) => (
+                    <option key={value} value={String(value)}>
+                      {value} points
                     </option>
                   ))}
-              </Select>
-            </label>
-            <label className="field">
-              <span>
-                Estimate <small>Manual story points</small>
-              </span>
-              <Select
-                aria-label="New story estimate"
-                value={estimate}
-                onValueChange={setEstimate}
-              >
-                <option value="none">Not estimated</option>
-                {estimateOptions.map((value) => (
-                  <option key={value} value={String(value)}>
-                    {value} points
-                  </option>
-                ))}
-              </Select>
-            </label>
-          </div>
+                </Select>
+              </label>
+            </div>
+          </details>
           <details className="new-story-extra">
             <summary>Dates & labels</summary>
             <div className="form-row">
@@ -405,7 +430,7 @@ export function NewTaskDialog({
           <button
             className="button primary"
             type="submit"
-            disabled={!title.trim() || busy}
+            disabled={!taskDraftTitle(title, description) || busy}
           >
             {busy ? <Spinner /> : <Plus size={14} />}Create work item
           </button>
@@ -538,20 +563,26 @@ export function NewProjectDialog({
               />
               <div className="brief-input-footer">
                 <span>
-                  {dictation.phase === "recording"
-                    ? "Listening…"
-                    : dictation.phase === "transcribing"
-                      ? "Transcribing locally…"
-                      : "Your project brief becomes shared context for the work."}
+                  {dictation.phase === "idle"
+                    ? "Your project brief becomes shared context for the work."
+                    : dictation.label}
                 </span>
                 <button
                   type="button"
                   className={"dictation-button " + dictation.phase}
-                  title="Dictate project purpose"
+                  title={
+                    dictation.phase === "idle"
+                      ? "Dictate project purpose"
+                      : dictation.label
+                  }
                   onClick={() => void dictation.toggle()}
-                  disabled={dictation.phase === "transcribing"}
+                  disabled={
+                    dictation.phase === "preparing" ||
+                    dictation.phase === "transcribing"
+                  }
                 >
-                  {dictation.phase === "transcribing" ? (
+                  {dictation.phase === "preparing" ||
+                  dictation.phase === "transcribing" ? (
                     <Spinner />
                   ) : dictation.phase === "recording" ? (
                     <Square size={12} />
@@ -726,33 +757,16 @@ export function SettingsDialog({
               </span>
             </label>
           </div>
-          <div className="settings-section">
-            <div>
-              <AudioLines size={17} />
-              <span>
-                <strong>Local dictation</strong>
-                <small>
-                  Audio is sent only to a speech server on this computer.
-                </small>
-              </span>
-              <span className="settings-tag">Whisper</span>
-            </div>
-            <label className="field">
-              <span>Whisper server inference endpoint</span>
-              <input
-                aria-label="Speech endpoint"
-                value={draft.speechEndpoint}
-                onChange={(e) =>
-                  setDraft({ ...draft, speechEndpoint: e.target.value })
-                }
-              />
-            </label>
-            <p className="settings-hint">
-              Connect a running whisper.cpp server. MemCode records audio,
-              converts it to WAV locally, and inserts the transcript into your
-              brief.
-            </p>
-          </div>
+          <DictationSettings
+            settings={draft}
+            change={(speech, endpoint) =>
+              setDraft((value) => ({
+                ...value,
+                speech,
+                ...(endpoint !== undefined ? { speechEndpoint: endpoint } : {}),
+              }))
+            }
+          />
           <ContextSettings
             value={draft.contextAssistant}
             change={(contextAssistant) =>

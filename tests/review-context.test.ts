@@ -13,6 +13,7 @@ import { harnessArgs, WorkerManager } from "../runtime/workers";
 import { initialState } from "../src/seed";
 import { git, within } from "../runtime/local";
 import type { MemtraceEngine } from "../runtime/memtrace";
+import { approveFixtureWorker } from "./fixtures/worker-consent";
 
 const at = "2026-11-14T19:00:00.000Z";
 const message = (id: string, role: Message["role"] = "assistant"): Message => ({
@@ -154,6 +155,10 @@ async function workerFixture(commandFails = false, preparationFails = false) {
     };
   state.projects = [project];
   state.tasks = [task];
+  const fixtureCommand = commandFails
+    ? join(root, "missing-program.exe")
+    : process.execPath;
+  approveFixtureWorker(state, "codex", fixtureCommand);
   let appended = false;
   const observations: Array<{ state: string; promptedAt?: string }> = [];
   const manager = new WorkerManager(
@@ -184,9 +189,7 @@ async function workerFixture(commandFails = false, preparationFails = false) {
     } as unknown as MemtraceEngine,
     join(root, "data"),
     async () => ({
-      command: commandFails
-        ? join(root, "missing-program.exe")
-        : process.execPath,
+      command: fixtureCommand,
       prefix: [stub],
     }),
     async () => [
@@ -194,7 +197,7 @@ async function workerFixture(commandFails = false, preparationFails = false) {
         id: "codex",
         name: "Fixture",
         available: true,
-        path: stub,
+        path: fixtureCommand,
         models: [
           {
             id: "fixture-model",

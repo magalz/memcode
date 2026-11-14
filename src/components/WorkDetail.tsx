@@ -10,8 +10,12 @@ import { reviewLocation } from "../review-labels";
 import type { ReviewReference, ReviewComment } from "../review";
 import { ReviewComposer } from "./ReviewComposer";
 import { ReviewNotes } from "./ReviewNotes";
+import { FollowupQueue, pendingFollowups } from "./FollowupQueue";
+import { StoryComments } from "./StoryComments";
+import { workerReadiness } from "../worker-availability";
 import "../styles-review.css";
 import "../styles-annotations.css";
+import "../styles-card-comments.css";
 import { WorkerChanges } from "./WorkerChanges";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
@@ -81,6 +85,8 @@ const WorkerTerminal = lazy(() =>
 const MessageMarkdown = lazy(() => import("./MessageMarkdown"));
 type Tab =
   | "conversation"
+  | "queue"
+  | "comments"
   | "runbook"
   | "changes"
   | "artifacts"
@@ -97,6 +103,7 @@ interface Props {
   epics: Epic[];
   conflicts: FleetConflict[];
   onDecisions: () => void;
+  onConnections: () => void;
   tasks: WorkItem[];
   onClose: () => void;
   onOpenTask: (task: WorkItem) => void;
@@ -116,6 +123,7 @@ export function WorkDetail({
   epics,
   conflicts,
   onDecisions,
+  onConnections,
   tasks,
   onClose,
   onOpenTask,
@@ -126,6 +134,13 @@ export function WorkDetail({
 }: Props) {
   const [tab, setTab] = useState<Tab>("conversation");
   const [draft, setDraft] = useState("");
+  const connectionDraft = useRef<
+    | {
+        taskId: string;
+        value: { draft?: string; comments?: string[] };
+      }
+    | undefined
+  >(undefined);
   const [commentFocus, setCommentFocus] = useState(0);
   const [commentsOpen, setCommentsOpen] = useState(false),
     [focusedCommentId, setFocusedCommentId] = useState<string>(),
@@ -134,6 +149,10 @@ export function WorkDetail({
   const comments = (state.reviewComments ?? []).filter(
     (comment) => comment.taskId === task.id,
   );
+  const discussion = (state.storyComments ?? []).filter(
+      (comment) => comment.taskId === task.id,
+    ),
+    pending = pendingFollowups(task);
   const [browserLink, setBrowserLink] = useState<{ url: string; id: string }>();
   const [file, setFile] = useState<FileReference>(),
     [references, setReferences] = useState<ReviewReference[]>([]);
@@ -161,11 +180,28 @@ export function WorkDetail({
   );
   useEffect(() => {
     setTab("conversation");
-    setDraft("");
+    let kept: { draft?: string; comments?: string[] } = {};
+    try {
+      const key = "memcode:connection-draft:" + task.id;
+      const stored =
+        connectionDraft.current?.taskId === task.id
+          ? connectionDraft.current.value
+          : JSON.parse(sessionStorage.getItem(key) ?? "{}");
+      if (stored && typeof stored === "object") kept = stored;
+      connectionDraft.current = { taskId: task.id, value: kept };
+      sessionStorage.removeItem(key);
+    } catch {}
+    setDraft(typeof kept.draft === "string" ? kept.draft : "");
     setCommentsOpen(false);
     setFocusedCommentId(undefined);
     setEditingComment(undefined);
-    setAttachedComments([]);
+    setAttachedComments(
+      Array.isArray(kept.comments)
+        ? kept.comments.filter((id) =>
+            comments.some((note) => note.id === id && note.status === "saved"),
+          )
+        : [],
+    );
     setBrowserLink(undefined);
     setArtifact(null);
     setFile(undefined);
@@ -204,6 +240,15 @@ export function WorkDetail({
   };
   const send = async () => {
     if (!draft.trim()) return;
+    if (
+      !task.example &&
+      !isActive(task) &&
+      !workerReadiness(task, runtime.harnesses, state.workerConnections)
+        .canStart
+    ) {
+      notify("Connect a worker in Workers before sending this story.");
+      return;
+    }
     await act(async () => {
       await window.memcode.sendFollowup(
         task.id,
@@ -300,6 +345,27 @@ export function WorkDetail({
     (h) => h.id === task.harness,
   )?.available;
   const active = isActive(task);
+  const connection = workerReadiness(
+    task,
+    runtime.harnesses,
+    state.workerConnections,
+  );
+  const assignedDisplay =
+    task.assignment === "auto" && !connection.routeConnected
+      ? { ...task, route: undefined }
+      : task;
+  const openConnections = () => {
+    try {
+      sessionStorage.setItem(
+        "memcode:connection-draft:" + task.id,
+        JSON.stringify({ draft, comments: attachedComments }),
+      );
+    } catch {
+      notify("Keep this story open until its draft is saved.");
+      return;
+    }
+    onConnections();
+  };
   const tabs: Array<{
     id: Tab;
     label: string;
@@ -307,6 +373,13 @@ export function WorkDetail({
     count?: number;
   }> = [
     { id: "conversation", label: "Conversation", icon: MessageSquare },
+    { id: "queue", label: "Queue", icon: ListChecks, count: pending.length },
+    {
+      id: "comments",
+      label: "Comments",
+      icon: MessageSquare,
+      count: discussion.filter((comment) => !comment.deletedAt).length,
+    },
     { id: "runbook", label: "Runbook", icon: ListChecks },
     { id: "changes", label: "Changes", icon: Code2 },
     {
@@ -447,6 +520,29 @@ export function WorkDetail({
         </div>
         <div className="detail-body">
           <div className="detail-content">
+            {tab === "queue" && (
+              <FollowupQueue
+                key={task.id}
+                task={task}
+                comments={comments}
+                notify={notify}
+              />
+            )}
+            {tab === "comments" && (
+              <StoryComments
+                key={task.id}
+                taskId={task.id}
+                comments={discussion}
+                notify={notify}
+                onOpenLink={(href) => void openLink(href)}
+                onFollowup={(text) => {
+                  setDraft((value) =>
+                    [value, text].filter(Boolean).join("\n\n"),
+                  );
+                  setTab("conversation");
+                }}
+              />
+            )}
             {tab === "terminal" && (
               <Suspense fallback={<Spinner />}>
                 <WorkerTerminal
@@ -469,6 +565,21 @@ export function WorkDetail({
             )}
             {tab === "conversation" && (
               <>
+                {pending.length > 0 && (
+                  <button
+                    className="followup-queue-summary"
+                    onClick={() => setTab("queue")}
+                    aria-label="View queued follow-ups"
+                  >
+                    <ListChecks size={14} />
+                    <strong>
+                      {pending.length} follow-up
+                      {pending.length === 1 ? "" : "s"} waiting
+                    </strong>
+                    <span>View, edit or cancel</span>
+                    <ArrowRight size={13} />
+                  </button>
+                )}
                 <div className="conversation-scroll" ref={messagesRef}>
                   <div className="session-start">
                     <span>THE WORK STARTS WITH A CLEAR BRIEF</span>
@@ -566,29 +677,32 @@ export function WorkDetail({
                     />
                     <div className="composer-controls">
                       <div>
-                        <WorkerMark task={task} small />
+                        <WorkerMark task={assignedDisplay} small />
                         <span>
-                          {task.assignment === "auto" && !task.route
+                          {task.assignment === "auto" &&
+                          !connection.routeConnected
                             ? "Automatic assignment"
                             : harnessNames[task.harness]}
                         </span>
                         {dictation.phase !== "idle" && (
                           <span className="recording-label">
-                            {dictation.phase === "recording"
-                              ? "Listening…"
-                              : "Transcribing locally…"}
+                            {dictation.label}
                           </span>
                         )}
                       </div>
                       <div>
                         <button
                           className={"dictation-button " + dictation.phase}
-                          title="Dictate a note locally"
+                          title={dictation.label || "Dictate a note locally"}
                           aria-label="Dictate a note"
                           onClick={() => void dictation.toggle()}
-                          disabled={dictation.phase === "transcribing"}
+                          disabled={
+                            dictation.phase === "preparing" ||
+                            dictation.phase === "transcribing"
+                          }
                         >
-                          {dictation.phase === "transcribing" ? (
+                          {dictation.phase === "preparing" ||
+                          dictation.phase === "transcribing" ? (
                             <Spinner />
                           ) : dictation.phase === "recording" ? (
                             <Square size={11} />
@@ -599,14 +713,19 @@ export function WorkDetail({
                         <button
                           className="send-button"
                           title={
-                            active
-                              ? "Queue follow-up · Ctrl+Enter"
-                              : "Send follow-up · Ctrl+Enter"
+                            !task.example && !active && !connection.canStart
+                              ? "Connect in Workers before sending this story"
+                              : active
+                                ? "Queue follow-up · Ctrl+Enter"
+                                : "Send follow-up · Ctrl+Enter"
                           }
                           aria-label={
                             active ? "Queue follow-up" : "Send follow-up"
                           }
-                          disabled={!draft.trim()}
+                          disabled={
+                            !draft.trim() ||
+                            (!task.example && !active && !connection.canStart)
+                          }
                           onClick={() => void send()}
                         >
                           <ArrowUp size={15} />
@@ -621,7 +740,7 @@ export function WorkDetail({
                     </span>
                     <span>
                       <kbd>ctrl</kbd>
-                      <kbd>↵</kbd> to save
+                      <kbd>↵</kbd> to send
                     </span>
                   </div>
                 </div>
@@ -871,10 +990,10 @@ export function WorkDetail({
                 </span>
               </div>
               <div className="assigned-worker">
-                <WorkerMark task={task} />
+                <WorkerMark task={assignedDisplay} />
                 <div>
                   <strong>
-                    {task.assignment === "auto" && !task.route
+                    {task.assignment === "auto" && !connection.routeConnected
                       ? "Automatic"
                       : harnessNames[task.harness]}
                   </strong>
@@ -883,11 +1002,15 @@ export function WorkDetail({
                       ? "Example conversation"
                       : active
                         ? "Working on the shared epic branch"
-                        : task.assignment === "auto" && !task.route
-                          ? "Selected from measured source scope"
-                          : available
-                            ? "Installed and available"
-                            : "Harness not detected"}
+                        : task.assignment === "auto"
+                          ? connection.connectedCount > 0
+                            ? "Routes among your approved workers"
+                            : "Connect a worker in Workers"
+                          : connection.selectedConnected
+                            ? "Connection approved"
+                            : available
+                              ? "Installed · approval needed"
+                              : "Runtime not detected"}
                   </span>
                 </div>
                 <span className={active ? "live-dot" : "quiet-dot"} />
@@ -895,6 +1018,8 @@ export function WorkDetail({
               <WorkerAssignment
                 task={task}
                 runtime={runtime}
+                connections={state.workerConnections}
+                onConnections={openConnections}
                 busy={busy}
                 plan={plan}
                 update={(patch) =>
@@ -920,7 +1045,14 @@ export function WorkDetail({
                 <button
                   className="button start-worker"
                   onClick={() => void run()}
-                  disabled={busy || conflicts.length > 0}
+                  disabled={
+                    busy || conflicts.length > 0 || !connection.canStart
+                  }
+                  title={
+                    !connection.canStart
+                      ? "Connect an approved worker in Workers first"
+                      : undefined
+                  }
                 >
                   {busy ? <Spinner /> : <Play size={12} />}{" "}
                   {task.run.workspace ? "Resume story" : "Start worker"}
@@ -955,6 +1087,12 @@ export function WorkDetail({
                 CODE CONTEXT
                 <GitBranch size={12} />
               </div>
+              {project.analysis === "error" && project.analysisNote && (
+                <details className="context-connection-error">
+                  <summary>Code context couldn’t connect</summary>
+                  <p>{project.analysisNote}</p>
+                </details>
+              )}
               {task.evidence ? (
                 <>
                   <div className="evidence-status">
@@ -1154,7 +1292,9 @@ function MessageBlock({
         {message.followupState && message.followupState !== "included" && (
           <span className="message-queue-state" role="status">
             {message.followupState === "queued"
-              ? "Queued"
+              ? message.pickedUpAt
+                ? "Picked up"
+                : "Queued"
               : message.followupState === "paused"
                 ? "Queue paused"
                 : "Queue cancelled"}

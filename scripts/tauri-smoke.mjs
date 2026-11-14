@@ -76,6 +76,18 @@ try {
   assert.equal(result.runtime.appVersion, "0.3.0");
   assert.ok(Array.isArray(result.state.projects));
   await expect(page.locator(".app-shell")).toBeVisible({ timeout: 20000 });
+  if (
+    !result.state.onboarding ||
+    (result.state.onboarding.step === "welcome" &&
+      !result.state.onboarding.dismissed)
+  ) {
+    const skip = page.getByRole("button", {
+      name: "Explore on my own",
+      exact: true,
+    });
+    await expect(skip).toBeVisible();
+    await skip.click();
+  }
   await page.evaluate(() => {
     window.__nativeSmokeEvents = { states: 0, previews: 0 };
     window.__nativeSmokeUnsubscribe = window.memcode.onState(() => {

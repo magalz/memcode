@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import {
   ArrowUpRight,
+  BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
@@ -46,6 +47,20 @@ import { FleetDecisions } from "./components/FleetDecisions";
 import { Cycles } from "./components/Cycles";
 import { InsightsPage } from "./components/InsightsPage";
 import { Improve } from "./components/Improve";
+import { Onboarding } from "./components/Onboarding";
+import {
+  firstRunGuide,
+  type OnboardingPatch,
+  type GuideAction,
+} from "./onboarding";
+import type { GuideDestination } from "./guide-content";
+import { WorkerConnections } from "./components/WorkerConnections";
+import { AccountConnections } from "./components/AccountConnections";
+import type { MemtraceAccount } from "./connections";
+import { approvedRuntime } from "./worker-availability";
+const Docs = lazy(() =>
+  import("./components/Docs").then((module) => ({ default: module.Docs })),
+);
 import {
   NewProjectDialog,
   NewTaskDialog,
@@ -63,8 +78,14 @@ type View =
   | "workers"
   | "conversations"
   | "artifacts"
-  | "activity";
+  | "activity"
+  | "docs";
 const pageCopy: Record<View, [string, string, string]> = {
+  docs: [
+    "A CLEAR PLACE TO BEGIN",
+    "The MemCode guide.",
+    "Start with the essentials. Find the details when you need them.",
+  ],
   cycles: [
     "A RHYTHM FOR THE WORK",
     "Clear cycles. Steady progress.",
@@ -131,6 +152,9 @@ export function App() {
     "task" | "project" | "settings" | "search" | null
   >(null);
   const [projectMenu, setProjectMenu] = useState(false);
+  const [docsArticle, setDocsArticle] = useState("start");
+  const [createEpicRequest, setCreateEpicRequest] = useState(0);
+  const [account, setAccount] = useState<MemtraceAccount>();
   const [toast, setToast] = useState("");
   const [fatal, setFatal] = useState("");
   const [collapsed, setCollapsed] = useState(false);
@@ -157,6 +181,11 @@ export function App() {
       .then((result) => {
         setState(result.state);
         setRuntime(result.runtime);
+        if (firstRunGuide(result.state))
+          void window.memcode.updateOnboarding({
+            step: "welcome",
+            dismissed: false,
+          });
         if (
           result.state.epics.some(
             (epic) => epic.projectId === result.state.activeProjectId,
@@ -176,6 +205,9 @@ export function App() {
     const handler = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
+        document.querySelector(
+          ".modal-backdrop, .connection-consent-backdrop",
+        ) ||
         document.querySelector('[data-memcode-select-open="true"]')
       )
         return;
@@ -205,6 +237,12 @@ export function App() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [dialog]);
+  useEffect(() => {
+    if (dialog === "settings" && docsArticle === "dictation")
+      document
+        .querySelector("[data-guide=dictation-settings]")
+        ?.scrollIntoView({ block: "center" });
+  }, [dialog, docsArticle]);
   if (fatal)
     return (
       <div className="boot-screen">
@@ -227,6 +265,8 @@ export function App() {
   const project =
     state.projects.find((p) => p.id === state.activeProjectId) ??
     state.projects[0];
+  const guideProject =
+    state.projects.find((p) => p.id === state.onboarding?.projectId) ?? project;
   const tasks = tasksForProject(state, project.id);
   const epics = state.epics.filter((epic) => epic.projectId === project.id);
   const selected = state.tasks.find((task) => task.id === selectedId);
@@ -242,6 +282,77 @@ export function App() {
     setStoryEpic(epicId);
     setStoryParent(parentId);
     setDialog("task");
+  };
+  const updateGuide = (patch: OnboardingPatch) => {
+    void act(() => window.memcode.updateOnboarding(patch));
+  };
+  const startGuide = (restart = false) => {
+    setSelectedId(null);
+    setDialog(null);
+    setProjectMenu(false);
+    const progress = state.onboarding;
+    updateGuide(
+      restart || !progress || progress.completedAt
+        ? { restart: true, step: "welcome", dismissed: false }
+        : { dismissed: false },
+    );
+    const step = restart ? "welcome" : progress?.step;
+    setView(
+      step === "worker"
+        ? "workers"
+        : step === "epic" || step === "story"
+          ? "roadmap"
+          : "board",
+    );
+  };
+  const guideAction = (action: GuideAction) => {
+    if (action === "project") {
+      setDialog("project");
+      return;
+    }
+    if (action === "worker") {
+      setView("workers");
+      return;
+    }
+    if (action === "account") {
+      setView("workers");
+      return;
+    }
+    const progress = state.onboarding;
+    void act(async () => {
+      if (progress?.projectId && progress.projectId !== project.id) {
+        await window.memcode.selectProject(progress.projectId);
+        setState((await window.memcode.load()).state);
+      }
+      if (action === "epic") {
+        setView("roadmap");
+        setCreateEpicRequest((value) => value + 1);
+      }
+      if (action === "story") {
+        setView("roadmap");
+        create(progress?.epicId);
+      }
+      if (action === "open-story" && progress?.storyId) {
+        const story = state.tasks.find((t) => t.id === progress.storyId);
+        if (story) open(story);
+      }
+    });
+  };
+  const guideGo = (destination: GuideDestination) => {
+    if (destination === "project") {
+      setDialog("project");
+      return;
+    }
+    if (destination === "settings") {
+      setDocsArticle("dictation");
+      setDialog("settings");
+      return;
+    }
+    if (destination === "account") {
+      setView("workers");
+      return;
+    }
+    setView(destination);
   };
   const navItems: Array<{
     id: View;
@@ -278,6 +389,7 @@ export function App() {
       count: artifacts.length,
     },
     { id: "activity", label: "Activity", icon: Radio },
+    { id: "docs", label: "Docs", icon: BookOpen },
   ];
   return (
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
@@ -330,6 +442,7 @@ export function App() {
         <div className="project-picker-wrap">
           <button
             className={"project-picker " + (projectMenu ? "selected" : "")}
+            data-guide="project-picker"
             onClick={() => setProjectMenu(!projectMenu)}
           >
             <span className="project-avatar">
@@ -428,11 +541,10 @@ export function App() {
             <span className="version">v{runtime.appVersion}</span>
             <button
               title="Open product guide"
-              onClick={() =>
-                notify(
-                  "Start with a project folder, describe a work item, then launch a worker. Your runbook, conversation, changes and artifacts stay together.",
-                )
-              }
+              onClick={() => {
+                setDocsArticle("start");
+                setView("docs");
+              }}
             >
               <CircleHelp size={15} />
             </button>
@@ -462,9 +574,7 @@ export function App() {
             >
               <Search size={16} />
             </button>
-            <button className="user-avatar" title="Your local workspace">
-              A
-            </button>
+            <AccountConnections compact notify={notify} onStatus={setAccount} />
           </div>
         </header>
         <div className="workspace-scroll">
@@ -477,12 +587,27 @@ export function App() {
               <h1>{pageCopy[view][1]}</h1>
               <p>{pageCopy[view][2]}</p>
             </div>
-            <button className="button primary" onClick={() => create()}>
-              <Plus size={15} />
-              {view === "roadmap" ? "New story" : "New work item"}
-              <kbd>C</kbd>
-            </button>
+            {view !== "docs" && (
+              <button
+                className="button primary"
+                data-guide="new-story"
+                onClick={() => create()}
+              >
+                <Plus size={15} />
+                {view === "roadmap" ? "New story" : "New work item"}
+                <kbd>C</kbd>
+              </button>
+            )}
           </div>
+          {view === "docs" && (
+            <Suspense fallback={<Spinner />}>
+              <Docs
+                initialArticle={docsArticle}
+                onStartGuide={startGuide}
+                onGo={guideGo}
+              />
+            </Suspense>
+          )}
           {view === "cycles" && (
             <Cycles
               state={state}
@@ -509,12 +634,22 @@ export function App() {
           )}
           {view === "roadmap" && (
             <Roadmap
+              key={project.id}
               project={project}
               epics={epics}
               tasks={tasks}
               open={open}
               addStory={create}
               notify={notify}
+              createRequest={createEpicRequest}
+              onCreateRequestConsumed={() => setCreateEpicRequest(0)}
+              onEpicCreated={(epic) => {
+                if (
+                  state.onboarding?.step === "epic" &&
+                  !state.onboarding.dismissed
+                )
+                  updateGuide({ epicId: epic.id, step: "story" });
+              }}
             />
           )}
           {view === "fleet" && (
@@ -542,53 +677,24 @@ export function App() {
           )}
           {view === "workers" && (
             <section className="workers-view">
-              <div className="section-heading">
-                <h2>Connected harnesses</h2>
-                <span>Run locally · models follow your configuration</span>
-              </div>
-              <div className="harness-grid">
-                {runtime.harnesses.map((harness) => (
-                  <article key={harness.id} className="harness-card">
-                    <div>
-                      <HarnessMark id={harness.id} />
-                      <span
-                        className={
-                          "connection-label " +
-                          (harness.available ? "available" : "")
-                        }
-                      >
-                        <span />
-                        {harness.available ? "Installed" : "Not detected"}
-                      </span>
-                    </div>
-                    <h3>{harness.name}</h3>
-                    <p>
-                      {harness.id === "codex"
-                        ? "Focused implementation with streamed conversation and changes."
-                        : harness.id === "claude"
-                          ? "Claude Code, coordinated with the other workers on your epic branch."
-                          : "Cursor Agent, with measured model routing and shared-branch Fleet coordination."}
-                    </p>
-                    <div>
-                      <span>
-                        {
-                          tasks.filter(
-                            (t) =>
-                              t.harness === harness.id &&
-                              !t.example &&
-                              isActive(t),
-                          ).length
-                        }{" "}
-                        active workers
-                      </span>
-                      <button className="text-button" onClick={() => create()}>
-                        Create work
-                        <ArrowUpRight size={12} />
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
+              <AccountConnections notify={notify} onStatus={setAccount} />
+              <WorkerConnections
+                runtime={runtime}
+                state={state}
+                notify={notify}
+                onCreateWork={() => create()}
+                onConnected={() => {
+                  if (
+                    state.onboarding?.step === "worker" &&
+                    !state.onboarding.dismissed &&
+                    (account?.status === "connected" ||
+                      guideProject.analysis === "ready")
+                  ) {
+                    updateGuide({ step: "epic" });
+                    setView("roadmap");
+                  }
+                }}
+              />
               <div className="section-heading">
                 <h2>Work in progress</h2>
                 <span>
@@ -631,7 +737,7 @@ export function App() {
                 <Empty
                   icon={<Workflow size={27} />}
                   title="A clear space to get started."
-                  description="Create a work item and choose an installed harness. Its session will appear here."
+                  description="Connect a worker, then give it a focused story. Its session will appear here."
                   action={
                     <button className="button primary" onClick={() => create()}>
                       <Plus size={14} />
@@ -770,6 +876,10 @@ export function App() {
             setSelectedId(null);
             setView("fleet");
           }}
+          onConnections={() => {
+            setSelectedId(null);
+            setView("workers");
+          }}
           epics={state.epics.filter(
             (epic) => epic.projectId === selected.projectId,
           )}
@@ -802,6 +912,15 @@ export function App() {
           onCreated={(task) => {
             setDialog(null);
             setSelectedId(task.id);
+            if (
+              state.onboarding?.step === "story" &&
+              !state.onboarding.dismissed
+            )
+              updateGuide({
+                storyId: task.id,
+                epicId: task.epicId ?? undefined,
+                step: "ready",
+              });
           }}
           notify={notify}
         />
@@ -813,6 +932,18 @@ export function App() {
             setDialog(null);
             setView("board");
             setSelectedId(null);
+            if (
+              state.onboarding?.step === "project" &&
+              !state.onboarding.dismissed
+            )
+              void act(async () => {
+                const current = await window.memcode.load();
+                await window.memcode.updateOnboarding({
+                  projectId: current.state.activeProjectId,
+                  step: "worker",
+                });
+                setView("workers");
+              });
           }}
           notify={notify}
         />
@@ -834,6 +965,35 @@ export function App() {
           create={create}
         />
       )}
+      {state.onboarding &&
+        !state.onboarding.dismissed &&
+        !state.onboarding.completedAt && (
+          <Onboarding
+            progress={state.onboarding}
+            state={state}
+            project={guideProject}
+            epics={state.epics.filter(
+              (e) =>
+                e.projectId === (state.onboarding?.projectId ?? project.id),
+            )}
+            connected={
+              runtime.harnesses.some((adapter) =>
+                approvedRuntime(adapter, state.workerConnections),
+              ) &&
+              (account?.status === "connected" ||
+                guideProject.analysis === "ready")
+            }
+            hidden={!!dialog}
+            onUpdate={updateGuide}
+            onAction={guideAction}
+            onDocs={() => {
+              updateGuide({ dismissed: true });
+              setSelectedId(null);
+              setDocsArticle("start");
+              setView("docs");
+            }}
+          />
+        )}
       {toast && (
         <div className="toast" role="status">
           <span className="toast-dot" />

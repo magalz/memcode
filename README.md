@@ -38,6 +38,8 @@ MemCode then connects to the installed Memtrace engine to analyze it.
 - Labels, child stories, related/duplicate links, custom fields and bulk edits.
 - A persisted Now / Next / Later roadmap, epics, stories, source scope and cycle-checked prerequisites.
 - Project briefs, editable runbooks, conversations, worker status and change review.
+- Visible follow-up queues with edit/cancel until pickup, plus separate story discussions.
+- Progressive project → approved worker → epic → story onboarding and a searchable, illustrated Docs tab.
 - Native folder selection and project creation. State stays in the local workspace
   directory (`%APPDATA%\MemCode` on Windows), preserving existing desktop data.
 - Local CLI worker adapters for **Codex, Claude Code and Cursor Agent**, including Windows standalone/runtime discovery.
@@ -55,7 +57,7 @@ MemCode then connects to the installed Memtrace engine to analyze it.
 - Separate saved artifacts: HTML, Markdown, Word, Excel, PowerPoint, PDF, images, video, audio and source text.
 - Precise saved annotations for text, source lines, spreadsheet cells, HTML elements/areas and media timestamps; send selected comments as an explicit follow-up.
 - Separate output folders under `.memcode/workers/<story-id>/artifacts/` and readable project-file links.
-- Dictation via an existing local whisper.cpp server; audio is converted to WAV locally.
+- Local dictation with explicit Whisper Tiny setup on Windows x64, or an existing local whisper.cpp server; transcripts enter the draft for review.
 
 Execution, project state, coordination and artifacts stay on this computer. A harness
 may use its configured cloud model. Codex can alternatively use an installed Ollama
@@ -78,11 +80,19 @@ If an existing Folder Group does not admit the selected repository, MemCode can
 open an explicit, single-project index under `.memcode/memtrace/`. It keeps that
 index separate from the existing workspace and exposes the binding in coverage
 details; it does not reindex the parent directory.
+Cold local owners are started headlessly for that exact project when needed.
+Opening an empty folder creates its Git baseline automatically. Existing nonempty
+folders require Git setup; MemCode does not commit their source changes.
+
+Installed runtimes remain disconnected until the user explicitly approves the
+specific local executable in Workers. MemCode reuses Memtrace's existing session
+and official sign-in flow; it stores no separate MemCode account or provider credentials.
+See [account and worker boundaries](docs/account-and-workers.md).
 
 All three local runtimes were detected on the development machine. Codex model IDs
 come from its local model cache; Cursor models come from `--list-models`; Claude
 supports its documented CLI aliases. Provider authentication, entitlements and actual
-execution are confirmed at launch. The [three-harness conformance checks](docs/worker-conformance.md)
+execution are confirmed at connection and launch. The [three-harness conformance checks](docs/worker-conformance.md)
 record real Codex, Claude Code and Cursor runs and their limits. Opening the app or
 creating a story never launches a coding session.
 
@@ -103,12 +113,18 @@ The [initial pilot results](docs/context-broker-results.md) and
 [Codex/Cursor coding comparison](docs/context-coding-results.md) include reproducible
 token/quality measurements and explicit limits on shell-search control and generalization.
 
-For local speech, run a whisper.cpp server and set its `/inference` endpoint in
-Settings. No speech model is bundled or automatically downloaded. The microphone
-is activated only by the dictation control. Speech endpoints are constrained to
+For local speech, choose **Set up local dictation** in Settings. On Windows x64,
+this explicitly downloads the pinned CPU runtime and multilingual Whisper Tiny
+(about 82 MB), verifies their hashes, and runs inference on loopback. Other systems
+can configure an existing local runtime or `/inference` server. Nothing downloads
+at startup. The microphone is activated only by the dictation control. Transcription
+never sends a follow-up automatically. Speech endpoints are constrained to
 loopback. The per-card browser accepts HTTPS and loopback development addresses;
 privileged URLs and remote plaintext HTTP are rejected. Saved artifacts open
 separately from that live browser.
+
+The [onboarding and collaboration verification](docs/onboarding-verification.md)
+records native form, consent, queue, discussion and local-speech checks.
 
 ## An honest prototype boundary
 

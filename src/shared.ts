@@ -84,6 +84,7 @@ export type RunState =
   | "finished";
 
 export interface Message {
+  pickedUpAt?: string;
   id: string;
   role: "user" | "assistant" | "system" | "tool";
   text: string;
@@ -188,6 +189,7 @@ export interface Project {
   example?: boolean;
 }
 export interface Settings {
+  speech?: import("./speech").SpeechSettings;
   contextAssistant?: ContextAssistantSettings;
   memtracePath: string;
   speechEndpoint: string;
@@ -216,6 +218,11 @@ export interface CreateEpic {
   phase: Epic["phase"];
 }
 export interface AppState {
+  onboarding?: import("./onboarding").OnboardingProgress;
+  storyComments?: import("./story-comments").StoryComment[];
+  workerConnections?: Partial<
+    Record<Harness, import("./connections").WorkerConnection>
+  >;
   fleetPlans?: FleetPlan[];
   fleetProposals?: FleetProposal[];
   qualitySnapshots: QualitySnapshot[];
@@ -293,6 +300,38 @@ export interface PreviewInput {
   bounds: { x: number; y: number; width: number; height: number };
 }
 export interface MemCodeAPI {
+  updateOnboarding(
+    patch: import("./onboarding").OnboardingPatch,
+  ): Promise<import("./onboarding").OnboardingProgress>;
+  updateQueuedFollowup(
+    taskId: string,
+    messageId: string,
+    text: string,
+    commentEdits?: Array<{ id: string; text: string }>,
+  ): Promise<void>;
+  cancelQueuedFollowup(taskId: string, messageId: string): Promise<void>;
+  storyCommentIdentity(): Promise<import("./story-comments").StoryAuthor>;
+  addStoryComment(
+    taskId: string,
+    text: string,
+    parentId?: string,
+  ): Promise<import("./story-comments").StoryComment>;
+  editStoryComment(taskId: string, id: string, text: string): Promise<void>;
+  deleteStoryComment(taskId: string, id: string): Promise<void>;
+  workerConnectionStatus(): Promise<
+    import("./connections").WorkerConnectionStatus[]
+  >;
+  connectWorker(
+    harness: Harness,
+    approved: true,
+  ): Promise<import("./connections").WorkerConnectionStatus>;
+  disconnectWorker(harness: Harness): Promise<void>;
+  accountStatus(): Promise<import("./connections").MemtraceAccount>;
+  signInMemtrace(): Promise<import("./connections").MemtraceAccount>;
+  speechStatus(): Promise<import("./speech").SpeechStatus>;
+  prepareSpeech(): Promise<import("./speech").SpeechStatus>;
+  installSpeech(): Promise<import("./speech").SpeechStatus>;
+  stopSpeech(): Promise<void>;
   sendFollowup(
     taskId: string,
     text: string,

@@ -9,6 +9,7 @@ import { git, exists, within } from "../runtime/local";
 import { WorkerManager } from "../runtime/workers";
 import type { MemtraceEngine } from "../runtime/memtrace";
 import type { WorkItem } from "../src/shared";
+import { approveFixtureWorker } from "./fixtures/worker-consent";
 
 async function preparingFixture(holdRenewal = false) {
   const root = await mkdtemp(join(tmpdir(), "memcode-preparation-test-"));
@@ -33,6 +34,7 @@ async function preparingFixture(holdRenewal = false) {
     "fixture",
   ]);
   const state = initialState();
+  approveFixtureWorker(state, "claude");
   const project = {
     ...state.projects[0],
     id: "preparation",
@@ -128,7 +130,7 @@ async function preparingFixture(holdRenewal = false) {
         id: "claude",
         name: "Fixture Claude",
         available: true,
-        path: script,
+        path: process.execPath,
         models: [
           { id: "fixture", label: "Fixture", tier: "extreme", source: "alias" },
         ],

@@ -7,10 +7,12 @@ export function RoutingCard({
   task,
   busy,
   plan,
+  disabled = false,
 }: {
   task: WorkItem;
   busy: boolean;
   plan: () => void;
+  disabled?: boolean;
 }) {
   const route = task.route;
   if (!route)
@@ -22,7 +24,7 @@ export function RoutingCard({
         <p>
           Measure the source scope, then choose a harness, model and effort.
         </p>
-        <button onClick={plan} disabled={busy || task.example}>
+        <button onClick={plan} disabled={busy || disabled || task.example}>
           {busy ? <Spinner size={12} /> : <GitBranch size={12} />}Plan worker
           <ArrowRight size={12} />
         </button>
@@ -102,7 +104,7 @@ export function RoutingCard({
       <button
         className="routing-remeasure"
         onClick={plan}
-        disabled={busy || task.example}
+        disabled={busy || disabled || task.example}
       >
         {busy ? <Spinner size={12} /> : <GitBranch size={12} />}
         Measure again

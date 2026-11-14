@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ArrowUpRight, Check, Clock3, MessageSquare, Plus } from "lucide-react";
 import type { Cycle, Stage, WorkItem } from "../shared";
+import type { StoryComment } from "../story-comments";
 import { harnessNames, stages } from "../shared";
 import { isActive, stageLabel } from "../domain";
 import { dateLabel, dayAt } from "../planning/dates";
@@ -20,6 +21,7 @@ interface Props {
   mode: "board" | "list";
   groups?: BoardGroup[];
   cycles?: Cycle[];
+  storyComments?: StoryComment[];
   open: (task: WorkItem) => void;
   create: () => void;
   move: (id: string, group: string) => void;
@@ -31,6 +33,7 @@ export function WorkBoard({
   mode,
   groups,
   cycles = [],
+  storyComments = [],
   open,
   create,
   move,
@@ -39,6 +42,39 @@ export function WorkBoard({
 }: Props) {
   const [dragged, setDragged] = useState<string | null>(null),
     [over, setOver] = useState<string | null>(null);
+  const commentCounts = new Map<string, number>();
+  for (const comment of storyComments)
+    if (!comment.deletedAt)
+      commentCounts.set(
+        comment.taskId,
+        (commentCounts.get(comment.taskId) ?? 0) + 1,
+      );
+  const discussion = (task: WorkItem) => {
+    const count = commentCounts.get(task.id) ?? 0;
+    return count > 0 ? (
+      <span
+        title={`${count} story comment${count === 1 ? "" : "s"}`}
+        aria-label={`${count} story comment${count === 1 ? "" : "s"}`}
+      >
+        <MessageSquare size={11} />
+        {count}
+      </span>
+    ) : null;
+  };
+  const queued = (task: WorkItem) => {
+    const count = task.messages.filter(
+      (message) => message.followupState === "queued" && !message.promptedAt,
+    ).length;
+    return count > 0 ? (
+      <span
+        title={`${count} queued follow-up${count === 1 ? "" : "s"}`}
+        aria-label={`${count} queued follow-up${count === 1 ? "" : "s"}`}
+      >
+        <Clock3 size={11} />
+        {count} queued
+      </span>
+    ) : null;
+  };
   const lanes: BoardGroup[] =
     groups ??
     stages.map((stage) => ({
@@ -337,12 +373,8 @@ export function WorkBoard({
                     {isActive(task) && <span className="live-dot" />}
                   </div>
                   <div className="card-meta">
-                    {task.messages.length > 0 && (
-                      <span>
-                        <MessageSquare size={11} />
-                        {task.messages.length}
-                      </span>
-                    )}
+                    {queued(task)}
+                    {discussion(task)}
                     {task.stage === "done" ? (
                       <Check size={13} className="mint-ink" />
                     ) : (

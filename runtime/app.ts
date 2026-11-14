@@ -6,6 +6,7 @@ import type { AppState, Project, WorkItem } from "../src/shared";
 import { isActive } from "../src/domain";
 import { LocalStore, exists, git, now, within } from "./local";
 import { MemtraceEngine } from "./memtrace";
+import { ensureProjectRepository } from "./project-repository";
 import { WorkerManager } from "./workers";
 import { PreviewManager, artifactRoots } from "./preview";
 import { localURL } from "./urls";
@@ -26,6 +27,11 @@ import { terminalRequestSchema } from "../src/terminal";
 import { readWorkerChanges, WorkerChangeJournal } from "./changes";
 import { resolveFile } from "./files";
 import { registerReview } from "./review";
+import { registerOnboarding } from "./onboarding";
+import { registerCardComments } from "./card-comments";
+import { registerConnections, connectedRuntimes } from "./worker-connections";
+import { SpeechManager, registerSpeech } from "./speech";
+import { speechSettingsSchema } from "../src/speech";
 import {
   formatReviewMessage,
   reviewReferenceSchema,
@@ -124,15 +130,31 @@ export async function createRuntime(
   ) => {
     handlers.set(name, { schema, handle });
   };
-  const analyze = async (id: string) => {
+  const connections = registerConnections(
+    register,
+    state,
+    changed,
+    () => store.state.settings.memtracePath,
+    host,
+  );
+  const speech = new SpeechManager(
+    () => store.state.settings,
+    store.dir,
+    async (value) => {
+      store.state.settings.speech = value;
+      await changed();
+    },
+  );
+  const analyses = new Map<string, Promise<void>>();
+  const runAnalysis = async (id: string) => {
     const item = project(id);
     if (item.example || !item.path)
       throw new Error("Choose a local project folder first.");
-    if (["connecting", "indexing"].includes(item.analysis)) return;
     item.analysis = "connecting";
     item.analysisNote = "Connecting to local Memtrace…";
     await changed();
     try {
+      await ensureProjectRepository(item);
       item.repoId = await engine.analyze(item, (note) => {
         item.analysis = "indexing";
         item.analysisNote = note;
@@ -147,6 +169,13 @@ export async function createRuntime(
       await changed();
       throw error;
     }
+  };
+  const analyze = (id: string): Promise<void> => {
+    const existing = analyses.get(id);
+    if (existing) return existing;
+    const pending = runAnalysis(id).finally(() => analyses.delete(id));
+    analyses.set(id, pending);
+    return pending;
   };
   // The platform-independent routes retained from the original desktop runtime.
   register("workspace:load", z.undefined(), async () => ({
@@ -326,18 +355,20 @@ export async function createRuntime(
       throw new Error(
         "Example context is not measured. Connect a project to gather real evidence.",
       );
+    const catalog = connectedRuntimes(store.state, await discoverHarnesses());
+    if (!catalog.length)
+      throw new Error(
+        "Connect and approve a worker in Workers before planning its model route.",
+      );
     item.evidence = await engine.qualify(project(item.projectId), item);
-    item.route = planRoute(
-      item,
-      item.evidence,
-      await discoverHarnesses(),
-      store.state.settings,
-    );
+    item.route = planRoute(item, item.evidence, catalog, store.state.settings);
     item.harness = item.route.harness;
     await changed();
   });
   register("worker:start", identifier, async (id) => {
     const item = task(id);
+    if (project(item.projectId).analysis !== "ready")
+      await analyze(item.projectId);
     await workers.start(item, project(item.projectId));
   });
   register("worker:stop", identifier, (id) => workers.stop(id));
@@ -366,6 +397,7 @@ export async function createRuntime(
       .object({
         memtracePath: z.string().max(1000),
         speechEndpoint: z.string().max(1000),
+        speech: speechSettingsSchema.optional(),
         defaultHarness: harness,
         model: z.string().max(200),
         localModel: z.boolean(),
@@ -474,6 +506,14 @@ export async function createRuntime(
   );
 
   registerPlanning(register, state, project, changed);
+  registerOnboarding(register, state, changed);
+  registerCardComments(
+    register,
+    state,
+    changed,
+    () => connections.account.current.principal,
+  );
+  registerSpeech(register, speech);
   registerReview(
     register,
     state,
@@ -686,45 +726,6 @@ export async function createRuntime(
     (input) => preview.action(input),
   );
   register(
-    "speech:transcribe",
-    z.string().min(60).max(28_000_000),
-    async (value) => {
-      const bytes = Buffer.from(value, "base64");
-      if (
-        bytes.length < 44 ||
-        bytes.length > 20_000_000 ||
-        bytes.toString("ascii", 0, 4) !== "RIFF" ||
-        bytes.toString("ascii", 8, 12) !== "WAVE"
-      )
-        throw new Error("Dictation requires a WAV recording under 20 MB.");
-      const form = new FormData();
-      form.append(
-        "file",
-        new Blob([Uint8Array.from(bytes)], { type: "audio/wav" }),
-        "dictation.wav",
-      );
-      form.append("response_format", "json");
-      let response: Response;
-      try {
-        response = await fetch(localURL(store.state.settings.speechEndpoint), {
-          method: "POST",
-          body: form,
-          signal: AbortSignal.timeout(120000),
-          redirect: "error",
-        });
-      } catch {
-        throw new Error(
-          "Start the local Whisper server or update Local dictation in Settings.",
-        );
-      }
-      if (!response.ok)
-        throw new Error(`Local transcription failed (${response.status}).`);
-      const result = (await response.json()) as { text?: string };
-      if (!result.text?.trim()) throw new Error("No speech was detected.");
-      return result.text.trim();
-    },
-  );
-  register(
     "window:action",
     z.enum(["minimize", "maximize", "close"]),
     (action) => host.call("window_action", { action }),
@@ -761,6 +762,8 @@ export async function createRuntime(
       if (closed) return;
       closed = true;
       await workers.close();
+      await speech.close();
+      await connections.close();
       await terminals.close();
       await browsers.close();
       await preview.close();

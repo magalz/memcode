@@ -52,6 +52,9 @@
   gap: 20px;
 }
 .modal-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -77,14 +80,56 @@
 .form-project > span {
   color: #87958b;
 }
+.task-title-field {
+  display: block;
+  margin: 0;
+}
+.context-connection-error {
+  margin: 12px 0;
+  color: #92734b;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.context-connection-error summary {
+  cursor: pointer;
+}
+.context-connection-error p {
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+  max-height: 150px;
+  overflow: auto;
+}
+.task-title-field > span {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #59755c;
+  font-size: 11px;
+  margin-bottom: 9px;
+}
+.task-title-field small {
+  font-size: 10px;
+  color: #98a38d;
+}
+.task-title-help {
+  font-size: 10px;
+  color: #94a18b;
+  line-height: 1.65;
+  margin: 7px 0 0;
+  overflow-wrap: anywhere;
+}
+.task-title-help strong {
+  font-weight: 400;
+  color: #547b5a;
+}
 .task-title-input {
-  border: 0 !important;
-  border-radius: 0 !important;
-  font-size: 20px;
+  border: 1px solid #dbe5d6 !important;
+  border-radius: 7px !important;
+  font-size: 14px;
   font-weight: 460;
-  letter-spacing: -0.7px;
-  padding: 0 0 3px !important;
-  background: transparent;
+  letter-spacing: -0.2px;
+  padding: 11px 12px !important;
+  background: white;
   color: #264726;
   box-shadow: none !important;
   width: 100%;

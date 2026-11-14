@@ -55,6 +55,37 @@ export function markReviewContext(
   }
 }
 
+export function claimReviewContext(messages: Message[], pickedUpAt: string) {
+  const snapshot = reviewContext(messages),
+    ids = new Set(snapshot.map((message) => message.id));
+  for (const message of messages)
+    if (
+      ids.has(message.id) &&
+      !message.promptedAt &&
+      ["queued", "paused"].includes(message.followupState ?? "")
+    )
+      message.pickedUpAt = pickedUpAt;
+  return snapshot.map((message) => ({
+    ...message,
+    ...(ids.has(message.id) &&
+    ["queued", "paused"].includes(message.followupState ?? "")
+      ? { pickedUpAt }
+      : {}),
+  }));
+}
+
+/** A failed preparation/spawn did not consume its claimed request. */
+export function releaseReviewClaims(messages: Message[], snapshot: Message[]) {
+  const claims = new Map(
+    snapshot
+      .filter((message) => message.pickedUpAt)
+      .map((message) => [message.id, message.pickedUpAt]),
+  );
+  for (const message of messages)
+    if (!message.promptedAt && claims.get(message.id) === message.pickedUpAt)
+      delete message.pickedUpAt;
+}
+
 /** Output retention must not delete user input awaiting its first worker brief. */
 export function retainReviewContext(messages: Message[], recentLimit = 250) {
   const start = Math.max(0, messages.length - recentLimit + 1);

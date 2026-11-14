@@ -11,6 +11,11 @@ import {
   type MemtraceScopeBinding,
 } from "./memtrace-workspace";
 import { join } from "node:path";
+import {
+  ManagedMemtraceOwners,
+  pendingMemtraceOwner,
+  disconnectedMemtraceClient,
+} from "./memtrace-owner";
 
 type Json = Record<string, any>;
 function unwrap(value: unknown): any {
@@ -33,6 +38,9 @@ function unwrap(value: unknown): any {
 }
 
 export class MemtraceEngine {
+  private readonly owners = new ManagedMemtraceOwners();
+  private readonly connecting = new Set<Client>();
+  private closing = false;
   private opening = new Map<string, Promise<Client>>();
   private scopes = new Map<string, MemtraceScopeBinding>();
   private clients = new Map<
@@ -45,13 +53,15 @@ export class MemtraceEngine {
     return scope ? { ...scope } : null;
   }
   async connect(project: Project): Promise<Client> {
+    if (this.closing) throw Error("The Memtrace connection is closing.");
     const existing = this.clients.get(project.id);
     if (existing) return existing.client;
     const pending = this.opening.get(project.id);
     if (pending) return pending;
-    const connection = this.open(project).finally(() =>
-      this.opening.delete(project.id),
-    );
+    const connection = this.open(
+      project,
+      this.scopes.get(project.id)?.mode === "project",
+    ).finally(() => this.opening.delete(project.id));
     this.opening.set(project.id, connection);
     return connection;
   }
@@ -81,35 +91,74 @@ export class MemtraceEngine {
       env.MEMTRACE_DATA_DIR = local.jobDirectory;
       env.MEMTRACE_NO_WATCH_RESTORE = "1";
     }
-    const transport = new StdioClientTransport({
-      command: command.command,
-      args: [
-        ...command.prefix,
-        "mcp",
-        ...(local
-          ? ["--workspace-file", local.workspaceFile]
-          : scope.workspace
-            ? ["--workspace", scope.workspace]
-            : []),
-      ],
-      cwd: local?.directory ?? scope.directory,
-      env,
-      stderr: "pipe",
-    });
-    const client = new Client(
-      { name: "memcode", version: "0.2.0" },
-      { capabilities: {} },
-    );
-    const timer = setTimeout(() => void transport.close(), 30_000);
-    try {
-      await client.connect(transport);
-      const discovered = unwrap(
-        await client.callTool(
+    let active: { client: Client; transport: StdioClientTransport } | undefined;
+    const disconnect = async () => {
+      if (!active) return;
+      const previous = active;
+      active = undefined;
+      this.connecting.delete(previous.client);
+      await previous.client.close().catch(() => {});
+    };
+    const attach = async () => {
+      if (this.closing) throw Error("The Memtrace connection is closing.");
+      await disconnect();
+      const transport = new StdioClientTransport({
+        command: command.command,
+        args: [
+          ...command.prefix,
+          "mcp",
+          ...(local
+            ? ["--workspace-file", local.workspaceFile]
+            : scope.workspace
+              ? ["--workspace", scope.workspace]
+              : []),
+        ],
+        cwd: local?.directory ?? scope.directory,
+        env,
+        stderr: "pipe",
+      });
+      const client = new Client(
+        { name: "memcode", version: "0.3.0" },
+        { capabilities: {} },
+      );
+      active = { client, transport };
+      this.connecting.add(client);
+      transport.stderr?.on("data", () => {});
+      const timer = setTimeout(() => void transport.close(), 30_000);
+      try {
+        await client.connect(transport);
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+    const discover = async () =>
+      unwrap(
+        await active!.client.callTool(
           { name: "list_indexed_repositories", arguments: {} },
           undefined,
-          { timeout: 30_000 },
+          { timeout: 15_000 },
         ),
       );
+    try {
+      let discovered: any;
+      try {
+        await attach();
+        discovered = await discover();
+      } catch (error) {
+        if (!pendingMemtraceOwner(error) && !disconnectedMemtraceClient(error))
+          throw error;
+        if (!local) {
+          // ClientPending is not a wrong store. Bootstrap only the selected
+          // project, never the broad Folder Group or an unmarked parent.
+          await disconnect();
+          return this.open(project, true);
+        }
+        await this.owners.ready(local, command, env, async () => {
+          // Pending clients can retain a stale attachment during owner election.
+          await attach();
+          discovered = await discover();
+        });
+      }
       const repos: Json[] = Array.isArray(discovered)
         ? discovered
         : (discovered?.repos ?? []);
@@ -123,14 +172,17 @@ export class MemtraceEngine {
         (repo) =>
           pathKey(repo.repo_path ?? repo.path ?? "") === pathKey(project.path!),
       );
-      if (!admitted)
+      // A healthy, explicit one-member private owner may have no index yet.
+      // Let analyze submit its first job; unrelated/partial stores still fail.
+      if (!admitted && !(local && repos.length === 0))
         throw new MemtraceAdmissionError(
           `Memtrace's workspace does not include ${project.name}. Reconnect to a workspace that includes this project.`,
         );
-      const repoId = project.repoId ?? admitted.repo_id;
+      const repoId =
+        admitted?.repo_id ?? (admitted ? project.repoId : undefined);
       if (repoId) {
         const admission = unwrap(
-          await client.callTool(
+          await active!.client.callTool(
             {
               name: "get_repository_stats",
               arguments: { repo_id: repoId, branch: project.branch },
@@ -148,14 +200,15 @@ export class MemtraceEngine {
           );
       }
     } catch (error) {
-      await client.close().catch(() => {});
+      await disconnect();
       if (error instanceof MemtraceAdmissionError && !privateProject) {
-        clearTimeout(timer);
         return this.open(project, true);
       }
       throw error;
-    } finally {
-      clearTimeout(timer);
+    }
+    if (this.closing) {
+      await disconnect();
+      throw Error("The Memtrace connection is closing.");
     }
     this.scopes.set(
       project.id,
@@ -171,16 +224,34 @@ export class MemtraceEngine {
               env.MEMTRACE_MEMDB_DATA_DIR ?? join(scope.directory, ".memdb"),
           },
     );
-    this.clients.set(project.id, { client, transport });
-    return client;
+    const connection = active!;
+    this.connecting.delete(connection.client);
+    this.clients.set(project.id, connection);
+    return connection.client;
   }
   async call(project: Project, name: string, args: Json): Promise<any> {
     const client = await this.connect(project);
-    return unwrap(
-      await client.callTool({ name, arguments: args }, undefined, {
-        timeout: 120_000,
-      }),
-    );
+    const query = (connection: Client) =>
+      connection
+        .callTool({ name, arguments: args }, undefined, { timeout: 120_000 })
+        .then(unwrap);
+    try {
+      return await query(client);
+    } catch (error) {
+      if (!pendingMemtraceOwner(error) && !disconnectedMemtraceClient(error))
+        throw error;
+      if (this.clients.get(project.id)?.client === client)
+        this.clients.delete(project.id);
+      await client.close().catch(() => {});
+      // A disconnected mutation could already have run. Reconnect reads and
+      // definitely-not-executed pending-owner requests, without replaying writes.
+      if (
+        !pendingMemtraceOwner(error) &&
+        !/^(get_|list_|find_|check_|query_)/.test(name)
+      )
+        throw error;
+      return query(await this.connect(project));
+    }
   }
   async analyze(
     project: Project,
@@ -281,6 +352,11 @@ export class MemtraceEngine {
     return collectEvidence(this, project, task);
   }
   async close(): Promise<void> {
+    this.closing = true;
+    await this.owners.close();
+    await Promise.allSettled(
+      [...this.connecting].map((client) => client.close()),
+    );
     await Promise.allSettled([...this.opening.values()]);
     await Promise.allSettled(
       [...this.clients.values()].map((c) => c.client.close()),

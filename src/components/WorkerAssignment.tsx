@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { GitBranch, Layers3, X } from "lucide-react";
-import type { Epic, Harness, RuntimeInfo, WorkItem } from "../shared";
+import { ArrowUpRight, GitBranch, Layers3, Link2, X } from "lucide-react";
+import type { AppState, Epic, Harness, RuntimeInfo, WorkItem } from "../shared";
+import { harnessNames } from "../shared";
+import { workerReadiness } from "../worker-availability";
 import { isActive } from "../domain";
 import { Select } from "./Select";
 import { RoutingCard } from "./Routing";
@@ -13,14 +15,23 @@ export function WorkerAssignment({
   busy,
   plan,
   update,
+  connections,
+  onConnections,
 }: {
   task: WorkItem;
   runtime: RuntimeInfo;
   busy: boolean;
   plan: () => void;
   update: Update;
+  connections: AppState["workerConnections"];
+  onConnections: () => void;
 }) {
   const automatic = task.assignment === "auto";
+  const readiness = workerReadiness(task, runtime.harnesses, connections),
+    displayTask =
+      automatic && !readiness.routeConnected
+        ? { ...task, route: undefined }
+        : task;
   const catalog =
     runtime.harnesses.find((h) => h.id === task.harness)?.models ?? [];
   return (
@@ -80,7 +91,32 @@ export function WorkerAssignment({
           This computer
         </span>
       </div>
-      <RoutingCard task={task} busy={busy || isActive(task)} plan={plan} />
+      {!task.example && !readiness.canStart && (
+        <div className="assignment-connect" role="status">
+          <span>
+            <Link2 size={13} />
+            Connect in Workers
+          </span>
+          <p>
+            {automatic
+              ? "Automatic assignment uses only workers you approve. Connect one to plan and start this story."
+              : readiness.runtimeKnown
+                ? `${harnessNames[task.harness]} is installed. Approve its connection before starting work.`
+                : readiness.selectedInstalled
+                  ? "The installed runtime path has not been confirmed. Check its connection in Workers."
+                  : `Install the standalone ${harnessNames[task.harness]} CLI, then connect it in Workers.`}
+          </p>
+          <button className="secondary-button" onClick={onConnections}>
+            Connect in Workers <ArrowUpRight size={12} />
+          </button>
+        </div>
+      )}
+      <RoutingCard
+        task={displayTask}
+        busy={busy || isActive(task)}
+        disabled={!task.example && !readiness.canStart}
+        plan={plan}
+      />
     </>
   );
 }

@@ -318,6 +318,7 @@ export function Workspace({
           mode={config.mode}
           groups={groups}
           cycles={cycles}
+          storyComments={state.storyComments}
           open={open}
           create={create}
           move={move}

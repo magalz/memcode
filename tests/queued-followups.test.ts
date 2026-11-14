@@ -9,6 +9,7 @@ import { restartSafeState } from "../src/domain";
 import type { Harness, Message, Project, WorkItem } from "../src/shared";
 import { WorkerManager } from "../runtime/workers";
 import { reviewContext } from "../runtime/review-context";
+import { registerReview } from "../runtime/review";
 import { git, within } from "../runtime/local";
 import type { MemtraceEngine } from "../runtime/memtrace";
 
@@ -37,6 +38,7 @@ async function fixture(
     spawnFails?: boolean;
     preparationFails?: boolean;
     slots?: number;
+    pickupGate?: boolean;
   } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), "memcode-queue-")),
@@ -58,7 +60,7 @@ async function fixture(
   ]);
   await writeFile(
     stub,
-    `import{readFile,writeFile,mkdir,access}from'node:fs/promises';import{join}from'node:path';const id=process.env.MEMCODE_TASK_ID,dir=join('.memcode','gates',id);await mkdir(dir,{recursive:true});const log=join(dir,'runs.json'),runs=JSON.parse(await readFile(log,'utf8').catch(()=>'[]'));let stdin='';for await(const data of process.stdin)stdin+=data;const prompt=stdin||await readFile(join('.memcode','workers',id,'brief.md'),'utf8');const index=runs.length+1;runs.push({index,prompt,at:Date.now()});await writeFile(log,JSON.stringify(runs));const release=join(dir,index+'.release');let ready=false;for(let n=0;n<1500;n++){try{await access(release);ready=true;break;}catch{}await new Promise(r=>setTimeout(r,10));}if(!ready)process.exit(8);console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'Fixture pass '+index+' finished; no model ran.'}}));process.exit(${options.fail ? 7 : 0});`,
+    `import{readFile,writeFile,mkdir,access,rename}from'node:fs/promises';import{join}from'node:path';const id=process.env.MEMCODE_TASK_ID,dir=join('.memcode','gates',id);await mkdir(dir,{recursive:true});const log=join(dir,'runs.json'),runs=JSON.parse(await readFile(log,'utf8').catch(()=>'[]'));let stdin='';for await(const data of process.stdin)stdin+=data;const prompt=stdin||await readFile(join('.memcode','workers',id,'brief.md'),'utf8');const index=runs.length+1;runs.push({index,prompt,at:Date.now()});await writeFile(log+'.tmp',JSON.stringify(runs));await rename(log+'.tmp',log);const release=join(dir,index+'.release');let ready=false;for(let n=0;n<1500;n++){try{await access(release);ready=true;break;}catch{}await new Promise(r=>setTimeout(r,10));}if(!ready)process.exit(8);console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'Fixture pass '+index+' finished; no model ran.'}}));process.exit(${options.fail ? 7 : 0});`,
   );
   const project: Project = {
     id: "queue-project",
@@ -92,10 +94,42 @@ async function fixture(
     stage: "planned",
   }));
   state.tasks = tasks;
+  const runtimePath = options.spawnFails
+    ? join(root, "missing.exe")
+    : process.execPath;
+  state.workerConnections = Object.fromEntries(
+    harnesses.map((harness) => [
+      harness,
+      {
+        harness,
+        runtimePath,
+        approvedAt: new Date().toISOString(),
+        auth: "authenticated",
+        scopeVersion: 1,
+      },
+    ]),
+  );
   let releases = 0;
+  let releasePickup!: () => void,
+    pickupHeld = false;
+  const pickupGate = new Promise<void>((resolve) => {
+    releasePickup = resolve;
+  });
   const manager = new WorkerManager(
     () => state,
     async () => {
+      if (
+        options.pickupGate &&
+        !pickupHeld &&
+        state.tasks.some((task) =>
+          task.messages.some(
+            (message) => message.pickedUpAt && !message.promptedAt,
+          ),
+        )
+      ) {
+        pickupHeld = true;
+        await pickupGate;
+      }
       manager.dispatchQueued();
     },
     {
@@ -129,7 +163,7 @@ async function fixture(
         id,
         name: id,
         available: true,
-        path: stub,
+        path: runtimePath,
         models: [
           {
             id: "fixture-model",
@@ -171,8 +205,10 @@ async function fixture(
     runs,
     release,
     enqueue,
+    releasePickup,
     releases: () => releases,
     async cleanup() {
+      releasePickup();
       await manager.close();
       assert.ok(
         within(tmpdir(), root) && basename(root).startsWith("memcode-queue-"),
@@ -220,6 +256,107 @@ test("all three adapters automatically coalesce busy follow-ups after Fleet clea
     } finally {
       await f.cleanup();
     }
+  }
+});
+
+test("edited and cancelled queued requests reach the next actual process exactly as last saved", async () => {
+  const f = await fixture(["codex", "claude"], { slots: 1 }),
+    [first, next] = f.tasks,
+    routes = new Map<string, { schema: any; run: (input: any) => unknown }>();
+  registerReview(
+    (name, schema, run) => routes.set(name, { schema, run }),
+    () => f.state,
+    async () => f.manager.dispatchQueued(),
+    () => {},
+  );
+  const call = async (name: string, input: unknown) => {
+    const route = routes.get(name)!;
+    return route.run(route.schema.parse(input));
+  };
+  try {
+    await f.manager.start(first, f.project);
+    await until(
+      async () => (await f.runs(first)).length === 1,
+      "occupied fixture process",
+    );
+    const edit = f.enqueue(next, "Original queue wording"),
+      cancel = f.enqueue(next, "Cancelled request must not reach process");
+    await call("review:queue-update", {
+      taskId: next.id,
+      messageId: edit.id,
+      text: "Final queued wording accepted",
+    });
+    await call("review:queue-cancel", {
+      taskId: next.id,
+      messageId: cancel.id,
+    });
+    await f.release(first, 1);
+    await until(
+      async () => (await f.runs(next)).length === 1,
+      "edited automatic process",
+    );
+    const prompt = (await f.runs(next))[0].prompt;
+    assert.match(prompt, /Final queued wording accepted/);
+    assert.doesNotMatch(
+      prompt,
+      /Original queue wording|Cancelled request must not reach process/,
+    );
+    assert.equal(edit.followupState, "included");
+    assert.equal(cancel.followupState, "cancelled");
+    await f.release(next, 1);
+    await until(() => next.run.state === "finished", "fixture complete");
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("a real worker's persisted brief pickup rejects a stale edit and cancel before process spawn", async () => {
+  const f = await fixture(["codex"], { pickupGate: true }),
+    task = f.tasks[0],
+    routes = new Map<string, { schema: any; run: (input: any) => unknown }>();
+  registerReview(
+    (name, schema, run) => routes.set(name, { schema, run }),
+    () => f.state,
+    async () => {},
+    () => {},
+  );
+  const call = async (name: string, input: unknown) => {
+    const route = routes.get(name)!;
+    return route.run(route.schema.parse(input));
+  };
+  try {
+    const message = f.enqueue(task, "Claimed wording is immutable");
+    await until(() => !!message.pickedUpAt, "persisted claim");
+    assert.equal((await f.runs(task)).length, 0);
+    await assert.rejects(
+      call("review:queue-update", {
+        taskId: task.id,
+        messageId: message.id,
+        text: "Stale replacement",
+      }),
+      /picked up/,
+    );
+    await assert.rejects(
+      call("review:queue-cancel", { taskId: task.id, messageId: message.id }),
+      /picked up/,
+    );
+    f.releasePickup();
+    await until(
+      async () => (await f.runs(task)).length === 1,
+      "spawn after claim release",
+    );
+    assert.match(
+      (await f.runs(task))[0].prompt,
+      /Claimed wording is immutable/,
+    );
+    assert.doesNotMatch((await f.runs(task))[0].prompt, /Stale replacement/);
+    await f.release(task, 1);
+    await until(
+      () => task.run.state === "finished",
+      "claimed fixture completes",
+    );
+  } finally {
+    await f.cleanup();
   }
 });
 

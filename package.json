@@ -27,6 +27,7 @@
     "@xterm/xterm": "6.0.0",
     "diff": "9.0.0",
     "docx-preview": "0.4.1",
+    "fflate": "0.8.3",
     "lucide-react": "1.72.0",
     "pdfjs-dist": "6.5.438",
     "playwright-core": "1.65.1",

@@ -48,8 +48,14 @@ fn main() {
                 .first()
                 .ok_or("Missing main window configuration")?
                 .clone();
-            tauri::WebviewWindowBuilder::from_config(app, &config)?
-                .focused(std::env::var_os("MEMCODE_NATIVE_TEST_PROFILE").is_none())
+            let verification = std::env::var_os("MEMCODE_NATIVE_TEST_PROFILE").is_some();
+            let mut window = tauri::WebviewWindowBuilder::from_config(app, &config)?
+                .focused(!verification)
+                .skip_taskbar(verification);
+            if verification {
+                window = window.title("MemCode — verification");
+            }
+            window
                 .data_directory(native::profile_dir(app.handle()).map_err(std::io::Error::other)?)
                 .on_navigation(native::main_origin)
                 .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)

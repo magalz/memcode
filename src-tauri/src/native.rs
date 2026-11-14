@@ -94,6 +94,13 @@ pub async fn host_call(app: AppHandle, method: &str, input: Value) -> Result<Val
             }
             Ok(Value::Null)
         }
+        "open_memtrace_claim" => {
+            let url = memtrace_claim_url(input["url"].as_str().ok_or("Missing sign-in URL")?)?;
+            tauri::async_runtime::spawn_blocking(move || open_claim(&url))
+                .await
+                .map_err(|e| e.to_string())??;
+            Ok(Value::Null)
+        }
         "open_path" => {
             let path = input["path"]
                 .as_str()
@@ -235,6 +242,71 @@ async fn show_preview(app: &AppHandle, input: Value) -> Result<(), String> {
     app.state::<PreviewState>()
         .1
         .store(true, std::sync::atomic::Ordering::SeqCst);
+    Ok(())
+}
+
+fn memtrace_claim_url(value: &str) -> Result<String, String> {
+    let url = Url::parse(value).map_err(|_| "Invalid Memtrace sign-in URL")?;
+    let pairs: Vec<_> = url.query_pairs().collect();
+    let valid_code = pairs.len() == 1
+        && pairs[0].0 == "code"
+        && (4..=256).contains(&pairs[0].1.len())
+        && pairs[0]
+            .1
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if url.scheme() != "https"
+        || !matches!(url.host_str(), Some("memtrace.io" | "www.memtrace.io"))
+        || url.path() != "/claim"
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.port_or_known_default() != Some(443)
+        || url.fragment().is_some()
+        || !valid_code
+    {
+        return Err("Only the official Memtrace sign-in claim can open here".into());
+    }
+    Ok(url.to_string())
+}
+
+#[cfg(test)]
+mod claim_url_tests {
+    use super::memtrace_claim_url;
+    #[test]
+    fn claim_url_accepts_only_the_official_device_claim() {
+        assert!(memtrace_claim_url("https://memtrace.io/claim?code=ABCD-1234").is_ok());
+        for value in [
+            "http://memtrace.io/claim?code=ABCD-1234",
+            "https://memtrace.io.evil.test/claim?code=ABCD-1234",
+            "https://memtrace.io/other?code=ABCD-1234",
+            "https://user:pass@memtrace.io/claim?code=ABCD-1234",
+            "https://memtrace.io:444/claim?code=ABCD-1234",
+            "https://memtrace.io/claim?code=ABCD-1234&redirect=https://evil.test",
+            "file:///claim?code=ABCD-1234",
+        ] {
+            assert!(memtrace_claim_url(value).is_err(), "accepted {value}");
+        }
+    }
+}
+
+fn open_claim(url: &str) -> Result<(), String> {
+    let mut command = std::process::Command::new(if cfg!(windows) {
+        "rundll32.exe"
+    } else if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    });
+    if cfg!(windows) {
+        command.arg("url.dll,FileProtocolHandler");
+    }
+    command.arg(url);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    command.spawn().map_err(|e| e.to_string())?;
     Ok(())
 }
 

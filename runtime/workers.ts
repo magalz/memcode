@@ -25,6 +25,7 @@ import type { Command } from "./local";
 import type { MemtraceEngine } from "./memtrace";
 import { discoverHarnesses } from "./catalog";
 import { planRoute } from "./router";
+import { assertWorkerConnected, connectedRuntimes } from "./worker-connections";
 import { EpicWorkspace } from "./epic-workspace";
 import { FleetCoordinator, FleetBlocked } from "./fleet";
 import { startContextSession, type ContextSession } from "./context/host";
@@ -35,7 +36,8 @@ import type { AgentBrowserManager } from "./browser/manager";
 import { workerToolProfile, type WorkerToolProfile } from "./worker-profile";
 import { watchArtifacts } from "./artifact-watch";
 import {
-  reviewContext,
+  claimReviewContext,
+  releaseReviewClaims,
   markReviewContext,
   retainReviewContext,
 } from "./review-context";
@@ -303,6 +305,8 @@ export class WorkerManager {
       throw new Error(
         "Connect a local project to start real workers. The example workspace never runs agents.",
       );
+    if (task.assignment !== "auto")
+      assertWorkerConnected(this.state(), task.harness);
     if (isActive(task) || this.children.has(task.id))
       throw new Error("This worker is already active.");
     const active = this.state().tasks.filter(
@@ -342,6 +346,7 @@ export class WorkerManager {
     let heartbeatStopped = false;
     let preparationFailure: Error | undefined;
     let closeArtifacts: (() => Promise<void>) | undefined;
+    let conversation: Message[] = [];
     const cancelledPreparation = new AbortController();
     const aborted = new Promise<never>((_resolve, reject) =>
       cancelledPreparation.signal.addEventListener(
@@ -395,19 +400,30 @@ export class WorkerManager {
       await this.changed();
       task.evidence = await this.engine.qualify(project, task);
       continuing();
+      const catalog = await this.catalog();
+      const selectedRuntime = catalog.find(
+        (runtime) => runtime.id === task.harness,
+      );
+      if (task.assignment !== "auto" && selectedRuntime?.path)
+        assertWorkerConnected(this.state(), task.harness, selectedRuntime.path);
+      const approved = connectedRuntimes(this.state(), catalog);
+      if (!approved.length)
+        throw Error("Connect a worker in Workers before starting a worker.");
       task.route = planRoute(
         task,
         task.evidence,
-        await this.catalog(),
+        approved,
         this.state().settings,
       );
       task.harness = task.route.harness;
+      assertWorkerConnected(this.state(), task.harness);
       const command = await this.resolveCommand(task.harness);
       continuing();
       if (!command)
         throw new Error(
           "The selected local harness is no longer available. Refresh its runtime or choose another worker.",
         );
+      assertWorkerConnected(this.state(), task.harness, command.command);
       await this.changed();
       task.run.changeRunId = randomUUID();
       await this.fleet.before(project, task);
@@ -556,7 +572,8 @@ export class WorkerManager {
         initialContext = await Promise.race([contextEvidence, aborted]);
         continuing();
       }
-      const conversation = reviewContext(task.messages);
+      conversation = claimReviewContext(task.messages, now());
+      await this.changed();
       const prompt = [
         "You are implementing a work item in MemCode, a local coding-worker suite.",
         `Project: ${project.name}\nProject purpose: ${project.description}`,
@@ -684,6 +701,7 @@ export class WorkerManager {
       const settle = async (code: number | null, error?: Error) => {
         if (settled) return;
         settled = true;
+        releaseReviewClaims(task.messages, conversation);
         stopHeartbeat();
         await closeArtifacts?.();
         await closeContext();
@@ -763,6 +781,7 @@ export class WorkerManager {
       child.stdin!.end(invocation.stdin ?? undefined);
       await this.changed();
     } catch (error) {
+      releaseReviewClaims(task.messages, conversation);
       this.preparations.delete(task.id);
       stopHeartbeat();
       await closeArtifacts?.();

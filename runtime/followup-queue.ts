@@ -25,6 +25,20 @@ export function queuedFollowups(task: WorkItem): Message[] {
   );
 }
 
+/** The edit/cancel window closes atomically when a brief snapshot is claimed. */
+export function editableFollowup(task: WorkItem, messageId: string) {
+  const message = task.messages.find(
+    (message) => message.id === messageId && message.role === "user",
+  );
+  if (!message || !["queued", "paused"].includes(message.followupState ?? ""))
+    throw Error("This follow-up is no longer waiting in the queue.");
+  if (message.promptedAt || message.pickedUpAt)
+    throw Error(
+      "The worker already picked up this follow-up. Send a new follow-up instead.",
+    );
+  return message;
+}
+
 export function settleFollowupQueue(
   task: WorkItem,
   state: "paused" | "cancelled",

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { AppState, WorkItem } from "../src/shared";
+import { editableFollowup } from "./followup-queue";
 import {
   formatReviewMessage,
   reviewReferenceSchema,
@@ -11,6 +12,19 @@ type Register = (
   schema: z.ZodType,
   handler: (input: any) => unknown,
 ) => void;
+function followupBody(text: string, notes: ReviewComment[]) {
+  return notes.length
+    ? text +
+        "\n\n" +
+        notes
+          .map(
+            (comment, index) =>
+              `Comment ${index + 1}: ${comment.text}\n` +
+              formatReviewMessage("", [comment.reference]),
+          )
+          .join("\n\n")
+    : text;
+}
 export function migrateReviewComments(state: AppState) {
   state.reviewComments ??= [];
   for (const task of state.tasks)
@@ -136,17 +150,7 @@ export function registerReview(
       );
     const notes = comments as ReviewComment[],
       references = notes.map((c) => c.reference),
-      body = notes.length
-        ? input.text +
-          "\n\n" +
-          notes
-            .map(
-              (c, i) =>
-                `Comment ${i + 1}: ${c.text}\n` +
-                formatReviewMessage("", [c.reference]),
-            )
-            .join("\n\n")
-        : input.text;
+      body = followupBody(input.text, notes);
     if (body.length > 100000)
       throw Error("Select fewer comments for this follow-up.");
     if (dispatch && !item.example && !queue)
@@ -193,5 +197,77 @@ export function registerReview(
       })
       .strict(),
     async (input) => ({ messageId: await send(input, true) }),
+  );
+  register(
+    "review:queue-update",
+    z
+      .object({
+        taskId: id,
+        messageId: id,
+        text: z.string().trim().min(1).max(20000),
+        commentEdits: z
+          .array(
+            z
+              .object({ id, text: z.string().trim().min(1).max(10000) })
+              .strict(),
+          )
+          .max(30)
+          .optional(),
+      })
+      .strict(),
+    async (input) => {
+      const item = task(input.taskId),
+        message = editableFollowup(item, input.messageId),
+        edits = new Map<string, string>(
+          (input.commentEdits ?? []).map(
+            (edit: { id: string; text: string }) => [edit.id, edit.text],
+          ),
+        );
+      if (edits.size !== (input.commentEdits ?? []).length)
+        throw Error("Choose each attached comment only once.");
+      const notes = (message.commentIds ?? []).map((commentId) => {
+        const note = state().reviewComments?.find(
+          (comment) =>
+            comment.id === commentId &&
+            comment.taskId === item.id &&
+            comment.messageId === message.id,
+        );
+        if (!note) throw Error("An attached review comment is unavailable.");
+        return { ...note, text: edits.get(commentId) ?? note.text };
+      });
+      if (
+        [...edits.keys()].some(
+          (commentId) => !notes.some((note) => note.id === commentId),
+        )
+      )
+        throw Error("Only comments attached to this follow-up can be edited.");
+      const body = followupBody(input.text, notes);
+      if (body.length > 100000) throw Error("This follow-up is too long.");
+      const at = new Date().toISOString();
+      for (const note of notes) {
+        const stored = state().reviewComments!.find(
+          (comment) => comment.id === note.id,
+        )!;
+        stored.text = note.text;
+        stored.updatedAt = at;
+      }
+      message.text = body;
+      if (notes.length) message.reviewText = input.text;
+      item.updatedAt = at;
+      await changed();
+      publish();
+    },
+  );
+  register(
+    "review:queue-cancel",
+    z.object({ taskId: id, messageId: id }).strict(),
+    async (input) => {
+      const item = task(input.taskId),
+        message = editableFollowup(item, input.messageId);
+      message.followupState = "cancelled";
+      item.updatedAt = new Date().toISOString();
+      await changed();
+      publish();
+    },
   );
 }

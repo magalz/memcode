@@ -13,7 +13,7 @@ import {
   type TerminalSession,
 } from "../src/terminal";
 import type { NativeHost } from "./host";
-import { findCommand } from "./commands";
+import { childEnv, findCommand } from "./commands";
 import { git, now, within } from "./local";
 
 export async function installedShells(): Promise<TerminalShell[]> {
@@ -188,6 +188,9 @@ export class TerminalManager {
         args = argumentsList;
       }
       const id = randomUUID();
+      const path = Object.entries(childEnv()).find(
+        ([key]) => key.toLowerCase() === "path",
+      )?.[1];
       const session = await this.host.call<TerminalSession>("terminal_start", {
         id,
         taskId,
@@ -200,6 +203,9 @@ export class TerminalManager {
         cols: request.cols,
         rows: request.rows,
         env: {
+          // Native PTYs may rebuild their environment from the Windows registry.
+          // Retain the runtime's prepared tool paths without forwarding secrets.
+          ...(path === undefined ? {} : { PATH: path }),
           MEMCODE_TASK_ID: taskId,
           MEMCODE_TERMINAL_ID: id,
           MEMCODE_HARNESS: task.harness,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -25,6 +25,9 @@ interface Props {
   open: (task: WorkItem) => void;
   addStory: (epicId?: string) => void;
   notify: (s: string) => void;
+  createRequest?: number;
+  onCreateRequestConsumed?: () => void;
+  onEpicCreated?: (epic: Epic) => void;
 }
 const phases = [
   { id: "now", name: "Now", detail: "Build the useful core", number: "01" },
@@ -44,10 +47,19 @@ export function Roadmap({
   open,
   addStory,
   notify,
+  createRequest,
+  onCreateRequestConsumed,
+  onEpicCreated,
 }: Props) {
   const [phase, setPhase] = useState("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [newEpic, setNewEpic] = useState(false);
+  useEffect(() => {
+    if (createRequest) {
+      setNewEpic(true);
+      onCreateRequestConsumed?.();
+    }
+  }, [createRequest, onCreateRequestConsumed]);
   const [busy, setBusy] = useState(false);
   const done = tasks.filter((task) => task.stage === "done").length;
   const blocked = (task: WorkItem) =>
@@ -146,7 +158,11 @@ export function Roadmap({
             </button>
           ))}
         </div>
-        <button className="button secondary" onClick={() => setNewEpic(true)}>
+        <button
+          className="button secondary"
+          data-guide="new-epic"
+          onClick={() => setNewEpic(true)}
+        >
           <Plus size={13} />
           New epic
         </button>
@@ -356,6 +372,7 @@ export function Roadmap({
       {newEpic && (
         <NewEpic
           project={project}
+          created={onEpicCreated}
           close={() => setNewEpic(false)}
           notify={notify}
         />
@@ -368,10 +385,12 @@ function NewEpic({
   project,
   close,
   notify,
+  created,
 }: {
   project: Project;
   close: () => void;
   notify: (s: string) => void;
+  created?: (epic: Epic) => void;
 }) {
   const [title, setTitle] = useState(""),
     [description, setDescription] = useState(""),
@@ -382,12 +401,13 @@ function NewEpic({
     if (!title.trim()) return;
     setBusy(true);
     try {
-      await window.memcode.createEpic({
+      const epic = await window.memcode.createEpic({
         projectId: project.id,
         title: title.trim(),
         description,
         phase,
       });
+      created?.(epic);
       close();
     } catch (error) {
       notify((error as Error).message);
