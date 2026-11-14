@@ -21,6 +21,10 @@ export async function exists(path: string): Promise<boolean> {
 
 export function childEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
+  // A standalone worker does not inherit the desktop parent's package identity.
+  // Keeping these hints makes Codex reject shell launches and sandboxed writes.
+  delete env.CODEX_WINDOWS_REGISTERED_CORE;
+  delete env.CODEX_WINDOWS_SANDBOX_PACKAGE_FAMILY;
   const key =
     Object.keys(env).find((k) => k.toLowerCase() === "path") ?? "PATH";
   const parts = [

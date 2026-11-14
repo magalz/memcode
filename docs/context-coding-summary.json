@@ -1,0 +1,5630 @@
+{
+  "at": "2026-11-14T10:11:11.777Z",
+  "summaries": [
+    {
+      "harness": "codex",
+      "model": "gpt-6-luna",
+      "complete": true,
+      "groups": [
+        {
+          "variant": "baseline",
+          "runs": 6,
+          "passed": 6,
+          "readTotal": 1838247,
+          "uncached": 187943,
+          "cacheRead": 1650304,
+          "cacheWrite": 0,
+          "output": 8590,
+          "medianLatencyMs": 42175.5,
+          "callerContextBeforeEdit": 0,
+          "assessmentBeforeEdit": 0,
+          "successfulRetrievalBeforeEdit": 6,
+          "toolErrors": 2,
+          "native": {
+            "reads": 0,
+            "grep": 0,
+            "glob": 0,
+            "shell": 22,
+            "shellSearch": 8
+          }
+        },
+        {
+          "variant": "broker",
+          "runs": 6,
+          "passed": 6,
+          "readTotal": 1317438,
+          "uncached": 116542,
+          "cacheRead": 1200896,
+          "cacheWrite": 0,
+          "output": 7441,
+          "medianLatencyMs": 41653,
+          "callerContextBeforeEdit": 6,
+          "assessmentBeforeEdit": 6,
+          "successfulRetrievalBeforeEdit": 6,
+          "toolErrors": 0,
+          "native": {
+            "reads": 0,
+            "grep": 0,
+            "glob": 0,
+            "shell": 12,
+            "shellSearch": 3
+          }
+        }
+      ],
+      "aggregateReadChangePercent": -28.33182918291176,
+      "pairs": [
+        {
+          "case": "signature",
+          "repetition": 1,
+          "baselineRead": 336714,
+          "brokerRead": 279208,
+          "changePercent": -17.078588950860375,
+          "identicalPatch": true
+        },
+        {
+          "case": "signature",
+          "repetition": 2,
+          "baselineRead": 253260,
+          "brokerRead": 204444,
+          "changePercent": -19.275053304904056,
+          "identicalPatch": true
+        },
+        {
+          "case": "signature",
+          "repetition": 3,
+          "baselineRead": 346308,
+          "brokerRead": 188553,
+          "changePercent": -45.553380228005125,
+          "identicalPatch": false
+        },
+        {
+          "case": "bug",
+          "repetition": 1,
+          "baselineRead": 195859,
+          "brokerRead": 208780,
+          "changePercent": 6.597092806559823,
+          "identicalPatch": true
+        },
+        {
+          "case": "bug",
+          "repetition": 2,
+          "baselineRead": 309972,
+          "brokerRead": 222778,
+          "changePercent": -28.12963751564658,
+          "identicalPatch": true
+        },
+        {
+          "case": "bug",
+          "repetition": 3,
+          "baselineRead": 396134,
+          "brokerRead": 213675,
+          "changePercent": -46.05991911827816,
+          "identicalPatch": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "codex-signature-1-baseline",
+          "case": "signature",
+          "variant": "baseline",
+          "repetition": 1,
+          "readTotal": 336714,
+          "input": 336714,
+          "uncached": 32330,
+          "cacheRead": 304384,
+          "cacheWrite": 0,
+          "output": 1308,
+          "latencyMs": 42020,
+          "passed": true,
+          "patchSha256": "9c443b46b8c89549a5d9ae846704a5bb1f9e92910c0969aa8b95740b1b24492f",
+          "assertions": {
+            "passed": true,
+            "passedCount": 28,
+            "total": 28,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "discount 0",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0",
+                "passed": true
+              },
+              {
+                "name": "discount 0.1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.1",
+                "passed": true
+              },
+              {
+                "name": "discount 0.5",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.5",
+                "passed": true
+              },
+              {
+                "name": "discount 1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 1",
+                "passed": true
+              },
+              {
+                "name": "reject total -1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -1",
+                "passed": true
+              },
+              {
+                "name": "reject total -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject total 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject total NaN",
+                "passed": true
+              },
+              {
+                "name": "reject receipt NaN",
+                "passed": true
+              },
+              {
+                "name": "reject total Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject total -Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -Infinity",
+                "passed": true
+              },
+              {
+                "name": "undefined discount",
+                "passed": true
+              },
+              {
+                "name": "round after discount",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "list_indexed_repositories",
+              "arguments": {}
+            },
+            {
+              "name": "analyze_relationships",
+              "arguments": {
+                "repo_id": "codex-signature-1-baseline-mwg82swa",
+                "target": "total",
+                "file_path": "src/pricing.mjs",
+                "query_type": "find_callers",
+                "depth": 3
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "repo_id": "codex-signature-1-baseline-mwg82swa",
+                "target": "total",
+                "file_path": "src/pricing.mjs",
+                "direction": "upstream",
+                "max_depth": 4
+              }
+            },
+            {
+              "name": "preflight_check",
+              "arguments": {
+                "repo_id": "codex-signature-1-baseline-mwg82swa",
+                "symbol": "total",
+                "file_path": "src/pricing.mjs",
+                "branch": "main"
+              }
+            },
+            {
+              "name": "analyze_relationships",
+              "arguments": {
+                "repo_id": "codex-signature-1-baseline-mwg82swa",
+                "target": "total",
+                "file_path": "src/pricing.mjs",
+                "query_type": "find_callers",
+                "depth": 3
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "list_indexed_repositories",
+            "analyze_relationships",
+            "preflight_check",
+            "get_impact"
+          ],
+          "callerContextBeforeEdit": false,
+          "assessmentBeforeEdit": false,
+          "toolErrors": 0,
+          "native": {
+            "reads": 0,
+            "grep": 0,
+            "glob": 0,
+            "shell": 4,
+            "shellSearch": 1
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "shell",
+              "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command 'Get-Content src/money.mjs; Get-ChildItem -Force | Select-Object Name,Mode'"
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg82swa\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg82swa\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg82swa\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg82swa\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-signature-1-broker",
+          "case": "signature",
+          "variant": "broker",
+          "repetition": 1,
+          "readTotal": 279208,
+          "input": 279208,
+          "uncached": 20776,
+          "cacheRead": 258432,
+          "cacheWrite": 0,
+          "output": 1597,
+          "latencyMs": 55152,
+          "passed": true,
+          "patchSha256": "9c443b46b8c89549a5d9ae846704a5bb1f9e92910c0969aa8b95740b1b24492f",
+          "assertions": {
+            "passed": true,
+            "passedCount": 28,
+            "total": 28,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "discount 0",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0",
+                "passed": true
+              },
+              {
+                "name": "discount 0.1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.1",
+                "passed": true
+              },
+              {
+                "name": "discount 0.5",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.5",
+                "passed": true
+              },
+              {
+                "name": "discount 1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 1",
+                "passed": true
+              },
+              {
+                "name": "reject total -1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -1",
+                "passed": true
+              },
+              {
+                "name": "reject total -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject total 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject total NaN",
+                "passed": true
+              },
+              {
+                "name": "reject receipt NaN",
+                "passed": true
+              },
+              {
+                "name": "reject total Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject total -Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -Infinity",
+                "passed": true
+              },
+              {
+                "name": "undefined discount",
+                "passed": true
+              },
+              {
+                "name": "round after discount",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "find",
+              "arguments": {
+                "query": "quantity unit price invoice amount total(lines) roundCents",
+                "scope": "src/pricing.mjs src/receipt.mjs",
+                "budgetChars": 5000
+              }
+            },
+            {
+              "name": "find",
+              "arguments": {
+                "query": "export function total quantity unit price roundCents",
+                "scope": "src/pricing.mjs src/receipt.mjs",
+                "mode": "text",
+                "fallbackReason": "incomplete-graph",
+                "budgetChars": 5000
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "file": "src/pricing.mjs",
+                  "symbol": "total"
+                },
+                "question": "Identify source, observed callers/dependencies, and complete all constraint continuation pages relevant to changing total signature.",
+                "budgetChars": 4000
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "file": "src/pricing.mjs",
+                  "symbol": "total"
+                },
+                "question": "Return observed immediate callers and all evidence; continue until no truncated/unknown continuation pages.",
+                "budgetChars": 8000
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "file": "src/receipt.mjs",
+                  "symbol": "makeReceipt"
+                },
+                "question": "Identify source, observed callers/dependencies, and refreshed constraints for forwarding optional discountRate.",
+                "budgetChars": 7000
+              }
+            },
+            {
+              "name": "assess",
+              "arguments": {
+                "change": "signature",
+                "intent": "Add optional discountRate=0 to total(lines, discountRate) and makeReceipt(lines, discountRate), forward from makeReceipt. Validate finite range [0,1], discount subtotal before roundCents; preserve one-argument calls and DKK.",
+                "targets": [
+                  {
+                    "file": "src/pricing.mjs",
+                    "symbol": "total"
+                  },
+                  {
+                    "file": "src/receipt.mjs",
+                    "symbol": "makeReceipt"
+                  }
+                ],
+                "budgetChars": 5000
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "find",
+            "find",
+            "understand",
+            "understand",
+            "understand",
+            "assess"
+          ],
+          "callerContextBeforeEdit": true,
+          "assessmentBeforeEdit": true,
+          "toolErrors": 0,
+          "native": {
+            "reads": 0,
+            "grep": 0,
+            "glob": 0,
+            "shell": 2,
+            "shellSearch": 1
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "shell",
+              "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command 'Get-Content src/pricing.mjs; Get-Content src/receipt.mjs; Get-ChildItem -Force | Select-Object -ExpandProperty Name'"
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg842kp\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg842kp\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg842kp\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg842kp\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-signature-2-broker",
+          "case": "signature",
+          "variant": "broker",
+          "repetition": 2,
+          "readTotal": 204444,
+          "input": 204444,
+          "uncached": 19996,
+          "cacheRead": 184448,
+          "cacheWrite": 0,
+          "output": 1223,
+          "latencyMs": 41982,
+          "passed": true,
+          "patchSha256": "9c443b46b8c89549a5d9ae846704a5bb1f9e92910c0969aa8b95740b1b24492f",
+          "assertions": {
+            "passed": true,
+            "passedCount": 28,
+            "total": 28,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "discount 0",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0",
+                "passed": true
+              },
+              {
+                "name": "discount 0.1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.1",
+                "passed": true
+              },
+              {
+                "name": "discount 0.5",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.5",
+                "passed": true
+              },
+              {
+                "name": "discount 1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 1",
+                "passed": true
+              },
+              {
+                "name": "reject total -1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -1",
+                "passed": true
+              },
+              {
+                "name": "reject total -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject total 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject total NaN",
+                "passed": true
+              },
+              {
+                "name": "reject receipt NaN",
+                "passed": true
+              },
+              {
+                "name": "reject total Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject total -Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -Infinity",
+                "passed": true
+              },
+              {
+                "name": "undefined discount",
+                "passed": true
+              },
+              {
+                "name": "round after discount",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "find",
+              "arguments": {
+                "query": "function total(lines) invoice amount quantity unit price",
+                "scope": "src/pricing.mjs src/receipt.mjs",
+                "budgetChars": 5000
+              }
+            },
+            {
+              "name": "find",
+              "arguments": {
+                "query": "total and makeReceipt quantity unit price",
+                "scope": "src/pricing.mjs src/receipt.mjs",
+                "mode": "text",
+                "fallbackReason": "incomplete-graph",
+                "budgetChars": 7000
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "file": "src/receipt.mjs",
+                  "symbol": "makeReceipt"
+                },
+                "question": "Show exact implementation and immediate callers/dependencies; include all constraint continuation pages.",
+                "budgetChars": 8000
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "file": "src/pricing.mjs",
+                  "symbol": "total"
+                },
+                "question": "Show exact implementation and immediate callers/dependencies; include all constraint continuation pages.",
+                "budgetChars": 8000
+              }
+            },
+            {
+              "name": "assess",
+              "arguments": {
+                "change": "signature",
+                "intent": "Add optional discountRate=0 to total(lines, discountRate) and makeReceipt(lines, discountRate), forwarding from makeReceipt; apply before roundCents; validate finite 0..1 and throw RangeError otherwise. Preserve one-argument compatibility and DKK.",
+                "targets": [
+                  {
+                    "file": "src/pricing.mjs",
+                    "symbol": "total"
+                  },
+                  {
+                    "file": "src/receipt.mjs",
+                    "symbol": "makeReceipt"
+                  }
+                ],
+                "budgetChars": 8000
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "find",
+            "find",
+            "understand",
+            "understand",
+            "assess"
+          ],
+          "callerContextBeforeEdit": true,
+          "assessmentBeforeEdit": true,
+          "toolErrors": 0,
+          "native": {
+            "reads": 0,
+            "grep": 0,
+            "glob": 0,
+            "shell": 2,
+            "shellSearch": 0
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-broker-mwg87u3o\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-broker-mwg87u3o\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-broker-mwg87u3o\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-broker-mwg87u3o\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-signature-2-baseline",
+          "case": "signature",
+          "variant": "baseline",
+          "repetition": 2,
+          "readTotal": 253260,
+          "input": 253260,
+          "uncached": 26572,
+          "cacheRead": 226688,
+          "cacheWrite": 0,
+          "output": 1496,
+          "latencyMs": 42331,
+          "passed": true,
+          "patchSha256": "9c443b46b8c89549a5d9ae846704a5bb1f9e92910c0969aa8b95740b1b24492f",
+          "assertions": {
+            "passed": true,
+            "passedCount": 28,
+            "total": 28,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "discount 0",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0",
+                "passed": true
+              },
+              {
+                "name": "discount 0.1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.1",
+                "passed": true
+              },
+              {
+                "name": "discount 0.5",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.5",
+                "passed": true
+              },
+              {
+                "name": "discount 1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 1",
+                "passed": true
+              },
+              {
+                "name": "reject total -1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -1",
+                "passed": true
+              },
+              {
+                "name": "reject total -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject total 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject total NaN",
+                "passed": true
+              },
+              {
+                "name": "reject receipt NaN",
+                "passed": true
+              },
+              {
+                "name": "reject total Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject total -Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -Infinity",
+                "passed": true
+              },
+              {
+                "name": "undefined discount",
+                "passed": true
+              },
+              {
+                "name": "round after discount",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "list_indexed_repositories",
+              "arguments": {}
+            },
+            {
+              "name": "analyze_relationships",
+              "arguments": {
+                "repo_id": "codex-signature-2-baseline-mwg892ua",
+                "target": "total",
+                "file_path": "src/pricing.mjs",
+                "query_type": "find_callers",
+                "depth": 2
+              }
+            },
+            {
+              "name": "preflight_check",
+              "arguments": {
+                "repo_id": "codex-signature-2-baseline-mwg892ua",
+                "target": "total",
+                "file_path": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "governing_rules",
+              "arguments": {
+                "repo_id": "codex-signature-2-baseline-mwg892ua",
+                "file_path": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "repo_id": "codex-signature-2-baseline-mwg892ua",
+                "target": "total",
+                "file_path": "src/pricing.mjs"
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "list_indexed_repositories",
+            "governing_rules",
+            "analyze_relationships",
+            "get_impact"
+          ],
+          "callerContextBeforeEdit": false,
+          "assessmentBeforeEdit": false,
+          "toolErrors": 1,
+          "native": {
+            "reads": 0,
+            "grep": 0,
+            "glob": 0,
+            "shell": 3,
+            "shellSearch": 1
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "shell",
+              "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command 'Get-Content src/pricing.mjs; Get-Content src/receipt.mjs; Get-ChildItem -Force -Name'"
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-baseline-mwg892ua\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-baseline-mwg892ua\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-baseline-mwg892ua\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-baseline-mwg892ua\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-signature-3-baseline",
+          "case": "signature",
+          "variant": "baseline",
+          "repetition": 3,
+          "readTotal": 346308,
+          "input": 346308,
+          "uncached": 37188,
+          "cacheRead": 309120,
+          "cacheWrite": 0,
+          "output": 1962,
+          "latencyMs": 57329,
+          "passed": true,
+          "patchSha256": "9c443b46b8c89549a5d9ae846704a5bb1f9e92910c0969aa8b95740b1b24492f",
+          "assertions": {
+            "passed": true,
+            "passedCount": 28,
+            "total": 28,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "discount 0",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0",
+                "passed": true
+              },
+              {
+                "name": "discount 0.1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.1",
+                "passed": true
+              },
+              {
+                "name": "discount 0.5",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.5",
+                "passed": true
+              },
+              {
+                "name": "discount 1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 1",
+                "passed": true
+              },
+              {
+                "name": "reject total -1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -1",
+                "passed": true
+              },
+              {
+                "name": "reject total -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject total 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject total NaN",
+                "passed": true
+              },
+              {
+                "name": "reject receipt NaN",
+                "passed": true
+              },
+              {
+                "name": "reject total Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject total -Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -Infinity",
+                "passed": true
+              },
+              {
+                "name": "undefined discount",
+                "passed": true
+              },
+              {
+                "name": "round after discount",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "list_indexed_repositories",
+              "arguments": {}
+            },
+            {
+              "name": "analyze_relationships",
+              "arguments": {
+                "repo_id": "codex-signature-3-baseline-mwg8ac2x",
+                "target": "makeReceipt",
+                "file_path": "src/receipt.mjs",
+                "query_type": "find_callers",
+                "depth": 2
+              }
+            },
+            {
+              "name": "analyze_relationships",
+              "arguments": {
+                "repo_id": "codex-signature-3-baseline-mwg8ac2x",
+                "target": "total",
+                "file_path": "src/pricing.mjs",
+                "query_type": "find_callers",
+                "depth": 2
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "repo_id": "codex-signature-3-baseline-mwg8ac2x",
+                "target": "total",
+                "file_path": "src/pricing.mjs",
+                "direction": "upstream",
+                "depth": 4
+              }
+            },
+            {
+              "name": "governing_rules",
+              "arguments": {
+                "repo_id": "codex-signature-3-baseline-mwg8ac2x",
+                "file_path": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "preflight_check",
+              "arguments": {
+                "repo_id": "codex-signature-3-baseline-mwg8ac2x",
+                "symbol": "total",
+                "file_path": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "governing_rules",
+              "arguments": {
+                "repo_id": "codex-signature-3-baseline-mwg8ac2x",
+                "file_path": "src/receipt.mjs"
+              }
+            },
+            {
+              "name": "analyze_relationships",
+              "arguments": {
+                "repo_id": "codex-signature-3-baseline-mwg8ac2x",
+                "target": "total",
+                "file_path": "src/pricing.mjs",
+                "query_type": "find_callers",
+                "depth": 2
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "list_indexed_repositories",
+            "governing_rules",
+            "governing_rules",
+            "preflight_check",
+            "analyze_relationships",
+            "get_impact",
+            "analyze_relationships"
+          ],
+          "callerContextBeforeEdit": false,
+          "assessmentBeforeEdit": false,
+          "toolErrors": 0,
+          "native": {
+            "reads": 0,
+            "grep": 0,
+            "glob": 0,
+            "shell": 4,
+            "shellSearch": 1
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "shell",
+              "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command 'Get-Content src/pricing.mjs; Get-Content src/receipt.mjs; Get-ChildItem -Name'"
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-baseline-mwg8ac2x\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-baseline-mwg8ac2x\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-baseline-mwg8ac2x\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-baseline-mwg8ac2x\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-signature-3-broker",
+          "case": "signature",
+          "variant": "broker",
+          "repetition": 3,
+          "readTotal": 188553,
+          "input": 188553,
+          "uncached": 21129,
+          "cacheRead": 167424,
+          "cacheWrite": 0,
+          "output": 1437,
+          "latencyMs": 41324,
+          "passed": true,
+          "patchSha256": "d7642c59a11da8162b05758ab57dd70e4aa18b94bae256a7e1e21c8c92aac825",
+          "assertions": {
+            "passed": true,
+            "passedCount": 28,
+            "total": 28,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "discount 0",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0",
+                "passed": true
+              },
+              {
+                "name": "discount 0.1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.1",
+                "passed": true
+              },
+              {
+                "name": "discount 0.5",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.5",
+                "passed": true
+              },
+              {
+                "name": "discount 1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 1",
+                "passed": true
+              },
+              {
+                "name": "reject total -1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -1",
+                "passed": true
+              },
+              {
+                "name": "reject total -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject total 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject total NaN",
+                "passed": true
+              },
+              {
+                "name": "reject receipt NaN",
+                "passed": true
+              },
+              {
+                "name": "reject total Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject total -Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -Infinity",
+                "passed": true
+              },
+              {
+                "name": "undefined discount",
+                "passed": true
+              },
+              {
+                "name": "round after discount",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "find",
+              "arguments": {
+                "query": "total(lines) quantity unit price invoice amount pricing total",
+                "scope": "src/pricing.mjs src/receipt.mjs",
+                "budgetChars": 5000
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "file": "src/pricing.mjs",
+                  "symbol": "total"
+                },
+                "question": "Show literal source, callers/dependencies and all constraint continuation pages.",
+                "budgetChars": 5000
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "file": "src/receipt.mjs",
+                  "symbol": "makeReceipt"
+                },
+                "question": "Show literal source, callers/dependencies and all constraint continuation pages.",
+                "budgetChars": 5000
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "file": "src/receipt.mjs",
+                  "symbol": "makeReceipt"
+                },
+                "question": "Immediate callers and full constraints; return remaining evidence.",
+                "budgetChars": 9000
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "file": "src/pricing.mjs",
+                  "symbol": "total"
+                },
+                "question": "Immediate callers and full constraints; return remaining evidence.",
+                "budgetChars": 9000
+              }
+            },
+            {
+              "name": "assess",
+              "arguments": {
+                "change": "signature",
+                "intent": "Add optional finite discountRate in [0,1] to total(lines, discountRate=0) and makeReceipt(lines, discountRate), multiply subtotal by (1-discountRate) before roundCents; makeReceipt forwards it. Preserve one-argument calls and DKK.",
+                "targets": [
+                  {
+                    "file": "src/pricing.mjs",
+                    "symbol": "total"
+                  },
+                  {
+                    "file": "src/receipt.mjs",
+                    "symbol": "makeReceipt"
+                  }
+                ],
+                "budgetChars": 9000
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "understand",
+            "understand",
+            "find",
+            "understand",
+            "understand",
+            "assess"
+          ],
+          "callerContextBeforeEdit": true,
+          "assessmentBeforeEdit": true,
+          "toolErrors": 0,
+          "native": {
+            "reads": 0,
+            "grep": 0,
+            "glob": 0,
+            "shell": 2,
+            "shellSearch": 1
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "shell",
+              "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command \"Get-Content src/pricing.mjs; Get-Content src/receipt.mjs; rg \\\"\\\\b(total|makeReceipt)\\\\s*\\\\(\\\" -n .\""
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-broker-mwg8bwvd\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-broker-mwg8bwvd\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-broker-mwg8bwvd\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-broker-mwg8bwvd\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-bug-1-baseline",
+          "case": "bug",
+          "variant": "baseline",
+          "repetition": 1,
+          "readTotal": 195859,
+          "input": 195859,
+          "uncached": 29203,
+          "cacheRead": 166656,
+          "cacheWrite": 0,
+          "output": 1106,
+          "latencyMs": 33283,
+          "passed": true,
+          "patchSha256": "ac18759e3530d573454337c4882ed4f17c831dc884d46e65fea281d55a040c48",
+          "assertions": {
+            "passed": true,
+            "passedCount": 23,
+            "total": 23,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "quantity zero",
+                "passed": true
+              },
+              {
+                "name": "receipt zero",
+                "passed": true
+              },
+              {
+                "name": "checkout zero",
+                "passed": true
+              },
+              {
+                "name": "quantity null",
+                "passed": true
+              },
+              {
+                "name": "receipt null",
+                "passed": true
+              },
+              {
+                "name": "checkout null",
+                "passed": true
+              },
+              {
+                "name": "quantity undefined",
+                "passed": true
+              },
+              {
+                "name": "receipt undefined",
+                "passed": true
+              },
+              {
+                "name": "checkout undefined",
+                "passed": true
+              },
+              {
+                "name": "quantity two",
+                "passed": true
+              },
+              {
+                "name": "receipt two",
+                "passed": true
+              },
+              {
+                "name": "checkout two",
+                "passed": true
+              },
+              {
+                "name": "quantity negative",
+                "passed": true
+              },
+              {
+                "name": "receipt negative",
+                "passed": true
+              },
+              {
+                "name": "checkout negative",
+                "passed": true
+              },
+              {
+                "name": "missing quantity",
+                "passed": true
+              },
+              {
+                "name": "mixed quantities",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "list_indexed_repositories",
+              "arguments": {}
+            },
+            {
+              "name": "preflight_check",
+              "arguments": {
+                "repo_id": "codex-bug-1-baseline-mwg8d54q",
+                "symbol": "total",
+                "file_path": "src/pricing.mjs",
+                "branch": "main"
+              }
+            },
+            {
+              "name": "analyze_relationships",
+              "arguments": {
+                "repo_id": "codex-bug-1-baseline-mwg8d54q",
+                "target": "total",
+                "file_path": "src/pricing.mjs",
+                "query_type": "find_callers",
+                "depth": 3,
+                "branch": "main"
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "list_indexed_repositories",
+            "preflight_check",
+            "analyze_relationships"
+          ],
+          "callerContextBeforeEdit": false,
+          "assessmentBeforeEdit": false,
+          "toolErrors": 0,
+          "native": {
+            "reads": 0,
+            "grep": 0,
+            "glob": 0,
+            "shell": 3,
+            "shellSearch": 2
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "shell",
+              "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command 'Get-Content src/pricing.mjs; Get-Content src/receipt.mjs; Get-ChildItem -Force -Name AGENTS.md; git status --short --branch'"
+            },
+            {
+              "kind": "shell",
+              "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command \"Get-Content AGENTS.md; rg -n \\\"total\\\\(|quantity|roundCents|currency\\\" src test*\""
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-baseline-mwg8d54q\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-baseline-mwg8d54q\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-baseline-mwg8d54q\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-baseline-mwg8d54q\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-bug-1-broker",
+          "case": "bug",
+          "variant": "broker",
+          "repetition": 1,
+          "readTotal": 208780,
+          "input": 208780,
+          "uncached": 19724,
+          "cacheRead": 189056,
+          "cacheWrite": 0,
+          "output": 1136,
+          "latencyMs": 37942,
+          "passed": true,
+          "patchSha256": "ac18759e3530d573454337c4882ed4f17c831dc884d46e65fea281d55a040c48",
+          "assertions": {
+            "passed": true,
+            "passedCount": 23,
+            "total": 23,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "quantity zero",
+                "passed": true
+              },
+              {
+                "name": "receipt zero",
+                "passed": true
+              },
+              {
+                "name": "checkout zero",
+                "passed": true
+              },
+              {
+                "name": "quantity null",
+                "passed": true
+              },
+              {
+                "name": "receipt null",
+                "passed": true
+              },
+              {
+                "name": "checkout null",
+                "passed": true
+              },
+              {
+                "name": "quantity undefined",
+                "passed": true
+              },
+              {
+                "name": "receipt undefined",
+                "passed": true
+              },
+              {
+                "name": "checkout undefined",
+                "passed": true
+              },
+              {
+                "name": "quantity two",
+                "passed": true
+              },
+              {
+                "name": "receipt two",
+                "passed": true
+              },
+              {
+                "name": "checkout two",
+                "passed": true
+              },
+              {
+                "name": "quantity negative",
+                "passed": true
+              },
+              {
+                "name": "receipt negative",
+                "passed": true
+              },
+              {
+                "name": "checkout negative",
+                "passed": true
+              },
+              {
+                "name": "missing quantity",
+                "passed": true
+              },
+              {
+                "name": "mixed quantities",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "find",
+              "arguments": {
+                "query": "unit price quantity multiplication default quantity null undefined zero billed",
+                "scope": "src/pricing.mjs",
+                "mode": "hybrid",
+                "budgetChars": 12000
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "file": "src/pricing.mjs",
+                  "symbol": "total"
+                },
+                "question": "Explain this calculation and its observed callers/dependencies; include all constraint continuation pages.",
+                "budgetChars": 12000
+              }
+            },
+            {
+              "name": "assess",
+              "arguments": {
+                "change": "implementation",
+                "intent": "Change total so quantity defaults to 1 only when null or undefined; preserve zero, roundCents and DKK.",
+                "targets": [
+                  {
+                    "file": "src/pricing.mjs",
+                    "symbol": "total"
+                  }
+                ],
+                "budgetChars": 12000
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "file": "src/pricing.mjs",
+                  "symbol": "total"
+                },
+                "question": "Return any remaining constraint continuation pages and complete relevant evidence/caller details.",
+                "budgetChars": 24000
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "find",
+            "understand",
+            "assess",
+            "understand"
+          ],
+          "callerContextBeforeEdit": true,
+          "assessmentBeforeEdit": true,
+          "toolErrors": 0,
+          "native": {
+            "reads": 0,
+            "grep": 0,
+            "glob": 0,
+            "shell": 2,
+            "shellSearch": 0
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-broker-mwg8e74v\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-broker-mwg8e74v\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-broker-mwg8e74v\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-broker-mwg8e74v\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-bug-2-broker",
+          "case": "bug",
+          "variant": "broker",
+          "repetition": 2,
+          "readTotal": 222778,
+          "input": 222778,
+          "uncached": 18362,
+          "cacheRead": 204416,
+          "cacheWrite": 0,
+          "output": 1001,
+          "latencyMs": 32265,
+          "passed": true,
+          "patchSha256": "ac18759e3530d573454337c4882ed4f17c831dc884d46e65fea281d55a040c48",
+          "assertions": {
+            "passed": true,
+            "passedCount": 23,
+            "total": 23,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "quantity zero",
+                "passed": true
+              },
+              {
+                "name": "receipt zero",
+                "passed": true
+              },
+              {
+                "name": "checkout zero",
+                "passed": true
+              },
+              {
+                "name": "quantity null",
+                "passed": true
+              },
+              {
+                "name": "receipt null",
+                "passed": true
+              },
+              {
+                "name": "checkout null",
+                "passed": true
+              },
+              {
+                "name": "quantity undefined",
+                "passed": true
+              },
+              {
+                "name": "receipt undefined",
+                "passed": true
+              },
+              {
+                "name": "checkout undefined",
+                "passed": true
+              },
+              {
+                "name": "quantity two",
+                "passed": true
+              },
+              {
+                "name": "receipt two",
+                "passed": true
+              },
+              {
+                "name": "checkout two",
+                "passed": true
+              },
+              {
+                "name": "quantity negative",
+                "passed": true
+              },
+              {
+                "name": "receipt negative",
+                "passed": true
+              },
+              {
+                "name": "checkout negative",
+                "passed": true
+              },
+              {
+                "name": "missing quantity",
+                "passed": true
+              },
+              {
+                "name": "mixed quantities",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "find",
+              "arguments": {
+                "query": "quantity default 1 unit price roundCents invoice pricing zero quantity",
+                "scope": "src/pricing.mjs",
+                "budgetChars": 6000
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "file": "src/pricing.mjs",
+                  "symbol": "total"
+                },
+                "question": "Explain exact calculation, observed callers/dependencies and refreshed constraints; include continuation pages.",
+                "budgetChars": 5000
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "file": "src/pricing.mjs",
+                  "symbol": "total"
+                },
+                "question": "Return omitted evidence and callers/dependencies",
+                "budgetChars": 9000
+              }
+            },
+            {
+              "name": "assess",
+              "arguments": {
+                "change": "implementation",
+                "intent": "Change total(lines) so quantity defaults to 1 only when null or undefined; quantity 0 contributes zero. Preserve roundCents, DKK, and one-argument API. Edit only src/pricing.mjs.",
+                "targets": [
+                  {
+                    "file": "src/pricing.mjs",
+                    "symbol": "total"
+                  }
+                ],
+                "budgetChars": 7000
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "find",
+            "understand",
+            "understand",
+            "assess"
+          ],
+          "callerContextBeforeEdit": true,
+          "assessmentBeforeEdit": true,
+          "toolErrors": 0,
+          "native": {
+            "reads": 0,
+            "grep": 0,
+            "glob": 0,
+            "shell": 2,
+            "shellSearch": 0
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-broker-mwg8fcrz\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-broker-mwg8fcrz\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-broker-mwg8fcrz\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-broker-mwg8fcrz\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-bug-2-baseline",
+          "case": "bug",
+          "variant": "baseline",
+          "repetition": 2,
+          "readTotal": 309972,
+          "input": 309972,
+          "uncached": 33108,
+          "cacheRead": 276864,
+          "cacheWrite": 0,
+          "output": 1177,
+          "latencyMs": 38231,
+          "passed": true,
+          "patchSha256": "ac18759e3530d573454337c4882ed4f17c831dc884d46e65fea281d55a040c48",
+          "assertions": {
+            "passed": true,
+            "passedCount": 23,
+            "total": 23,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "quantity zero",
+                "passed": true
+              },
+              {
+                "name": "receipt zero",
+                "passed": true
+              },
+              {
+                "name": "checkout zero",
+                "passed": true
+              },
+              {
+                "name": "quantity null",
+                "passed": true
+              },
+              {
+                "name": "receipt null",
+                "passed": true
+              },
+              {
+                "name": "checkout null",
+                "passed": true
+              },
+              {
+                "name": "quantity undefined",
+                "passed": true
+              },
+              {
+                "name": "receipt undefined",
+                "passed": true
+              },
+              {
+                "name": "checkout undefined",
+                "passed": true
+              },
+              {
+                "name": "quantity two",
+                "passed": true
+              },
+              {
+                "name": "receipt two",
+                "passed": true
+              },
+              {
+                "name": "checkout two",
+                "passed": true
+              },
+              {
+                "name": "quantity negative",
+                "passed": true
+              },
+              {
+                "name": "receipt negative",
+                "passed": true
+              },
+              {
+                "name": "checkout negative",
+                "passed": true
+              },
+              {
+                "name": "missing quantity",
+                "passed": true
+              },
+              {
+                "name": "mixed quantities",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "list_indexed_repositories",
+              "arguments": {}
+            },
+            {
+              "name": "analyze_relationships",
+              "arguments": {
+                "repo_id": "codex-bug-2-baseline-mwg8ge8y",
+                "target": "total",
+                "file_path": "src/pricing.mjs",
+                "query_type": "find_callers",
+                "depth": 3
+              }
+            },
+            {
+              "name": "preflight_check",
+              "arguments": {
+                "repo_id": "codex-bug-2-baseline-mwg8ge8y",
+                "symbol": "total",
+                "file_path": "src/pricing.mjs"
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "list_indexed_repositories",
+            "preflight_check",
+            "analyze_relationships"
+          ],
+          "callerContextBeforeEdit": false,
+          "assessmentBeforeEdit": false,
+          "toolErrors": 0,
+          "native": {
+            "reads": 0,
+            "grep": 0,
+            "glob": 0,
+            "shell": 3,
+            "shellSearch": 2
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "shell",
+              "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command \"Get-Content src/pricing.mjs; Get-Content src/receipt.mjs; rg -n \\\"price|pricing|roundCents|quantity|unitPrice\\\" . -g '\"'!node_modules'\"'\""
+            },
+            {
+              "kind": "shell",
+              "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command \"Get-ChildItem -Force; Get-ChildItem -Recurse -File | Select-String -Pattern 'total\\\\(|makeReceipt|roundCents|quantity|unitPrice' | Select-Object -First 80 Path,LineNumber,Line\""
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-baseline-mwg8ge8y\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-baseline-mwg8ge8y\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-baseline-mwg8ge8y\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-baseline-mwg8ge8y\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-bug-3-baseline",
+          "case": "bug",
+          "variant": "baseline",
+          "repetition": 3,
+          "readTotal": 396134,
+          "input": 396134,
+          "uncached": 29542,
+          "cacheRead": 366592,
+          "cacheWrite": 0,
+          "output": 1541,
+          "latencyMs": 48398,
+          "passed": true,
+          "patchSha256": "ac18759e3530d573454337c4882ed4f17c831dc884d46e65fea281d55a040c48",
+          "assertions": {
+            "passed": true,
+            "passedCount": 23,
+            "total": 23,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "quantity zero",
+                "passed": true
+              },
+              {
+                "name": "receipt zero",
+                "passed": true
+              },
+              {
+                "name": "checkout zero",
+                "passed": true
+              },
+              {
+                "name": "quantity null",
+                "passed": true
+              },
+              {
+                "name": "receipt null",
+                "passed": true
+              },
+              {
+                "name": "checkout null",
+                "passed": true
+              },
+              {
+                "name": "quantity undefined",
+                "passed": true
+              },
+              {
+                "name": "receipt undefined",
+                "passed": true
+              },
+              {
+                "name": "checkout undefined",
+                "passed": true
+              },
+              {
+                "name": "quantity two",
+                "passed": true
+              },
+              {
+                "name": "receipt two",
+                "passed": true
+              },
+              {
+                "name": "checkout two",
+                "passed": true
+              },
+              {
+                "name": "quantity negative",
+                "passed": true
+              },
+              {
+                "name": "receipt negative",
+                "passed": true
+              },
+              {
+                "name": "checkout negative",
+                "passed": true
+              },
+              {
+                "name": "missing quantity",
+                "passed": true
+              },
+              {
+                "name": "mixed quantities",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "list_indexed_repositories",
+              "arguments": {}
+            },
+            {
+              "name": "preflight_check",
+              "arguments": {
+                "repo_id": "codex-bug-3-baseline-mwg8hka5",
+                "symbol": "total",
+                "file_path": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "get_symbol_context",
+              "arguments": {
+                "repo_id": "codex-bug-3-baseline-mwg8hka5",
+                "target": "total",
+                "file_path": "src/pricing.mjs",
+                "include_content": true,
+                "limit": 20
+              }
+            },
+            {
+              "name": "governing_rules",
+              "arguments": {
+                "repo_id": "codex-bug-3-baseline-mwg8hka5",
+                "file_path": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "get_symbol_context",
+              "arguments": {
+                "repo_id": "codex-bug-3-baseline-mwg8hka5",
+                "symbol": "total",
+                "file_path": "src/pricing.mjs",
+                "include_content": true,
+                "limit": 20
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "list_indexed_repositories",
+            "governing_rules",
+            "preflight_check",
+            "get_symbol_context"
+          ],
+          "callerContextBeforeEdit": false,
+          "assessmentBeforeEdit": false,
+          "toolErrors": 1,
+          "native": {
+            "reads": 0,
+            "grep": 0,
+            "glob": 0,
+            "shell": 5,
+            "shellSearch": 1
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "shell",
+              "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command 'Get-Content src/pricing.mjs; Get-ChildItem -Force | Select-Object -ExpandProperty Name; rg -n \"price|quantity|roundCents\" src test tests'"
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-baseline-mwg8hka5\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-baseline-mwg8hka5\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-baseline-mwg8hka5\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-baseline-mwg8hka5\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-bug-3-broker",
+          "case": "bug",
+          "variant": "broker",
+          "repetition": 3,
+          "readTotal": 213675,
+          "input": 213675,
+          "uncached": 16555,
+          "cacheRead": 197120,
+          "cacheWrite": 0,
+          "output": 1047,
+          "latencyMs": 50498,
+          "passed": true,
+          "patchSha256": "ac18759e3530d573454337c4882ed4f17c831dc884d46e65fea281d55a040c48",
+          "assertions": {
+            "passed": true,
+            "passedCount": 23,
+            "total": 23,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "quantity zero",
+                "passed": true
+              },
+              {
+                "name": "receipt zero",
+                "passed": true
+              },
+              {
+                "name": "checkout zero",
+                "passed": true
+              },
+              {
+                "name": "quantity null",
+                "passed": true
+              },
+              {
+                "name": "receipt null",
+                "passed": true
+              },
+              {
+                "name": "checkout null",
+                "passed": true
+              },
+              {
+                "name": "quantity undefined",
+                "passed": true
+              },
+              {
+                "name": "receipt undefined",
+                "passed": true
+              },
+              {
+                "name": "checkout undefined",
+                "passed": true
+              },
+              {
+                "name": "quantity two",
+                "passed": true
+              },
+              {
+                "name": "receipt two",
+                "passed": true
+              },
+              {
+                "name": "checkout two",
+                "passed": true
+              },
+              {
+                "name": "quantity negative",
+                "passed": true
+              },
+              {
+                "name": "receipt negative",
+                "passed": true
+              },
+              {
+                "name": "checkout negative",
+                "passed": true
+              },
+              {
+                "name": "missing quantity",
+                "passed": true
+              },
+              {
+                "name": "mixed quantities",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "find",
+              "arguments": {
+                "query": "quantity unit price total charge zero default quantity",
+                "scope": "src/pricing.mjs",
+                "budgetChars": 6000
+              }
+            },
+            {
+              "name": "find",
+              "arguments": {
+                "query": "quantity unit price total amount",
+                "scope": "src",
+                "mode": "text",
+                "fallbackReason": "incomplete-graph",
+                "budgetChars": 6000
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "file": "src/pricing.mjs",
+                  "symbol": "total"
+                },
+                "question": "Explain implementation and observed callers/dependencies, include all constraint continuation pages.",
+                "budgetChars": 8000
+              }
+            },
+            {
+              "name": "assess",
+              "arguments": {
+                "change": "implementation",
+                "intent": "Fix total so quantity defaults to 1 only when null or undefined; preserve zero, DKK downstream receipt behavior, and roundCents.",
+                "targets": [
+                  {
+                    "file": "src/pricing.mjs",
+                    "symbol": "total"
+                  }
+                ],
+                "budgetChars": 5000
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "find",
+            "find",
+            "understand",
+            "assess"
+          ],
+          "callerContextBeforeEdit": true,
+          "assessmentBeforeEdit": true,
+          "toolErrors": 0,
+          "native": {
+            "reads": 0,
+            "grep": 0,
+            "glob": 0,
+            "shell": 2,
+            "shellSearch": 1
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "shell",
+              "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -Command 'Get-Content src/pricing.mjs; Get-Content src/receipt.mjs; Get-ChildItem -Force -Name'"
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-broker-mwg8iyf5\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-broker-mwg8iyf5\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-broker-mwg8iyf5\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-broker-mwg8iyf5\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        }
+      ],
+      "excludedSetupAttempts": [
+        {
+          "id": "codex-signature-1-baseline",
+          "reason": "CLI config rejected before model launch: incomplete disabled MCP transport.",
+          "usage": null,
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-signature-1-broker",
+          "reason": "CLI config rejected before model launch: incomplete disabled MCP transport.",
+          "usage": null,
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-signature-1-baseline",
+          "reason": "CLI config rejected before model launch: disabled per-key override still lacked a parsed transport.",
+          "usage": null,
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7ril0\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7ril0\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7ril0\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7ril0\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-signature-1-broker",
+          "reason": "CLI config rejected before model launch: disabled per-key override still lacked a parsed transport.",
+          "usage": null,
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7rtaj\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7rtaj\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7rtaj\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7rtaj\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-signature-1-baseline",
+          "reason": "Windows executor inherited desktop-only registered Core identity; retrieval ran, but both shell and sandboxed patch writes failed before any edit.",
+          "usage": {
+            "input_tokens": 553378,
+            "cached_input_tokens": 511232,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1786,
+            "reasoning_output_tokens": 0
+          },
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7v4ec\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7v4ec\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7v4ec\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7v4ec\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "codex-signature-1-broker",
+          "reason": "Windows executor inherited desktop-only registered Core identity; retrieval ran, but both shell and sandboxed patch writes failed before any edit.",
+          "usage": {
+            "input_tokens": 253806,
+            "cached_input_tokens": 208128,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1171,
+            "reasoning_output_tokens": 0
+          },
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7wm3k\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7wm3k\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7wm3k\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7wm3k\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        }
+      ],
+      "preparationFailures": [
+        {
+          "at": "2026-11-14T09:39:02.735Z",
+          "error": "Error: Fixture scope contains another repository"
+        }
+      ],
+      "error": null
+    },
+    {
+      "harness": "cursor",
+      "model": "composer-2.5",
+      "complete": true,
+      "groups": [
+        {
+          "variant": "baseline",
+          "runs": 6,
+          "passed": 6,
+          "readTotal": 1005516,
+          "uncached": 198220,
+          "cacheRead": 807296,
+          "cacheWrite": 0,
+          "output": 16990,
+          "medianLatencyMs": 33274,
+          "callerContextBeforeEdit": 0,
+          "assessmentBeforeEdit": 0,
+          "successfulRetrievalBeforeEdit": 6,
+          "toolErrors": 22,
+          "native": {
+            "reads": 32,
+            "grep": 16,
+            "glob": 9,
+            "shell": 11,
+            "shellSearch": 0
+          }
+        },
+        {
+          "variant": "broker",
+          "runs": 6,
+          "passed": 6,
+          "readTotal": 923805,
+          "uncached": 194397,
+          "cacheRead": 729408,
+          "cacheWrite": 0,
+          "output": 13885,
+          "medianLatencyMs": 28535,
+          "callerContextBeforeEdit": 6,
+          "assessmentBeforeEdit": 6,
+          "successfulRetrievalBeforeEdit": 6,
+          "toolErrors": 6,
+          "native": {
+            "reads": 24,
+            "grep": 12,
+            "glob": 9,
+            "shell": 10,
+            "shellSearch": 0
+          }
+        }
+      ],
+      "aggregateReadChangePercent": -8.126275464537613,
+      "pairs": [
+        {
+          "case": "signature",
+          "repetition": 1,
+          "baselineRead": 181055,
+          "brokerRead": 200805,
+          "changePercent": 10.908287536936289,
+          "identicalPatch": false
+        },
+        {
+          "case": "signature",
+          "repetition": 2,
+          "baselineRead": 205632,
+          "brokerRead": 129449,
+          "changePercent": -37.04822206660442,
+          "identicalPatch": false
+        },
+        {
+          "case": "signature",
+          "repetition": 3,
+          "baselineRead": 171946,
+          "brokerRead": 192567,
+          "changePercent": 11.992718644225508,
+          "identicalPatch": true
+        },
+        {
+          "case": "bug",
+          "repetition": 1,
+          "baselineRead": 151007,
+          "brokerRead": 158225,
+          "changePercent": 4.779910865059245,
+          "identicalPatch": true
+        },
+        {
+          "case": "bug",
+          "repetition": 2,
+          "baselineRead": 147547,
+          "brokerRead": 113605,
+          "changePercent": -23.00419527337052,
+          "identicalPatch": true
+        },
+        {
+          "case": "bug",
+          "repetition": 3,
+          "baselineRead": 148329,
+          "brokerRead": 129154,
+          "changePercent": -12.927343944879288,
+          "identicalPatch": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "cursor-signature-1-baseline",
+          "case": "signature",
+          "variant": "baseline",
+          "repetition": 1,
+          "readTotal": 181055,
+          "input": 19007,
+          "uncached": 19007,
+          "cacheRead": 162048,
+          "cacheWrite": 0,
+          "output": 3525,
+          "latencyMs": 33015,
+          "passed": true,
+          "patchSha256": "b0da465a20210bc6190cea03a5691c62bf67cee042b2f7c42fc1afc156fb525f",
+          "assertions": {
+            "passed": true,
+            "passedCount": 28,
+            "total": 28,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "discount 0",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0",
+                "passed": true
+              },
+              {
+                "name": "discount 0.1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.1",
+                "passed": true
+              },
+              {
+                "name": "discount 0.5",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.5",
+                "passed": true
+              },
+              {
+                "name": "discount 1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 1",
+                "passed": true
+              },
+              {
+                "name": "reject total -1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -1",
+                "passed": true
+              },
+              {
+                "name": "reject total -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject total 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject total NaN",
+                "passed": true
+              },
+              {
+                "name": "reject receipt NaN",
+                "passed": true
+              },
+              {
+                "name": "reject total Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject total -Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -Infinity",
+                "passed": true
+              },
+              {
+                "name": "undefined discount",
+                "passed": true
+              },
+              {
+                "name": "round after discount",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "preflight_check",
+              "arguments": {
+                "query": "optional discountRate in total(lines, discountRate) and makeReceipt(lines, discountRate)",
+                "changed_symbols": [
+                  "total",
+                  "makeReceipt"
+                ],
+                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-1-baseline-mwg7ri5y"
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "symbol": "total",
+                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-1-baseline-mwg7ri5y"
+              }
+            },
+            {
+              "name": "governing_rules",
+              "arguments": {
+                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-1-baseline-mwg7ri5y"
+              }
+            },
+            {
+              "name": "find_symbol",
+              "arguments": {
+                "name": "total",
+                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-1-baseline-mwg7ri5y"
+              }
+            },
+            {
+              "name": "find_symbol",
+              "arguments": {
+                "name": "makeReceipt",
+                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-1-baseline-mwg7ri5y"
+              }
+            },
+            {
+              "name": "find_symbol",
+              "arguments": {
+                "name": "total",
+                "repo_id": "cursor-signature-1-baseline-mwg7ri5y"
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "target": "total",
+                "repo_id": "cursor-signature-1-baseline-mwg7ri5y"
+              }
+            },
+            {
+              "name": "find_symbol",
+              "arguments": {
+                "name": "makeReceipt",
+                "repo_id": "cursor-signature-1-baseline-mwg7ri5y"
+              }
+            },
+            {
+              "name": "governing_rules",
+              "arguments": {
+                "file_path": "src/pricing.mjs",
+                "repo_id": "cursor-signature-1-baseline-mwg7ri5y"
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "find_symbol",
+            "find_symbol",
+            "find_symbol",
+            "get_impact",
+            "find_symbol"
+          ],
+          "callerContextBeforeEdit": false,
+          "assessmentBeforeEdit": false,
+          "toolErrors": 3,
+          "native": {
+            "reads": 6,
+            "grep": 3,
+            "glob": 2,
+            "shell": 2,
+            "shellSearch": 0
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "total\\(|makeReceipt\\(",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-d012c540-2a0e-4041-a4cd-8afccc2097e1-composer_call_G2SiDcP8\nfc_56ae9421-d5b1-9e0e-93d3-ea20be417818_2",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y",
+                "globPattern": "**/*.test.*"
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "discount|total|makeReceipt",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-3eddd030-8f4a-4528-8ee5-f20b18aa2f81-composer_call_qQ516JKl\nfc_4621b359-5303-9fce-9fb1-2f89b8f60859_3",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y",
+                "globPattern": "**/*"
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "discount|RangeError",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-2d42bd2b-fe4d-4f79-92e9-e36735a7d4e5-composer_call_OnxfaGqz\nfc_004e7202-0502-9b7e-b9cb-a2d2007f17c7_0",
+                "offset": 0
+              }
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "cursor-signature-1-broker",
+          "case": "signature",
+          "variant": "broker",
+          "repetition": 1,
+          "readTotal": 200805,
+          "input": 38181,
+          "uncached": 38181,
+          "cacheRead": 162624,
+          "cacheWrite": 0,
+          "output": 2718,
+          "latencyMs": 30879,
+          "passed": true,
+          "patchSha256": "fdd21a48ff026a0a271a958536866da492cd918c3d9c99463a3b71ce3f0b5204",
+          "assertions": {
+            "passed": true,
+            "passedCount": 28,
+            "total": 28,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "discount 0",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0",
+                "passed": true
+              },
+              {
+                "name": "discount 0.1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.1",
+                "passed": true
+              },
+              {
+                "name": "discount 0.5",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.5",
+                "passed": true
+              },
+              {
+                "name": "discount 1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 1",
+                "passed": true
+              },
+              {
+                "name": "reject total -1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -1",
+                "passed": true
+              },
+              {
+                "name": "reject total -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject total 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject total NaN",
+                "passed": true
+              },
+              {
+                "name": "reject receipt NaN",
+                "passed": true
+              },
+              {
+                "name": "reject total Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject total -Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -Infinity",
+                "passed": true
+              },
+              {
+                "name": "undefined discount",
+                "passed": true
+              },
+              {
+                "name": "round after discount",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "find",
+              "arguments": {
+                "query": "total lines quantity unitPrice invoice amount",
+                "scope": "src"
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "symbol": "total",
+                  "file": "src/pricing.mjs"
+                }
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "symbol": "makeReceipt",
+                  "file": "src/receipt.mjs"
+                }
+              }
+            },
+            {
+              "name": "assess",
+              "arguments": {
+                "targets": [
+                  {
+                    "symbol": "total",
+                    "file": "src/pricing.mjs"
+                  },
+                  {
+                    "symbol": "makeReceipt",
+                    "file": "src/receipt.mjs"
+                  }
+                ],
+                "change": "signature",
+                "intent": "Add optional discountRate=0 parameter to total and makeReceipt; apply discount before roundCents; validate finite 0..1 with RangeError"
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "find",
+            "understand",
+            "understand",
+            "assess"
+          ],
+          "callerContextBeforeEdit": true,
+          "assessmentBeforeEdit": true,
+          "toolErrors": 0,
+          "native": {
+            "reads": 4,
+            "grep": 1,
+            "glob": 2,
+            "shell": 2,
+            "shellSearch": 0
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "glob",
+              "args": {
+                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi",
+                "globPattern": "**/*.test.*"
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "discount",
+                "path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-9399a411-8e84-423e-9b24-25da2ddef72f-composer_call_2HGfWsxH\nfc_f0361ebc-c642-9b26-9937-225c2bd2d5ef_0",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi",
+                "globPattern": "**/*"
+              }
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "cursor-signature-2-broker",
+          "case": "signature",
+          "variant": "broker",
+          "repetition": 2,
+          "readTotal": 129449,
+          "input": 23849,
+          "uncached": 23849,
+          "cacheRead": 105600,
+          "cacheWrite": 0,
+          "output": 2322,
+          "latencyMs": 25256,
+          "passed": true,
+          "patchSha256": "39c261c0e7ba4a44c564b5a927d8ba5b54f0c9e2baa042a6b2f92bc560ab78cd",
+          "assertions": {
+            "passed": true,
+            "passedCount": 28,
+            "total": 28,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "discount 0",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0",
+                "passed": true
+              },
+              {
+                "name": "discount 0.1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.1",
+                "passed": true
+              },
+              {
+                "name": "discount 0.5",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.5",
+                "passed": true
+              },
+              {
+                "name": "discount 1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 1",
+                "passed": true
+              },
+              {
+                "name": "reject total -1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -1",
+                "passed": true
+              },
+              {
+                "name": "reject total -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject total 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject total NaN",
+                "passed": true
+              },
+              {
+                "name": "reject receipt NaN",
+                "passed": true
+              },
+              {
+                "name": "reject total Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject total -Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -Infinity",
+                "passed": true
+              },
+              {
+                "name": "undefined discount",
+                "passed": true
+              },
+              {
+                "name": "round after discount",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "find",
+              "arguments": {
+                "query": "total lines discount unit price invoice amount pricing receipt",
+                "repository": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-2-broker-mwg7udhr"
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "symbol": "total",
+                "repository": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-2-broker-mwg7udhr"
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "symbol": "makeReceipt",
+                "repository": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-2-broker-mwg7udhr"
+              }
+            },
+            {
+              "name": "find",
+              "arguments": {
+                "query": "quantity unitPrice invoice total roundCents",
+                "scope": "src/"
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "symbol": "total",
+                  "file": "src/pricing.mjs"
+                }
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "symbol": "makeReceipt",
+                  "file": "src/receipt.mjs"
+                }
+              }
+            },
+            {
+              "name": "assess",
+              "arguments": {
+                "targets": [
+                  {
+                    "symbol": "total",
+                    "file": "src/pricing.mjs"
+                  },
+                  {
+                    "symbol": "makeReceipt",
+                    "file": "src/receipt.mjs"
+                  }
+                ],
+                "change": "signature",
+                "intent": "Add optional discountRate=0 to total(lines, discountRate) and makeReceipt(lines, discountRate); apply discount before roundCents; validate finite 0..1 with RangeError"
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "find",
+            "understand",
+            "understand",
+            "assess"
+          ],
+          "callerContextBeforeEdit": true,
+          "assessmentBeforeEdit": true,
+          "toolErrors": 3,
+          "native": {
+            "reads": 4,
+            "grep": 2,
+            "glob": 1,
+            "shell": 1,
+            "shellSearch": 0
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "total|makeReceipt|pricing",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-7c096dbf-076b-473f-a7a9-b888aec656a1-composer_call_IhvklJRW\nfc_4cad70ee-b75a-9096-ba75-e4077fd6e344_1",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-broker-mwg7udhr",
+                "globPattern": "**/*.test.*"
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "discount|RangeError",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-6b4accb3-23e7-4953-acf5-184a40d60ded-composer_call_YjDp4ty9\nfc_1f24db84-f18a-9aae-bb3f-907fc5c7384a_0",
+                "offset": 0
+              }
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-broker-mwg7udhr\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-broker-mwg7udhr\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-broker-mwg7udhr\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-broker-mwg7udhr\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "cursor-signature-2-baseline",
+          "case": "signature",
+          "variant": "baseline",
+          "repetition": 2,
+          "readTotal": 205632,
+          "input": 59200,
+          "uncached": 59200,
+          "cacheRead": 146432,
+          "cacheWrite": 0,
+          "output": 3056,
+          "latencyMs": 34464,
+          "passed": true,
+          "patchSha256": "b8b1362a1e414aa23616e0f496309829a8e153baa07068fa83f147c7978eb92d",
+          "assertions": {
+            "passed": true,
+            "passedCount": 28,
+            "total": 28,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "discount 0",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0",
+                "passed": true
+              },
+              {
+                "name": "discount 0.1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.1",
+                "passed": true
+              },
+              {
+                "name": "discount 0.5",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.5",
+                "passed": true
+              },
+              {
+                "name": "discount 1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 1",
+                "passed": true
+              },
+              {
+                "name": "reject total -1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -1",
+                "passed": true
+              },
+              {
+                "name": "reject total -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject total 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject total NaN",
+                "passed": true
+              },
+              {
+                "name": "reject receipt NaN",
+                "passed": true
+              },
+              {
+                "name": "reject total Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject total -Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -Infinity",
+                "passed": true
+              },
+              {
+                "name": "undefined discount",
+                "passed": true
+              },
+              {
+                "name": "round after discount",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "get_impact",
+              "arguments": {
+                "symbol": "total",
+                "path": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "symbol": "makeReceipt",
+                "path": "src/receipt.mjs"
+              }
+            },
+            {
+              "name": "list_indexed_repositories",
+              "arguments": {}
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "repo_id": "cursor-signature-2-baseline-mwg7v7rd",
+                "target": "total",
+                "file_path": "src/pricing.mjs",
+                "direction": "upstream",
+                "depth": 3
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "repo_id": "cursor-signature-2-baseline-mwg7v7rd",
+                "target": "makeReceipt",
+                "file_path": "src/receipt.mjs",
+                "direction": "upstream",
+                "depth": 3
+              }
+            },
+            {
+              "name": "governing_rules",
+              "arguments": {
+                "repo_id": "cursor-signature-2-baseline-mwg7v7rd"
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "list_indexed_repositories",
+            "get_impact",
+            "get_impact"
+          ],
+          "callerContextBeforeEdit": false,
+          "assessmentBeforeEdit": false,
+          "toolErrors": 3,
+          "native": {
+            "reads": 6,
+            "grep": 5,
+            "glob": 2,
+            "shell": 2,
+            "shellSearch": 0
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "total\\(|makeReceipt\\(",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-b2c33885-b718-4920-a285-79a59d1143f9-composer_call_z8qy7tYK\nfc_e77f956c-7695-9148-ab21-4953fddbfc38_4",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "discount|makeReceipt|total",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-55e3af50-4359-456f-9a78-79198b5335e6-composer_call_cLdTgjZ0\nfc_1e907fab-9618-9c36-bbda-3749f6d6dc66_1",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "globPattern": "**/*.test.mjs"
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "globPattern": "**/*"
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "discount|RangeError|makeReceipt",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-be41841d-6ae9-4906-8a7f-74dc51df53a5-composer_call_j8rneWko\nfc_e8077ad7-2529-9917-8a2d-1d28cf04495c_0",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "test",
+                "glob": "package.json",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-68f816a1-3dba-4c3f-9b3c-e55c6839496e-composer_call_6Kha6sRq\nfc_85552d8e-2276-9e18-a5b3-92a8eb6c8b6b_1",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "discountRate|RangeError",
+                "path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-baseline-mwg7v7rd",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-50c5116f-813f-4722-b14a-08413b457c11-composer_call_N27f9C1n\nfc_0a7bdb06-f6c8-91c4-93ad-2de1957351c1_0",
+                "offset": 0
+              }
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-baseline-mwg7v7rd\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-baseline-mwg7v7rd\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-baseline-mwg7v7rd\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-baseline-mwg7v7rd\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "cursor-signature-3-baseline",
+          "case": "signature",
+          "variant": "baseline",
+          "repetition": 3,
+          "readTotal": 171946,
+          "input": 29546,
+          "uncached": 29546,
+          "cacheRead": 142400,
+          "cacheWrite": 0,
+          "output": 2838,
+          "latencyMs": 35635,
+          "passed": true,
+          "patchSha256": "fdd21a48ff026a0a271a958536866da492cd918c3d9c99463a3b71ce3f0b5204",
+          "assertions": {
+            "passed": true,
+            "passedCount": 28,
+            "total": 28,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "discount 0",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0",
+                "passed": true
+              },
+              {
+                "name": "discount 0.1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.1",
+                "passed": true
+              },
+              {
+                "name": "discount 0.5",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.5",
+                "passed": true
+              },
+              {
+                "name": "discount 1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 1",
+                "passed": true
+              },
+              {
+                "name": "reject total -1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -1",
+                "passed": true
+              },
+              {
+                "name": "reject total -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject total 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject total NaN",
+                "passed": true
+              },
+              {
+                "name": "reject receipt NaN",
+                "passed": true
+              },
+              {
+                "name": "reject total Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject total -Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -Infinity",
+                "passed": true
+              },
+              {
+                "name": "undefined discount",
+                "passed": true
+              },
+              {
+                "name": "round after discount",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "get_impact",
+              "arguments": {
+                "symbol": "total",
+                "path": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "symbol": "makeReceipt",
+                "path": "src/receipt.mjs"
+              }
+            },
+            {
+              "name": "list_indexed_repositories",
+              "arguments": {}
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "repo_id": "cursor-signature-3-baseline-mwg7w96s",
+                "symbol": "total",
+                "path": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "repo_id": "cursor-signature-3-baseline-mwg7w96s",
+                "symbol": "makeReceipt",
+                "path": "src/receipt.mjs"
+              }
+            },
+            {
+              "name": "governing_rules",
+              "arguments": {
+                "repo_id": "cursor-signature-3-baseline-mwg7w96s"
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "repo_id": "cursor-signature-3-baseline-mwg7w96s",
+                "target": "total",
+                "file_path": "src/pricing.mjs",
+                "direction": "upstream",
+                "depth": 3
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "repo_id": "cursor-signature-3-baseline-mwg7w96s",
+                "target": "makeReceipt",
+                "file_path": "src/receipt.mjs",
+                "direction": "upstream",
+                "depth": 3
+              }
+            },
+            {
+              "name": "governing_rules",
+              "arguments": {
+                "repo_id": "cursor-signature-3-baseline-mwg7w96s",
+                "file_path": "src/pricing.mjs"
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "list_indexed_repositories",
+            "get_impact",
+            "get_impact",
+            "governing_rules"
+          ],
+          "callerContextBeforeEdit": false,
+          "assessmentBeforeEdit": false,
+          "toolErrors": 5,
+          "native": {
+            "reads": 5,
+            "grep": 2,
+            "glob": 2,
+            "shell": 1,
+            "shellSearch": 0
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "total\\(|makeReceipt\\(",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-8c588f3d-b191-4307-ac32-adad2d2e608c-composer_call_Y9VHxJLs\nfc_0b60f201-2c52-922e-befe-1b4c97ea465a_4",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "globPattern": "**/*.mjs"
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "discount",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-eaae77be-1a66-4338-958b-0383e719937f-composer_call_PrQIDouw\nfc_e357f22f-b9d8-9c1a-81e2-4be6a6114374_3",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "globPattern": "**/*.test.*"
+              }
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-baseline-mwg7w96s\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-baseline-mwg7w96s\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-baseline-mwg7w96s\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-baseline-mwg7w96s\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "cursor-signature-3-broker",
+          "case": "signature",
+          "variant": "broker",
+          "repetition": 3,
+          "readTotal": 192567,
+          "input": 36855,
+          "uncached": 36855,
+          "cacheRead": 155712,
+          "cacheWrite": 0,
+          "output": 2577,
+          "latencyMs": 41469,
+          "passed": true,
+          "patchSha256": "fdd21a48ff026a0a271a958536866da492cd918c3d9c99463a3b71ce3f0b5204",
+          "assertions": {
+            "passed": true,
+            "passedCount": 28,
+            "total": 28,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "discount 0",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0",
+                "passed": true
+              },
+              {
+                "name": "discount 0.1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.1",
+                "passed": true
+              },
+              {
+                "name": "discount 0.5",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 0.5",
+                "passed": true
+              },
+              {
+                "name": "discount 1",
+                "passed": true
+              },
+              {
+                "name": "receipt forwards 1",
+                "passed": true
+              },
+              {
+                "name": "reject total -1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -1",
+                "passed": true
+              },
+              {
+                "name": "reject total -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -0.01",
+                "passed": true
+              },
+              {
+                "name": "reject total 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject receipt 1.1",
+                "passed": true
+              },
+              {
+                "name": "reject total NaN",
+                "passed": true
+              },
+              {
+                "name": "reject receipt NaN",
+                "passed": true
+              },
+              {
+                "name": "reject total Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject total -Infinity",
+                "passed": true
+              },
+              {
+                "name": "reject receipt -Infinity",
+                "passed": true
+              },
+              {
+                "name": "undefined discount",
+                "passed": true
+              },
+              {
+                "name": "round after discount",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "find",
+              "arguments": {
+                "query": "total(lines) makeReceipt convert quantities unit prices invoice amount roundCents",
+                "repository": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-3-broker-mwg7xbj7"
+              }
+            },
+            {
+              "name": "find",
+              "arguments": {
+                "query": "total makeReceipt line quantity unitPrice roundCents discount",
+                "scope": "src/pricing.mjs src/receipt.mjs"
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "query": "How does total compute invoice amount from lines? Who calls total and makeReceipt?"
+              }
+            },
+            {
+              "name": "assess",
+              "arguments": {
+                "query": "Adding optional discountRate parameter to total(lines, discountRate) and makeReceipt(lines, discountRate)"
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "symbol": "total",
+                  "file": "src/pricing.mjs"
+                },
+                "question": "How does total convert quantities and unit prices? What are immediate callers?"
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "symbol": "makeReceipt",
+                  "file": "src/receipt.mjs"
+                }
+              }
+            },
+            {
+              "name": "assess",
+              "arguments": {
+                "targets": [
+                  {
+                    "symbol": "total",
+                    "file": "src/pricing.mjs"
+                  },
+                  {
+                    "symbol": "makeReceipt",
+                    "file": "src/receipt.mjs"
+                  }
+                ],
+                "change": "signature",
+                "intent": "Add optional second argument discountRate defaulting to 0; apply discount before roundCents; validate finite 0..1 with RangeError"
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "find",
+            "understand",
+            "understand",
+            "assess"
+          ],
+          "callerContextBeforeEdit": true,
+          "assessmentBeforeEdit": true,
+          "toolErrors": 3,
+          "native": {
+            "reads": 5,
+            "grep": 2,
+            "glob": 2,
+            "shell": 1,
+            "shellSearch": 0
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "glob",
+              "args": {
+                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7",
+                "globPattern": "**/*.test.*"
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "total\\(|makeReceipt\\(",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-bbd2d962-674b-477a-8a74-6bdbd92dffa0-composer_call_BDlJX9FH\nfc_e2a74ed7-119c-9efa-83e3-9c2c813f6af4_2",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "discount",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-77a928ce-7134-43b3-a38b-d7b64b12d528-composer_call_rbU3aVK1\nfc_2003691e-25ec-9d94-a8cf-c783d471f8cc_1",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7",
+                "globPattern": "**/*"
+              }
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "cursor-bug-1-baseline",
+          "case": "bug",
+          "variant": "baseline",
+          "repetition": 1,
+          "readTotal": 151007,
+          "input": 22623,
+          "uncached": 22623,
+          "cacheRead": 128384,
+          "cacheWrite": 0,
+          "output": 2403,
+          "latencyMs": 22949,
+          "passed": true,
+          "patchSha256": "ac18759e3530d573454337c4882ed4f17c831dc884d46e65fea281d55a040c48",
+          "assertions": {
+            "passed": true,
+            "passedCount": 23,
+            "total": 23,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "quantity zero",
+                "passed": true
+              },
+              {
+                "name": "receipt zero",
+                "passed": true
+              },
+              {
+                "name": "checkout zero",
+                "passed": true
+              },
+              {
+                "name": "quantity null",
+                "passed": true
+              },
+              {
+                "name": "receipt null",
+                "passed": true
+              },
+              {
+                "name": "checkout null",
+                "passed": true
+              },
+              {
+                "name": "quantity undefined",
+                "passed": true
+              },
+              {
+                "name": "receipt undefined",
+                "passed": true
+              },
+              {
+                "name": "checkout undefined",
+                "passed": true
+              },
+              {
+                "name": "quantity two",
+                "passed": true
+              },
+              {
+                "name": "receipt two",
+                "passed": true
+              },
+              {
+                "name": "checkout two",
+                "passed": true
+              },
+              {
+                "name": "quantity negative",
+                "passed": true
+              },
+              {
+                "name": "receipt negative",
+                "passed": true
+              },
+              {
+                "name": "checkout negative",
+                "passed": true
+              },
+              {
+                "name": "missing quantity",
+                "passed": true
+              },
+              {
+                "name": "mixed quantities",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "preflight_check",
+              "arguments": {
+                "task_description": "Fix invoice line with quantity 0 and unit price 9 still charged 9. Edit src/pricing.mjs only. Default qty 1 for null/undefined only.",
+                "target_paths": [
+                  "src/pricing.mjs",
+                  "src/receipt.mjs"
+                ]
+              }
+            },
+            {
+              "name": "list_indexed_repositories",
+              "arguments": {}
+            },
+            {
+              "name": "preflight_check",
+              "arguments": {
+                "repo_id": "cursor-bug-1-baseline-mwg7yiu5",
+                "task_description": "Fix quantity 0 treated as 1 in total() via line.quantity || 1",
+                "target_paths": [
+                  "src/pricing.mjs"
+                ]
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "repo_id": "cursor-bug-1-baseline-mwg7yiu5",
+                "symbol": "total",
+                "path": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "get_symbol_context",
+              "arguments": {
+                "repo_id": "cursor-bug-1-baseline-mwg7yiu5",
+                "symbol": "total",
+                "file_path": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "preflight_check",
+              "arguments": {
+                "repo_id": "cursor-bug-1-baseline-mwg7yiu5",
+                "symbol": "total",
+                "file_path": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "repo_id": "cursor-bug-1-baseline-mwg7yiu5",
+                "target": "total",
+                "file_path": "src/pricing.mjs",
+                "direction": "upstream"
+              }
+            },
+            {
+              "name": "governing_rules",
+              "arguments": {
+                "repo_id": "cursor-bug-1-baseline-mwg7yiu5",
+                "path": "src/pricing.mjs"
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "list_indexed_repositories",
+            "get_symbol_context",
+            "preflight_check",
+            "get_impact"
+          ],
+          "callerContextBeforeEdit": false,
+          "assessmentBeforeEdit": false,
+          "toolErrors": 4,
+          "native": {
+            "reads": 5,
+            "grep": 2,
+            "glob": 0,
+            "shell": 2,
+            "shellSearch": 0
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "quantity|roundCents",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-3d75815f-d04f-4206-a3e5-b507d3332101-composer_call_gIRVzqo9\nfc_1212cabb-cc6c-951a-b273-e5465a6b16e9_1",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "total\\(|from.*pricing",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-7548f43c-39d9-454c-9cf9-082e4a8fefc1-composer_call_vi087n9h\nfc_3d0e712c-b71d-9ab2-9341-8ad1b8c458a8_1",
+                "offset": 0
+              }
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-baseline-mwg7yiu5\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-baseline-mwg7yiu5\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-baseline-mwg7yiu5\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-baseline-mwg7yiu5\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "cursor-bug-1-broker",
+          "case": "bug",
+          "variant": "broker",
+          "repetition": 1,
+          "readTotal": 158225,
+          "input": 50321,
+          "uncached": 50321,
+          "cacheRead": 107904,
+          "cacheWrite": 0,
+          "output": 2138,
+          "latencyMs": 34055,
+          "passed": true,
+          "patchSha256": "ac18759e3530d573454337c4882ed4f17c831dc884d46e65fea281d55a040c48",
+          "assertions": {
+            "passed": true,
+            "passedCount": 23,
+            "total": 23,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "quantity zero",
+                "passed": true
+              },
+              {
+                "name": "receipt zero",
+                "passed": true
+              },
+              {
+                "name": "checkout zero",
+                "passed": true
+              },
+              {
+                "name": "quantity null",
+                "passed": true
+              },
+              {
+                "name": "receipt null",
+                "passed": true
+              },
+              {
+                "name": "checkout null",
+                "passed": true
+              },
+              {
+                "name": "quantity undefined",
+                "passed": true
+              },
+              {
+                "name": "receipt undefined",
+                "passed": true
+              },
+              {
+                "name": "checkout undefined",
+                "passed": true
+              },
+              {
+                "name": "quantity two",
+                "passed": true
+              },
+              {
+                "name": "receipt two",
+                "passed": true
+              },
+              {
+                "name": "checkout two",
+                "passed": true
+              },
+              {
+                "name": "quantity negative",
+                "passed": true
+              },
+              {
+                "name": "receipt negative",
+                "passed": true
+              },
+              {
+                "name": "checkout negative",
+                "passed": true
+              },
+              {
+                "name": "missing quantity",
+                "passed": true
+              },
+              {
+                "name": "mixed quantities",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "find",
+              "arguments": {
+                "query": "quantity default unit price line subtotal pricing",
+                "scope": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "symbol": "computeSubtotal",
+                  "file": "src/pricing.mjs"
+                },
+                "question": "How is quantity defaulted and who calls this?"
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "symbol": "total",
+                  "file": "src/pricing.mjs"
+                },
+                "question": "Callers and quantity default behavior"
+              }
+            },
+            {
+              "name": "assess",
+              "arguments": {
+                "targets": [
+                  {
+                    "symbol": "total",
+                    "file": "src/pricing.mjs"
+                  }
+                ],
+                "change": "implementation",
+                "intent": "Default quantity to 1 only for null/undefined; quantity 0 must multiply to zero"
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "find",
+            "understand",
+            "understand",
+            "assess"
+          ],
+          "callerContextBeforeEdit": true,
+          "assessmentBeforeEdit": true,
+          "toolErrors": 0,
+          "native": {
+            "reads": 3,
+            "grep": 3,
+            "glob": 2,
+            "shell": 2,
+            "shellSearch": 0
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "quantity",
+                "glob": "**/src/**",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-84f6f5e7-c2a9-49f9-a9ec-42228b5c6501-composer_call_I00e2H9J\nfc_fd51d705-6d9c-98ca-a2f5-1e1adc8bdcb4_1",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc",
+                "globPattern": "**/*"
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "total\\(",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-a4bbc64e-7a48-45fa-bf57-7d8011eafce4-composer_call_ziPeRwY4\nfc_699e2ac0-b426-98dd-b7c9-bb060c785254_3",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc",
+                "globPattern": "**/*.test.mjs"
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "quantity.*0|zero",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-49fd6cb0-dfe5-4098-9eb6-6477d0bb5891-composer_call_F2Vz3NeI\nfc_799dbe7e-3c08-93e1-833c-58fae631e825_1",
+                "offset": 0
+              }
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "cursor-bug-2-broker",
+          "case": "bug",
+          "variant": "broker",
+          "repetition": 2,
+          "readTotal": 113605,
+          "input": 20613,
+          "uncached": 20613,
+          "cacheRead": 92992,
+          "cacheWrite": 0,
+          "output": 2106,
+          "latencyMs": 26191,
+          "passed": true,
+          "patchSha256": "ac18759e3530d573454337c4882ed4f17c831dc884d46e65fea281d55a040c48",
+          "assertions": {
+            "passed": true,
+            "passedCount": 23,
+            "total": 23,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "quantity zero",
+                "passed": true
+              },
+              {
+                "name": "receipt zero",
+                "passed": true
+              },
+              {
+                "name": "checkout zero",
+                "passed": true
+              },
+              {
+                "name": "quantity null",
+                "passed": true
+              },
+              {
+                "name": "receipt null",
+                "passed": true
+              },
+              {
+                "name": "checkout null",
+                "passed": true
+              },
+              {
+                "name": "quantity undefined",
+                "passed": true
+              },
+              {
+                "name": "receipt undefined",
+                "passed": true
+              },
+              {
+                "name": "checkout undefined",
+                "passed": true
+              },
+              {
+                "name": "quantity two",
+                "passed": true
+              },
+              {
+                "name": "receipt two",
+                "passed": true
+              },
+              {
+                "name": "checkout two",
+                "passed": true
+              },
+              {
+                "name": "quantity negative",
+                "passed": true
+              },
+              {
+                "name": "receipt negative",
+                "passed": true
+              },
+              {
+                "name": "checkout negative",
+                "passed": true
+              },
+              {
+                "name": "missing quantity",
+                "passed": true
+              },
+              {
+                "name": "mixed quantities",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "find",
+              "arguments": {
+                "query": "quantity zero unit price line total calculation pricing",
+                "scope": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "symbol": "total",
+                  "file": "src/pricing.mjs"
+                },
+                "question": "How is quantity defaulted and who calls total?"
+              }
+            },
+            {
+              "name": "assess",
+              "arguments": {
+                "targets": [
+                  {
+                    "symbol": "total",
+                    "file": "src/pricing.mjs"
+                  }
+                ],
+                "change": "implementation",
+                "intent": "Replace line.quantity || 1 with nullish coalescing so quantity 0 is not treated as 1"
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "find",
+            "understand",
+            "assess"
+          ],
+          "callerContextBeforeEdit": true,
+          "assessmentBeforeEdit": true,
+          "toolErrors": 0,
+          "native": {
+            "reads": 4,
+            "grep": 2,
+            "glob": 1,
+            "shell": 2,
+            "shellSearch": 0
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "quantity|roundCents|unitPrice",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-4d497401-e454-4945-8b5a-01f34e69c090-composer_call_3Uq9n67c\nfc_fa8851a6-13f7-99e0-983e-defa72597f58_2",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "total\\(|from.*pricing",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-1922cc6a-bdfb-4029-aa4b-7fddd2a24020-composer_call_a9yRzA5B\nfc_af5204dd-01a9-95ec-9664-86944de5d24e_2",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "globPattern": "**/*.test.mjs"
+              }
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-broker-mwg80csd\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-broker-mwg80csd\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-broker-mwg80csd\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-broker-mwg80csd\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "cursor-bug-2-baseline",
+          "case": "bug",
+          "variant": "baseline",
+          "repetition": 2,
+          "readTotal": 147547,
+          "input": 36251,
+          "uncached": 36251,
+          "cacheRead": 111296,
+          "cacheWrite": 0,
+          "output": 2522,
+          "latencyMs": 24930,
+          "passed": true,
+          "patchSha256": "ac18759e3530d573454337c4882ed4f17c831dc884d46e65fea281d55a040c48",
+          "assertions": {
+            "passed": true,
+            "passedCount": 23,
+            "total": 23,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "quantity zero",
+                "passed": true
+              },
+              {
+                "name": "receipt zero",
+                "passed": true
+              },
+              {
+                "name": "checkout zero",
+                "passed": true
+              },
+              {
+                "name": "quantity null",
+                "passed": true
+              },
+              {
+                "name": "receipt null",
+                "passed": true
+              },
+              {
+                "name": "checkout null",
+                "passed": true
+              },
+              {
+                "name": "quantity undefined",
+                "passed": true
+              },
+              {
+                "name": "receipt undefined",
+                "passed": true
+              },
+              {
+                "name": "checkout undefined",
+                "passed": true
+              },
+              {
+                "name": "quantity two",
+                "passed": true
+              },
+              {
+                "name": "receipt two",
+                "passed": true
+              },
+              {
+                "name": "checkout two",
+                "passed": true
+              },
+              {
+                "name": "quantity negative",
+                "passed": true
+              },
+              {
+                "name": "receipt negative",
+                "passed": true
+              },
+              {
+                "name": "checkout negative",
+                "passed": true
+              },
+              {
+                "name": "missing quantity",
+                "passed": true
+              },
+              {
+                "name": "mixed quantities",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "preflight_check",
+              "arguments": {
+                "intent": "Fix line total when quantity is 0 - currently charges unit price instead of 0",
+                "files": [
+                  "src/pricing.mjs"
+                ]
+              }
+            },
+            {
+              "name": "find_code",
+              "arguments": {
+                "query": "quantity unit price line total pricing",
+                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-bug-2-baseline-mwg818fa"
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "symbol": "total",
+                "file": "src/pricing.mjs",
+                "repo_id": "cursor-bug-2-baseline-mwg818fa"
+              }
+            },
+            {
+              "name": "governing_rules",
+              "arguments": {
+                "repo_id": "cursor-bug-2-baseline-mwg818fa"
+              }
+            },
+            {
+              "name": "find_symbol",
+              "arguments": {
+                "name": "total",
+                "repo_id": "cursor-bug-2-baseline-mwg818fa"
+              }
+            },
+            {
+              "name": "get_symbol_context",
+              "arguments": {
+                "symbol": "total",
+                "repo_id": "cursor-bug-2-baseline-mwg818fa",
+                "file_path": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "target": "total",
+                "file_path": "src/pricing.mjs",
+                "repo_id": "cursor-bug-2-baseline-mwg818fa"
+              }
+            },
+            {
+              "name": "governing_rules",
+              "arguments": {
+                "file_path": "src/pricing.mjs",
+                "repo_id": "cursor-bug-2-baseline-mwg818fa"
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "find_code",
+            "find_symbol",
+            "get_symbol_context",
+            "get_impact",
+            "governing_rules"
+          ],
+          "callerContextBeforeEdit": false,
+          "assessmentBeforeEdit": false,
+          "toolErrors": 3,
+          "native": {
+            "reads": 4,
+            "grep": 3,
+            "glob": 1,
+            "shell": 2,
+            "shellSearch": 0
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "pricing",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-3fc93495-479e-4365-8598-69d69acc40fb-composer_call_6klXluTW\nfc_5ae8d6c5-6fae-904e-abcd-aa7852160cf3_3",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "total\\(",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-026de2d7-3ab4-4132-933d-0332b4a35a3d-composer_call_qzh4eqxG\nfc_50eedefd-2402-9fc7-b88a-1fac2619c794_4",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "globPattern": "**/*.test.mjs"
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "quantity.*\\|\\|",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-09a386df-53f7-47d0-947e-7ae12f5c4726-composer_call_d6FMDTCo\nfc_5656bbbc-732c-9efe-9329-4223a0f78af1_2",
+                "offset": 0
+              }
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-baseline-mwg818fa\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-baseline-mwg818fa\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-baseline-mwg818fa\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-baseline-mwg818fa\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "cursor-bug-3-baseline",
+          "case": "bug",
+          "variant": "baseline",
+          "repetition": 3,
+          "readTotal": 148329,
+          "input": 31593,
+          "uncached": 31593,
+          "cacheRead": 116736,
+          "cacheWrite": 0,
+          "output": 2646,
+          "latencyMs": 33533,
+          "passed": true,
+          "patchSha256": "ac18759e3530d573454337c4882ed4f17c831dc884d46e65fea281d55a040c48",
+          "assertions": {
+            "passed": true,
+            "passedCount": 23,
+            "total": 23,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "quantity zero",
+                "passed": true
+              },
+              {
+                "name": "receipt zero",
+                "passed": true
+              },
+              {
+                "name": "checkout zero",
+                "passed": true
+              },
+              {
+                "name": "quantity null",
+                "passed": true
+              },
+              {
+                "name": "receipt null",
+                "passed": true
+              },
+              {
+                "name": "checkout null",
+                "passed": true
+              },
+              {
+                "name": "quantity undefined",
+                "passed": true
+              },
+              {
+                "name": "receipt undefined",
+                "passed": true
+              },
+              {
+                "name": "checkout undefined",
+                "passed": true
+              },
+              {
+                "name": "quantity two",
+                "passed": true
+              },
+              {
+                "name": "receipt two",
+                "passed": true
+              },
+              {
+                "name": "checkout two",
+                "passed": true
+              },
+              {
+                "name": "quantity negative",
+                "passed": true
+              },
+              {
+                "name": "receipt negative",
+                "passed": true
+              },
+              {
+                "name": "checkout negative",
+                "passed": true
+              },
+              {
+                "name": "missing quantity",
+                "passed": true
+              },
+              {
+                "name": "mixed quantities",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "find_symbol",
+              "arguments": {
+                "query": "pricing quantity unit price line total",
+                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-bug-3-baseline-mwg822hi"
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "symbol": "pricing",
+                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-bug-3-baseline-mwg822hi"
+              }
+            },
+            {
+              "name": "find_symbol",
+              "arguments": {
+                "query": "total",
+                "repo_id": "cursor-bug-3-baseline-mwg822hi"
+              }
+            },
+            {
+              "name": "preflight_check",
+              "arguments": {
+                "repo_id": "cursor-bug-3-baseline-mwg822hi",
+                "files": [
+                  "src/pricing.mjs"
+                ]
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "node_id": "memdb:281474976727725",
+                "repo_id": "cursor-bug-3-baseline-mwg822hi"
+              }
+            },
+            {
+              "name": "governing_rules",
+              "arguments": {
+                "repo_id": "cursor-bug-3-baseline-mwg822hi"
+              }
+            },
+            {
+              "name": "get_symbol_context",
+              "arguments": {
+                "symbol": "total",
+                "repo_id": "cursor-bug-3-baseline-mwg822hi",
+                "file_path": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "get_impact",
+              "arguments": {
+                "target": "total",
+                "repo_id": "cursor-bug-3-baseline-mwg822hi",
+                "file_path": "src/pricing.mjs"
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "find_symbol",
+            "find_symbol",
+            "get_symbol_context"
+          ],
+          "callerContextBeforeEdit": false,
+          "assessmentBeforeEdit": false,
+          "toolErrors": 4,
+          "native": {
+            "reads": 6,
+            "grep": 1,
+            "glob": 2,
+            "shell": 2,
+            "shellSearch": 0
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "pricing",
+                "path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-10d51e2e-2a69-4bc6-9240-d2544be3db2d-composer_call_i69EvMI3\nfc_984282e2-064c-9372-8e6d-c6a4ea290df1_3",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi",
+                "globPattern": "**/*.test.mjs"
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi",
+                "globPattern": "**/*"
+              }
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "cursor-bug-3-broker",
+          "case": "bug",
+          "variant": "broker",
+          "repetition": 3,
+          "readTotal": 129154,
+          "input": 24578,
+          "uncached": 24578,
+          "cacheRead": 104576,
+          "cacheWrite": 0,
+          "output": 2024,
+          "latencyMs": 25522,
+          "passed": true,
+          "patchSha256": "ac18759e3530d573454337c4882ed4f17c831dc884d46e65fea281d55a040c48",
+          "assertions": {
+            "passed": true,
+            "passedCount": 23,
+            "total": 23,
+            "checks": [
+              {
+                "name": "old total",
+                "passed": true
+              },
+              {
+                "name": "old receipt",
+                "passed": true
+              },
+              {
+                "name": "checkout compatibility",
+                "passed": true
+              },
+              {
+                "name": "empty",
+                "passed": true
+              },
+              {
+                "name": "cents rounding",
+                "passed": true
+              },
+              {
+                "name": "quantity zero",
+                "passed": true
+              },
+              {
+                "name": "receipt zero",
+                "passed": true
+              },
+              {
+                "name": "checkout zero",
+                "passed": true
+              },
+              {
+                "name": "quantity null",
+                "passed": true
+              },
+              {
+                "name": "receipt null",
+                "passed": true
+              },
+              {
+                "name": "checkout null",
+                "passed": true
+              },
+              {
+                "name": "quantity undefined",
+                "passed": true
+              },
+              {
+                "name": "receipt undefined",
+                "passed": true
+              },
+              {
+                "name": "checkout undefined",
+                "passed": true
+              },
+              {
+                "name": "quantity two",
+                "passed": true
+              },
+              {
+                "name": "receipt two",
+                "passed": true
+              },
+              {
+                "name": "checkout two",
+                "passed": true
+              },
+              {
+                "name": "quantity negative",
+                "passed": true
+              },
+              {
+                "name": "receipt negative",
+                "passed": true
+              },
+              {
+                "name": "checkout negative",
+                "passed": true
+              },
+              {
+                "name": "missing quantity",
+                "passed": true
+              },
+              {
+                "name": "mixed quantities",
+                "passed": true
+              },
+              {
+                "name": "no input mutation",
+                "passed": true
+              }
+            ]
+          },
+          "calls": [
+            {
+              "name": "find",
+              "arguments": {
+                "query": "quantity zero unit price line total calculation",
+                "scope": "src/pricing.mjs"
+              }
+            },
+            {
+              "name": "understand",
+              "arguments": {
+                "target": {
+                  "symbol": "total",
+                  "file": "src/pricing.mjs"
+                },
+                "question": "How is quantity defaulted and who calls total?"
+              }
+            },
+            {
+              "name": "assess",
+              "arguments": {
+                "targets": [
+                  {
+                    "symbol": "total",
+                    "file": "src/pricing.mjs"
+                  }
+                ],
+                "change": "implementation",
+                "intent": "Default quantity to 1 only for null/undefined; quantity 0 must yield zero line charge"
+              }
+            }
+          ],
+          "retrievalBeforeEdit": [
+            "find",
+            "understand",
+            "assess"
+          ],
+          "callerContextBeforeEdit": true,
+          "assessmentBeforeEdit": true,
+          "toolErrors": 0,
+          "native": {
+            "reads": 4,
+            "grep": 2,
+            "glob": 1,
+            "shell": 2,
+            "shellSearch": 0
+          },
+          "otherMcpCalls": [],
+          "nativeSearches": [
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "quantity|roundCents",
+                "glob": "**/*.{mjs,js}",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-bb4dc2ab-88d1-4652-8e21-855b333229cf-composer_call_Y6AcsYQc\nfc_6838028c-dbf1-9047-b53d-18b314b40b4c_2",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "grep",
+              "args": {
+                "pattern": "total\\(",
+                "outputMode": "content",
+                "caseInsensitive": false,
+                "multiline": false,
+                "toolCallId": "call-1c71559c-d463-4506-96db-b370ff9d6cf7-composer_call_8b832MTa\nfc_6e1e49c8-0c5e-9385-925e-75a037eae5dc_5",
+                "offset": 0
+              }
+            },
+            {
+              "kind": "glob",
+              "args": {
+                "globPattern": "**/*.test.mjs"
+              }
+            }
+          ],
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-broker-mwg832rf\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-broker-mwg832rf\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-broker-mwg832rf\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-broker-mwg832rf\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        }
+      ],
+      "excludedSetupAttempts": [
+        {
+          "id": "cursor-signature-1-baseline",
+          "reason": "Invalid project MCP configuration fell back to global servers; expected proxy/gateway was not exposed.",
+          "usage": {
+            "inputTokens": 30678,
+            "outputTokens": 3352,
+            "cacheReadTokens": 147136,
+            "cacheWriteTokens": 0
+          },
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        },
+        {
+          "id": "cursor-signature-1-broker",
+          "reason": "Invalid project MCP configuration fell back to global servers; expected proxy/gateway was not exposed.",
+          "usage": {
+            "inputTokens": 12138,
+            "outputTokens": 2552,
+            "cacheReadTokens": 80768,
+            "cacheWriteTokens": 0
+          },
+          "artifacts": {
+            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker\\.memcode\\worker",
+            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker\\.memcode\\worker\\stream.jsonl",
+            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker\\.memcode\\worker\\worker.diff",
+            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker\\.memcode\\worker\\mcp-audit.jsonl"
+          }
+        }
+      ],
+      "preparationFailures": [
+        {
+          "at": "2026-11-14T09:39:02.736Z",
+          "error": "Error: Fixture scope contains another repository"
+        }
+      ],
+      "error": null
+    }
+  ]
+}

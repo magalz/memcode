@@ -30,10 +30,14 @@ none performed code search. Six direct `Read` calls inspected the source files
 being edited. This is observed use at the relevant points in those four tasks,
 not an enforced ban on alternative search paths.
 
-Codex and Cursor invoked all three tools in directed conformance checks. Those
-checks establish connectivity and working tool calls; they do not establish
-independent adoption throughout a complete coding task. Their normal production
-launch paths have not been migrated to the broker.
+The initial Codex and Cursor checks invoked all three tools through directed
+conformance prompts. Subsequent [complete coding comparisons](context-coding-results.md)
+ran the same two fixture tasks three times per profile and harness: all 24 runs
+passed independent acceptance. Both harnesses used MemCode caller context and
+change assessment before editing in all six broker runs each. Aggregate read
+tokens fell 28.3% for Codex and 8.1% for Cursor against their full Memtrace
+baseline. These are benchmark profiles; production launch coverage is documented
+separately from conformance and task-level adoption.
 
 The approximately 60% input reduction compares the deterministic broker with
 the full Memtrace-enabled Claude setup. It is not a comparison with bare Claude
