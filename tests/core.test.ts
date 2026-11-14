@@ -5,14 +5,14 @@ import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { initialState } from "../src/seed.ts";
 import { canMoveTask, restartSafeState } from "../src/domain.ts";
-import { LocalStore, exists, git, within } from "../electron/local.ts";
-import { localURL } from "../electron/urls.ts";
+import { LocalStore, exists, git, within } from "../runtime/local.ts";
+import { localURL } from "../runtime/urls.ts";
 import {
   eventMessage,
   harnessArgs,
   WorkerManager,
-} from "../electron/workers.ts";
-import { MemtraceEngine } from "../electron/memtrace.ts";
+} from "../runtime/workers.ts";
+import { MemtraceEngine } from "../runtime/memtrace.ts";
 import type { Project, WorkItem } from "../src/shared.ts";
 
 async function temporary() {

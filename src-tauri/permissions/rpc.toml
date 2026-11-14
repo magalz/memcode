@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-rpc"
+description = "Allow the MemCode application webview to call its validated local runtime."
+commands.allow = ["rpc"]

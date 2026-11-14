@@ -1,6 +1,6 @@
 # MemCode: Fleet Agentic Worker Suite
 
-MemCode is an independent local Electron app built around a scrum-inspired work
+MemCode is an independent local Tauri app built around a scrum-inspired work
 board. A work item owns its brief, runbook, conversation, worker attempt, changes
 and artifacts. Memtrace provides the understanding underneath the experience.
 
@@ -15,8 +15,9 @@ way to write the brief, not a separate product flow.
 
 ## Implementation boundary
 
-React renders the workspace. A narrow preload exposes validated IPC. Electron main
-owns project files, persistence, process launches, Memtrace MCP and preview views.
+React renders the workspace. A narrow Tauri bridge exposes validated IPC. Rust owns
+native windows, folder dialogs and isolated preview WebViews. A bundled local Node
+service owns project files, persistence, process launches and Memtrace MCP.
 Installed harnesses own model execution; the app normalizes their observable output.
 The browser never receives the desktop bridge.
 

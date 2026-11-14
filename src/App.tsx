@@ -1,27 +1,20 @@
-import { harnessNames } from "./shared";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  ArrowRight,
   ArrowUpRight,
-  AudioLines,
-  Bell,
   Check,
   ChevronDown,
   ChevronRight,
   CircleHelp,
-  Command,
+  CalendarDays,
+  ChartNoAxesCombined,
   FileCode2,
   Files,
   Folder,
-  FolderOpen,
   GitBranch,
   Layers3,
   LayoutGrid,
-  List,
-  LoaderCircle,
   MessageSquare,
   Minus,
-  MoreHorizontal,
   PanelLeft,
   Plus,
   Radio,
@@ -29,27 +22,28 @@ import {
   Search,
   Settings2,
   ShieldCheck,
-  SlidersHorizontal,
   Sparkles,
   Square,
   Workflow,
   X,
 } from "lucide-react";
-import type { AppState, RuntimeInfo, WorkItem, Stage } from "./shared";
-import { isActive, stageLabel, tasksForProject } from "./domain";
+import type { AppState, RuntimeInfo, WorkItem } from "./shared";
+import { isActive, tasksForProject } from "./domain";
 import {
   Empty,
   HarnessMark,
   Mark,
-  PriorityMark,
   Spinner,
   StageIcon,
   Time,
 } from "./components/UI";
-import { WorkBoard } from "./components/Board";
+import { Workspace } from "./components/Workspace";
 import { WorkDetail } from "./components/WorkDetail";
 import { Roadmap } from "./components/Roadmap";
 import { FleetDecisions } from "./components/FleetDecisions";
+import { Cycles } from "./components/Cycles";
+import { InsightsPage } from "./components/InsightsPage";
+import { Improve } from "./components/Improve";
 import {
   NewProjectDialog,
   NewTaskDialog,
@@ -60,12 +54,30 @@ import {
 type View =
   | "board"
   | "roadmap"
+  | "cycles"
+  | "insights"
+  | "improve"
   | "fleet"
   | "workers"
   | "conversations"
   | "artifacts"
   | "activity";
 const pageCopy: Record<View, [string, string, string]> = {
+  cycles: [
+    "A RHYTHM FOR THE WORK",
+    "Clear cycles. Steady progress.",
+    "Plan a focused window, track the scope, and carry the right work forward.",
+  ],
+  insights: [
+    "UNDERSTAND THE MOMENTUM",
+    "The work, understood.",
+    "See recorded progress and the evidence behind the next decision.",
+  ],
+  improve: [
+    "MEASURE THE CHANGE",
+    "Better code, with evidence.",
+    "Turn source findings into focused work, then see how the code improves.",
+  ],
   fleet: [
     "HUMAN IN THE LOOP",
     "A clear decision. A moving fleet.",
@@ -107,16 +119,13 @@ export function App() {
   const [state, setState] = useState<AppState | null>(null);
   const [runtime, setRuntime] = useState<RuntimeInfo | null>(null);
   const [view, setView] = useState<View>("board");
-  const [mode, setMode] = useState<"board" | "list">("board");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [storyEpic, setStoryEpic] = useState<string | undefined>();
+  const [storyParent, setStoryParent] = useState<string | undefined>();
   const [dialog, setDialog] = useState<
     "task" | "project" | "settings" | "search" | null
   >(null);
   const [projectMenu, setProjectMenu] = useState(false);
-  const [search, setSearch] = useState("");
-  const [priority, setPriority] = useState("all");
-  const [filterOpen, setFilterOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [fatal, setFatal] = useState("");
   const [collapsed, setCollapsed] = useState(false);
@@ -175,7 +184,6 @@ export function App() {
       if (event.key === "Escape") {
         setDialog(null);
         setProjectMenu(false);
-        setFilterOpen(false);
         if (!dialog) setSelectedId(null);
       }
       if (
@@ -183,8 +191,11 @@ export function App() {
         !event.metaKey &&
         !event.ctrlKey &&
         event.key.toLowerCase() === "c"
-      )
+      ) {
+        setStoryEpic(undefined);
+        setStoryParent(undefined);
         setDialog("task");
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -213,33 +224,19 @@ export function App() {
     state.projects[0];
   const tasks = tasksForProject(state, project.id);
   const epics = state.epics.filter((epic) => epic.projectId === project.id);
-  const filtered = tasks.filter(
-    (task) =>
-      (priority === "all" || task.priority === priority) &&
-      (!search ||
-        `${task.title} ${task.identifier} ${task.description}`
-          .toLowerCase()
-          .includes(search.toLowerCase())),
-  );
   const selected = state.tasks.find((task) => task.id === selectedId);
   const active = tasks.filter((task) => isActive(task));
   const working = tasks.filter((task) => task.stage === "working");
-  const reviewing = tasks.filter((task) => task.stage === "review");
-  const done = tasks.filter((task) => task.stage === "done");
   const artifacts = state.artifacts.filter((a) => a.projectId === project.id);
-  const completion = tasks.length
-    ? Math.round((done.length / tasks.length) * 100)
-    : 0;
   const open = (task: WorkItem) => {
     setSelectedId(task.id);
     setDialog(null);
   };
-  const create = (epicId?: string) => {
+  const create = (epicId?: string, parentId?: string) => {
     setStoryEpic(epicId);
+    setStoryParent(parentId);
     setDialog("task");
   };
-  const move = (id: string, stage: Stage) =>
-    void act(() => window.memcode.updateTask(id, { stage }));
   const navItems: Array<{
     id: View;
     label: string;
@@ -248,6 +245,16 @@ export function App() {
   }> = [
     { id: "board", label: "Workspace", icon: LayoutGrid },
     { id: "roadmap", label: "Roadmap", icon: Route, count: epics.length },
+    {
+      id: "cycles",
+      label: "Cycles",
+      icon: CalendarDays,
+      count: state.cycles.filter(
+        (cycle) => cycle.projectId === project.id && cycle.state === "active",
+      ).length,
+    },
+    { id: "insights", label: "Insights", icon: ChartNoAxesCombined },
+    { id: "improve", label: "Improve", icon: Sparkles },
     {
       id: "fleet",
       label: "Decisions",
@@ -268,7 +275,7 @@ export function App() {
   ];
   return (
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
-      <div className="desktop-titlebar">
+      <div className="desktop-titlebar" data-tauri-drag-region>
         <div className="titlebar-left">
           <button
             className="icon-button"
@@ -384,33 +391,6 @@ export function App() {
             </button>
           ))}
         </nav>
-        <div className="nav-label project-label">
-          PROJECTS
-          <button
-            className="icon-button"
-            title="Add project"
-            onClick={() => setDialog("project")}
-          >
-            <Plus size={13} />
-          </button>
-        </div>
-        <div className="sidebar-projects">
-          {state.projects.map((item) => (
-            <button
-              key={item.id}
-              className={project.id === item.id ? "active" : ""}
-              onClick={() => {
-                void act(() => window.memcode.selectProject(item.id));
-                setView("board");
-                setSelectedId(null);
-              }}
-            >
-              <span className="project-dot" />
-              {item.name}
-              {item.example && <span className="example-mini">preview</span>}
-            </button>
-          ))}
-        </div>
         <div className="sidebar-bottom">
           <div className="engine-card">
             <span
@@ -497,6 +477,30 @@ export function App() {
               <kbd>C</kbd>
             </button>
           </div>
+          {view === "cycles" && (
+            <Cycles
+              state={state}
+              project={project}
+              open={open}
+              notify={notify}
+            />
+          )}
+          {view === "insights" && (
+            <InsightsPage
+              state={state}
+              project={project}
+              open={open}
+              notify={notify}
+            />
+          )}
+          {view === "improve" && (
+            <Improve
+              state={state}
+              project={project}
+              open={open}
+              notify={notify}
+            />
+          )}
           {view === "roadmap" && (
             <Roadmap
               project={project}
@@ -519,219 +523,16 @@ export function App() {
             />
           )}
           {view === "board" && (
-            <>
-              <section className="focus-panel">
-                <div className="focus-grid" />
-                <div className="focus-copy">
-                  <div className="focus-kicker">
-                    <span />
-                    {project.example ? "BUILDING MEMCODE" : "PROJECT BRIEF"}
-                  </div>
-                  <h2>
-                    {project.example ? (
-                      <>
-                        Local by default.
-                        <br />
-                        <span>Coordinated by design.</span>
-                      </>
-                    ) : (
-                      project.name
-                    )}
-                  </h2>
-                  <p>
-                    {project.description ||
-                      "Describe what you want to build. Turn the idea into clear, focused work."}
-                  </p>
-                  <button
-                    className="focus-link"
-                    onClick={() =>
-                      project.example
-                        ? setDialog("project")
-                        : void act(() =>
-                            window.memcode.analyzeProject(project.id),
-                          )
-                    }
-                  >
-                    {project.example
-                      ? "Connect your first project"
-                      : project.analysis === "ready"
-                        ? "Refresh code context"
-                        : ["connecting", "indexing"].includes(project.analysis)
-                          ? "Analyzing your project"
-                          : "Understand this codebase"}
-                    {["connecting", "indexing"].includes(project.analysis) ? (
-                      <Spinner size={13} />
-                    ) : (
-                      <ArrowRight size={14} />
-                    )}
-                  </button>
-                </div>
-                <div className="focus-right">
-                  <div className="cycle-header">
-                    <span>WORKSPACE MOMENTUM</span>
-                    {project.example ? (
-                      <span className="example-pill">Example data</span>
-                    ) : (
-                      <span>{tasks.length} work items</span>
-                    )}
-                  </div>
-                  <div className="focus-metrics">
-                    <div>
-                      <strong>
-                        {tasks
-                          .filter((t) => t.stage === "planned")
-                          .length.toString()
-                          .padStart(2, "0")}
-                      </strong>
-                      <span>
-                        <span className="metric-dot planned" />
-                        Planned
-                      </span>
-                    </div>
-                    <div>
-                      <strong>
-                        {working.length.toString().padStart(2, "0")}
-                      </strong>
-                      <span>
-                        <span className="metric-dot working" />
-                        In progress
-                      </span>
-                    </div>
-                    <div>
-                      <strong>
-                        {reviewing.length.toString().padStart(2, "0")}
-                      </strong>
-                      <span>
-                        <span className="metric-dot review" />
-                        In review
-                      </span>
-                    </div>
-                  </div>
-                  <div className="cycle-progress">
-                    <div>
-                      <i style={{ width: `${completion}%` }} />
-                    </div>
-                    <span>
-                      {done.length} of {tasks.length} complete
-                      <em>{completion}%</em>
-                    </span>
-                  </div>
-                  <div className="focus-bottom">
-                    <div className="stacked-harnesses">
-                      <HarnessMark id="codex" small />
-                      <HarnessMark id="claude" small />
-                      <HarnessMark id="cursor" small />
-                    </div>
-                    <span>
-                      {project.example
-                        ? "One workspace. Different strengths."
-                        : `${runtime.harnesses.filter((h) => h.available).length} installed harnesses · ${active.length} active workers`}
-                    </span>
-                  </div>
-                </div>
-              </section>
-              <div className="board-toolbar">
-                <div className="board-toolbar-left">
-                  <span className="section-title">
-                    All work <small>{tasks.length}</small>
-                  </span>
-                  <span className="toolbar-divider" />
-                  <div className="segmented-control">
-                    <button
-                      title="Board view"
-                      aria-label="Board view"
-                      className={mode === "board" ? "active" : ""}
-                      onClick={() => setMode("board")}
-                    >
-                      <LayoutGrid size={13} />
-                      Board
-                    </button>
-                    <button
-                      title="List view"
-                      aria-label="List view"
-                      className={mode === "list" ? "active" : ""}
-                      onClick={() => setMode("list")}
-                    >
-                      <List size={14} />
-                      List
-                    </button>
-                  </div>
-                </div>
-                <div className="board-toolbar-right">
-                  <label className="inline-search">
-                    <Search size={13} />
-                    <input
-                      aria-label="Search work items"
-                      placeholder="Search work"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                    />
-                    {search && (
-                      <button
-                        onClick={() => setSearch("")}
-                        aria-label="Clear search"
-                      >
-                        <X size={11} />
-                      </button>
-                    )}
-                  </label>
-                  <div className="filter-wrap">
-                    <button
-                      className={
-                        "button subtle filter-button " +
-                        (priority !== "all" ? "filtered" : "")
-                      }
-                      onClick={() => setFilterOpen(!filterOpen)}
-                    >
-                      <SlidersHorizontal size={13} />
-                      Filter
-                      {priority !== "all" && <span className="filter-dot" />}
-                    </button>
-                    {filterOpen && (
-                      <div className="filter-menu">
-                        <span className="menu-eyebrow">PRIORITY</span>
-                        {["all", "high", "medium", "low"].map((value) => (
-                          <button
-                            key={value}
-                            onClick={() => {
-                              setPriority(value);
-                              setFilterOpen(false);
-                            }}
-                          >
-                            <span className="capitalize">
-                              {value === "all" ? "All priorities" : value}
-                            </span>
-                            {priority === value && <Check size={13} />}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <WorkBoard
-                tasks={filtered}
-                mode={mode}
-                open={open}
-                create={create}
-                move={move}
-              />
-              <div className="board-footnote">
-                <GitBranch size={12} />
-                <span>
-                  {project.example
-                    ? "Explore the example, or connect a folder to start your own fleet."
-                    : (project.analysisNote ??
-                      (project.analysis === "ready"
-                        ? "Code context connected to the local Memtrace engine."
-                        : "Your work stays local. Analyze the project to add Memtrace context."))}
-                </span>
-                <button onClick={() => setDialog("project")}>
-                  {project.example ? "Open a project" : "Add project"}
-                  <ArrowUpRight size={11} />
-                </button>
-              </div>
-            </>
+            <Workspace
+              state={state}
+              project={project}
+              runtime={runtime}
+              open={open}
+              create={() => create()}
+              notify={notify}
+              act={act}
+              addProject={() => setDialog("project")}
+            />
           )}
           {view === "workers" && (
             <section className="workers-view">
@@ -972,6 +773,7 @@ export function App() {
       </main>
       {selected && (
         <WorkDetail
+          state={state}
           task={selected}
           project={state.projects.find((p) => p.id === selected.projectId)!}
           artifacts={state.artifacts.filter((a) => a.taskId === selected.id)}
@@ -994,6 +796,10 @@ export function App() {
             (task) => task.projectId === selected.projectId,
           )}
           onClose={() => setSelectedId(null)}
+          onOpenTask={open}
+          onCreateChild={() =>
+            create(selected.epicId ?? undefined, selected.id)
+          }
           notify={notify}
           act={act}
           obscured={!!dialog}
@@ -1005,6 +811,12 @@ export function App() {
           defaultHarness={state.settings.defaultHarness}
           epics={epics}
           initialEpicId={storyEpic}
+          cycles={state.cycles.filter(
+            (cycle) => cycle.projectId === project.id,
+          )}
+          parent={state.tasks.find(
+            (task) => task.id === storyParent && task.projectId === project.id,
+          )}
           onClose={() => setDialog(null)}
           onCreated={(task) => {
             setDialog(null);

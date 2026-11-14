@@ -28,9 +28,12 @@ import type {
   Settings,
   WorkItem,
   Epic,
+  Cycle,
 } from "../shared";
 import { useDictation } from "../useDictation";
 import { HarnessMark, Mark, PriorityMark, Spinner, StageIcon } from "./UI";
+import { estimateOptions } from "../planning/types";
+import { ContextSettings } from "./ContextSettings";
 
 export function Modal({
   title,
@@ -123,6 +126,8 @@ export function NewTaskDialog({
   defaultHarness,
   epics,
   initialEpicId,
+  cycles = [],
+  parent,
   onClose,
   onCreated,
   notify,
@@ -131,6 +136,8 @@ export function NewTaskDialog({
   defaultHarness: Harness;
   epics: Epic[];
   initialEpicId?: string;
+  cycles?: Cycle[];
+  parent?: WorkItem;
   onClose: () => void;
   onCreated: (task: WorkItem) => void;
   notify: (s: string) => void;
@@ -139,7 +146,20 @@ export function NewTaskDialog({
   const [description, setDescription] = useState("");
   const [harness, setHarness] = useState<Harness>(defaultHarness);
   const [assignment, setAssignment] = useState("auto");
-  const [epicId, setEpicId] = useState(initialEpicId ?? "none");
+  const [epicId, setEpicId] = useState(
+    parent?.epicId ?? initialEpicId ?? "none",
+  );
+  const [cycleId, setCycleId] = useState(
+    cycles.some(
+      (cycle) => cycle.id === parent?.cycleId && cycle.state !== "completed",
+    )
+      ? parent!.cycleId!
+      : "none",
+  );
+  const [estimate, setEstimate] = useState("none");
+  const [startDate, setStartDate] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [labels, setLabels] = useState("");
   const [kind, setKind] = useState<NonNullable<WorkItem["kind"]>>("feature");
   const [priority, setPriority] = useState<"high" | "medium" | "low">("medium");
   const [busy, setBusy] = useState(false);
@@ -163,6 +183,15 @@ export function NewTaskDialog({
           epicId: epicId === "none" ? null : epicId,
           kind,
           priority,
+          cycleId: cycleId === "none" ? null : cycleId,
+          estimate: estimate === "none" ? null : Number(estimate),
+          parentId: parent?.id ?? null,
+          startDate: startDate || null,
+          dueDate: dueDate || null,
+          labels: labels
+            .split(",")
+            .map((label) => label.trim())
+            .filter(Boolean),
         }),
       );
     } catch (error) {
@@ -183,7 +212,9 @@ export function NewTaskDialog({
             <Layers3 size={14} />
             {project.name}
             <ChevronRight size={12} />
-            <span>New work item</span>
+            <span>
+              {parent ? `Child of ${parent.identifier}` : "New work item"}
+            </span>
           </div>
           <input
             className="task-title-input"
@@ -289,6 +320,75 @@ export function NewTaskDialog({
               </Select>
             </label>
           </div>
+          <div className="form-row">
+            <label className="field">
+              <span>Cycle</span>
+              <Select
+                aria-label="New story cycle"
+                value={cycleId}
+                onValueChange={setCycleId}
+              >
+                <option value="none">Backlog · no cycle</option>
+                {cycles
+                  .filter((cycle) => cycle.state !== "completed")
+                  .map((cycle) => (
+                    <option key={cycle.id} value={cycle.id}>
+                      {cycle.name}
+                    </option>
+                  ))}
+              </Select>
+            </label>
+            <label className="field">
+              <span>
+                Estimate <small>Manual story points</small>
+              </span>
+              <Select
+                aria-label="New story estimate"
+                value={estimate}
+                onValueChange={setEstimate}
+              >
+                <option value="none">Not estimated</option>
+                {estimateOptions.map((value) => (
+                  <option key={value} value={String(value)}>
+                    {value} points
+                  </option>
+                ))}
+              </Select>
+            </label>
+          </div>
+          <details className="new-story-extra">
+            <summary>Dates & labels</summary>
+            <div className="form-row">
+              <label className="field">
+                <span>Start date</span>
+                <input
+                  type="date"
+                  aria-label="New story start date"
+                  value={startDate}
+                  onChange={(event) => setStartDate(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>Due date</span>
+                <input
+                  type="date"
+                  aria-label="New story due date"
+                  min={startDate || undefined}
+                  value={dueDate}
+                  onChange={(event) => setDueDate(event.target.value)}
+                />
+              </label>
+            </div>
+            <label className="field">
+              <span>Labels</span>
+              <input
+                aria-label="New story labels"
+                placeholder="interface, orchestration…"
+                value={labels}
+                onChange={(event) => setLabels(event.target.value)}
+              />
+            </label>
+          </details>
           <div className="form-note">
             <GitBranch size={13} />
             <p>
@@ -653,6 +753,12 @@ export function SettingsDialog({
               brief.
             </p>
           </div>
+          <ContextSettings
+            value={draft.contextAssistant}
+            change={(contextAssistant) =>
+              setDraft({ ...draft, contextAssistant })
+            }
+          />
           <div className="storage-note">
             <ShieldCheck size={14} />
             <span>

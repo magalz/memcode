@@ -4,10 +4,10 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { initialState } from "../src/seed.ts";
-import { git, within, exists } from "../electron/local.ts";
-import { WorkerManager } from "../electron/workers.ts";
-import { FleetBlocked } from "../electron/fleet.ts";
-import type { MemtraceEngine } from "../electron/memtrace.ts";
+import { git, within, exists } from "../runtime/local.ts";
+import { WorkerManager } from "../runtime/workers.ts";
+import { FleetBlocked } from "../runtime/fleet.ts";
+import type { MemtraceEngine } from "../runtime/memtrace.ts";
 import type { HarnessRuntime, WorkItem } from "../src/shared.ts";
 
 class TestFleet {

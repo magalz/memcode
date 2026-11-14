@@ -1,0 +1,1246 @@
+{
+  "version": 1,
+  "case": "bug",
+  "at": "2026-11-14T02:36:56.132Z",
+  "temporaryRoot": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS",
+  "fixtureOnly": true,
+  "limitations": [
+    "One small synthetic fixture per case/variant; not statistical evidence of general task savings.",
+    "No native/shell hard fencing claim. Local token counts are tokenizer measurements, not provider billing.",
+    "Graph indexing uses skip_embed=true to keep the experiment isolated and bounded; semantic retrieval is unavailable in this fixture."
+  ],
+  "retrieval": [
+    {
+      "variant": "baseline",
+      "fullCatalogCount": 99,
+      "fullCatalogChars": 189146,
+      "gatewayCatalogCount": 3,
+      "steps": [
+        {
+          "capability": "find",
+          "chars": 6382,
+          "revision": {
+            "head": "b736c68fb61761f0cde68de5d3a336680839e61c",
+            "branch": "main",
+            "dirty": false,
+            "fingerprint": "ac3f4d5fbd0447d416b5295853670ebb6b38c33a757fd931242fd866ff567b05",
+            "files": 8,
+            "graph": "49080f5016bbfc1d4935d54970f97c12a4629b977c95ac93731dd4fbea5e0f21",
+            "graphSource": "760b3dc2faef4664003c437b70e6f2f3e7b8739988c2516242360a77a9ec1681",
+            "graphReady": false,
+            "stable": true,
+            "constraintsDigest": "6e99a1033350bd772e641bc76d301c140c76ee1e18e7cb4eb42ca4cf6a2932b1"
+          },
+          "telemetry": {
+            "cacheHit": false,
+            "durationMs": 2099,
+            "backendCalls": [
+              "get_query_revision",
+              "find_code",
+              "governing_rules",
+              "governing_rules",
+              "governing_rules",
+              "governing_rules",
+              "recall_decision",
+              "get_query_revision"
+            ],
+            "fallback": null,
+            "localModel": {
+              "state": "disabled"
+            },
+            "responseChars": 6382,
+            "estimatedTokens": 1594,
+            "tokenMethod": "ceil(characters/4), not provider usage"
+          },
+          "coverage": {
+            "status": "partial",
+            "unknown": [
+              "get_query_revision: partial",
+              "Graph/source alignment is unverified; live excerpts are authoritative for text, indexed relationships may be stale or missing.",
+              "get_query_revision: partial"
+            ],
+            "truncated": [],
+            "constraintsRemaining": 0,
+            "canAct": true
+          },
+          "sourceFiles": [
+            "src/pricing.mjs",
+            "src/receipt.mjs",
+            "src/pricing.mjs",
+            "src/receipt.mjs",
+            "src/money.mjs",
+            "src/checkout.mjs",
+            "src/checkout.mjs",
+            "src/money.mjs"
+          ],
+          "preservedProjectRules": true
+        },
+        {
+          "capability": "understand",
+          "chars": 6251,
+          "revision": {
+            "head": "b736c68fb61761f0cde68de5d3a336680839e61c",
+            "branch": "main",
+            "dirty": false,
+            "fingerprint": "ac3f4d5fbd0447d416b5295853670ebb6b38c33a757fd931242fd866ff567b05",
+            "files": 8,
+            "graph": "49080f5016bbfc1d4935d54970f97c12a4629b977c95ac93731dd4fbea5e0f21",
+            "graphSource": "760b3dc2faef4664003c437b70e6f2f3e7b8739988c2516242360a77a9ec1681",
+            "graphReady": false,
+            "stable": true,
+            "constraintsDigest": "6e99a1033350bd772e641bc76d301c140c76ee1e18e7cb4eb42ca4cf6a2932b1"
+          },
+          "telemetry": {
+            "cacheHit": false,
+            "durationMs": 373,
+            "backendCalls": [
+              "get_query_revision",
+              "get_symbol_context",
+              "governing_rules",
+              "recall_decision",
+              "get_query_revision"
+            ],
+            "fallback": null,
+            "localModel": {
+              "state": "disabled"
+            },
+            "responseChars": 6251,
+            "estimatedTokens": 1562,
+            "tokenMethod": "ceil(characters/4), not provider usage"
+          },
+          "coverage": {
+            "status": "partial",
+            "unknown": [
+              "get_query_revision: partial",
+              "Graph/source alignment is unverified; live excerpts are authoritative for text, indexed relationships may be stale or missing.",
+              "total: indexed relationships are observed evidence, not complete reachability or a runtime trace.",
+              "get_query_revision: partial"
+            ],
+            "truncated": [],
+            "constraintsRemaining": 0,
+            "canAct": true
+          },
+          "sourceFiles": [
+            "src/pricing.mjs"
+          ],
+          "preservedProjectRules": true
+        },
+        {
+          "capability": "assess",
+          "chars": 15328,
+          "revision": {
+            "head": "b736c68fb61761f0cde68de5d3a336680839e61c",
+            "branch": "main",
+            "dirty": false,
+            "fingerprint": "ac3f4d5fbd0447d416b5295853670ebb6b38c33a757fd931242fd866ff567b05",
+            "files": 8,
+            "graph": "49080f5016bbfc1d4935d54970f97c12a4629b977c95ac93731dd4fbea5e0f21",
+            "graphSource": "760b3dc2faef4664003c437b70e6f2f3e7b8739988c2516242360a77a9ec1681",
+            "graphReady": false,
+            "stable": true,
+            "constraintsDigest": "6e99a1033350bd772e641bc76d301c140c76ee1e18e7cb4eb42ca4cf6a2932b1"
+          },
+          "telemetry": {
+            "cacheHit": false,
+            "durationMs": 303,
+            "backendCalls": [
+              "get_query_revision",
+              "get_symbol_context",
+              "preflight_check",
+              "governing_rules",
+              "recall_decision",
+              "get_query_revision"
+            ],
+            "fallback": null,
+            "localModel": {
+              "state": "disabled"
+            },
+            "responseChars": 15328,
+            "estimatedTokens": 3831,
+            "tokenMethod": "ceil(characters/4), not provider usage"
+          },
+          "coverage": {
+            "status": "partial",
+            "unknown": [
+              "get_query_revision: partial",
+              "Graph/source alignment is unverified; live excerpts are authoritative for text, indexed relationships may be stale or missing.",
+              "total: indexed relationships are observed evidence, not complete reachability or a runtime trace.",
+              "get_query_revision: partial"
+            ],
+            "truncated": [],
+            "constraintsRemaining": 0,
+            "canAct": true
+          },
+          "sourceFiles": [
+            "src/pricing.mjs"
+          ],
+          "preservedProjectRules": true
+        }
+      ]
+    },
+    {
+      "variant": "broker",
+      "fullCatalogCount": 99,
+      "fullCatalogChars": 189146,
+      "gatewayCatalogCount": 3,
+      "steps": [
+        {
+          "capability": "find",
+          "chars": 6164,
+          "revision": {
+            "head": "3f96f3389b84081f3fda2272012bd790c9ef05a1",
+            "branch": "main",
+            "dirty": false,
+            "fingerprint": "87d61285fe9eb2d070f3624c3ccbe5ac24590b8d1ab29a228d281b120b3f7e40",
+            "files": 8,
+            "graph": "30b3f6e1f7694761f6c674a6d278abaaa0ceea80f8f3b6d1ffe2bb1271bc3745",
+            "graphSource": "ea294cf8f33066801d4a91db69bc1525cf16370eb08eff9b4a578a8411494ba5",
+            "graphReady": true,
+            "stable": true,
+            "constraintsDigest": "6e99a1033350bd772e641bc76d301c140c76ee1e18e7cb4eb42ca4cf6a2932b1"
+          },
+          "telemetry": {
+            "cacheHit": false,
+            "durationMs": 1842,
+            "backendCalls": [
+              "get_query_revision",
+              "find_code",
+              "governing_rules",
+              "governing_rules",
+              "governing_rules",
+              "governing_rules",
+              "recall_decision",
+              "get_query_revision"
+            ],
+            "fallback": null,
+            "localModel": {
+              "state": "disabled"
+            },
+            "responseChars": 6164,
+            "estimatedTokens": 1540,
+            "tokenMethod": "ceil(characters/4), not provider usage"
+          },
+          "coverage": {
+            "status": "observed",
+            "unknown": [],
+            "truncated": [],
+            "constraintsRemaining": 0,
+            "canAct": true
+          },
+          "sourceFiles": [
+            "src/pricing.mjs",
+            "src/receipt.mjs",
+            "src/pricing.mjs",
+            "src/receipt.mjs",
+            "src/money.mjs",
+            "src/checkout.mjs",
+            "src/checkout.mjs",
+            "src/money.mjs"
+          ],
+          "preservedProjectRules": true
+        },
+        {
+          "capability": "understand",
+          "chars": 6017,
+          "revision": {
+            "head": "3f96f3389b84081f3fda2272012bd790c9ef05a1",
+            "branch": "main",
+            "dirty": false,
+            "fingerprint": "87d61285fe9eb2d070f3624c3ccbe5ac24590b8d1ab29a228d281b120b3f7e40",
+            "files": 8,
+            "graph": "30b3f6e1f7694761f6c674a6d278abaaa0ceea80f8f3b6d1ffe2bb1271bc3745",
+            "graphSource": "ea294cf8f33066801d4a91db69bc1525cf16370eb08eff9b4a578a8411494ba5",
+            "graphReady": true,
+            "stable": true,
+            "constraintsDigest": "6e99a1033350bd772e641bc76d301c140c76ee1e18e7cb4eb42ca4cf6a2932b1"
+          },
+          "telemetry": {
+            "cacheHit": false,
+            "durationMs": 330,
+            "backendCalls": [
+              "get_query_revision",
+              "get_symbol_context",
+              "governing_rules",
+              "recall_decision",
+              "get_query_revision"
+            ],
+            "fallback": null,
+            "localModel": {
+              "state": "disabled"
+            },
+            "responseChars": 6017,
+            "estimatedTokens": 1503,
+            "tokenMethod": "ceil(characters/4), not provider usage"
+          },
+          "coverage": {
+            "status": "partial",
+            "unknown": [
+              "total: indexed relationships are observed evidence, not complete reachability or a runtime trace."
+            ],
+            "truncated": [],
+            "constraintsRemaining": 0,
+            "canAct": true
+          },
+          "sourceFiles": [
+            "src/pricing.mjs"
+          ],
+          "preservedProjectRules": true
+        },
+        {
+          "capability": "assess",
+          "chars": 15014,
+          "revision": {
+            "head": "3f96f3389b84081f3fda2272012bd790c9ef05a1",
+            "branch": "main",
+            "dirty": false,
+            "fingerprint": "87d61285fe9eb2d070f3624c3ccbe5ac24590b8d1ab29a228d281b120b3f7e40",
+            "files": 8,
+            "graph": "30b3f6e1f7694761f6c674a6d278abaaa0ceea80f8f3b6d1ffe2bb1271bc3745",
+            "graphSource": "ea294cf8f33066801d4a91db69bc1525cf16370eb08eff9b4a578a8411494ba5",
+            "graphReady": true,
+            "stable": true,
+            "constraintsDigest": "6e99a1033350bd772e641bc76d301c140c76ee1e18e7cb4eb42ca4cf6a2932b1"
+          },
+          "telemetry": {
+            "cacheHit": false,
+            "durationMs": 293,
+            "backendCalls": [
+              "get_query_revision",
+              "get_symbol_context",
+              "preflight_check",
+              "governing_rules",
+              "recall_decision",
+              "get_query_revision"
+            ],
+            "fallback": null,
+            "localModel": {
+              "state": "disabled"
+            },
+            "responseChars": 15014,
+            "estimatedTokens": 3752,
+            "tokenMethod": "ceil(characters/4), not provider usage"
+          },
+          "coverage": {
+            "status": "partial",
+            "unknown": [
+              "total: indexed relationships are observed evidence, not complete reachability or a runtime trace."
+            ],
+            "truncated": [],
+            "constraintsRemaining": 0,
+            "canAct": true
+          },
+          "sourceFiles": [
+            "src/pricing.mjs"
+          ],
+          "preservedProjectRules": true
+        }
+      ]
+    },
+    {
+      "variant": "local",
+      "fullCatalogCount": 99,
+      "fullCatalogChars": 189146,
+      "gatewayCatalogCount": 3,
+      "steps": [
+        {
+          "capability": "find",
+          "chars": 6504,
+          "revision": {
+            "head": "b6c47a23c9e892acc6e7a1e9df8d27dc3e841be9",
+            "branch": "main",
+            "dirty": false,
+            "fingerprint": "f827a342731a747a3c5c7ef700d6e778f2adfa18baaeb1364b3d0a7bbede8574",
+            "files": 8,
+            "graph": "a460258b8d7c0043e99b3a8ebe1bb3f3776f4afe6692392c1973bd59a29586db",
+            "graphSource": "b4e6a8ab1f43a1aa862c5878c43b73e9b972c59eb19aac7f6f3daa64448a0967",
+            "graphReady": true,
+            "stable": true,
+            "constraintsDigest": "6e99a1033350bd772e641bc76d301c140c76ee1e18e7cb4eb42ca4cf6a2932b1"
+          },
+          "telemetry": {
+            "cacheHit": false,
+            "durationMs": 5684,
+            "backendCalls": [
+              "get_query_revision",
+              "find_code",
+              "find_code",
+              "governing_rules",
+              "governing_rules",
+              "governing_rules",
+              "governing_rules",
+              "recall_decision",
+              "get_query_revision"
+            ],
+            "fallback": null,
+            "localModel": {
+              "state": "used",
+              "model": "onnx-community/Qwen2.5-Coder-0.5B-Instruct:q4",
+              "durationMs": 3655.710699999996,
+              "usage": {
+                "planning": {
+                  "inputTokens": 61,
+                  "outputRetokenized": 6,
+                  "method": "local tokenizer; output retokenized, not provider usage"
+                },
+                "ranking": {
+                  "inputTokens": 625,
+                  "outputRetokenized": 7,
+                  "method": "local tokenizer; output retokenized, not provider usage"
+                }
+              }
+            },
+            "responseChars": 6504,
+            "estimatedTokens": 1625,
+            "tokenMethod": "ceil(characters/4), not provider usage"
+          },
+          "coverage": {
+            "status": "observed",
+            "unknown": [],
+            "truncated": [],
+            "constraintsRemaining": 0,
+            "canAct": true
+          },
+          "sourceFiles": [
+            "src/pricing.mjs",
+            "src/receipt.mjs",
+            "src/pricing.mjs",
+            "src/receipt.mjs",
+            "src/money.mjs",
+            "src/checkout.mjs",
+            "src/checkout.mjs",
+            "src/money.mjs"
+          ],
+          "preservedProjectRules": true
+        },
+        {
+          "capability": "understand",
+          "chars": 6007,
+          "revision": {
+            "head": "b6c47a23c9e892acc6e7a1e9df8d27dc3e841be9",
+            "branch": "main",
+            "dirty": false,
+            "fingerprint": "f827a342731a747a3c5c7ef700d6e778f2adfa18baaeb1364b3d0a7bbede8574",
+            "files": 8,
+            "graph": "a460258b8d7c0043e99b3a8ebe1bb3f3776f4afe6692392c1973bd59a29586db",
+            "graphSource": "b4e6a8ab1f43a1aa862c5878c43b73e9b972c59eb19aac7f6f3daa64448a0967",
+            "graphReady": true,
+            "stable": true,
+            "constraintsDigest": "6e99a1033350bd772e641bc76d301c140c76ee1e18e7cb4eb42ca4cf6a2932b1"
+          },
+          "telemetry": {
+            "cacheHit": false,
+            "durationMs": 380,
+            "backendCalls": [
+              "get_query_revision",
+              "get_symbol_context",
+              "governing_rules",
+              "recall_decision",
+              "get_query_revision"
+            ],
+            "fallback": null,
+            "localModel": {
+              "state": "fallback"
+            },
+            "responseChars": 6007,
+            "estimatedTokens": 1501,
+            "tokenMethod": "ceil(characters/4), not provider usage"
+          },
+          "coverage": {
+            "status": "partial",
+            "unknown": [
+              "total: indexed relationships are observed evidence, not complete reachability or a runtime trace."
+            ],
+            "truncated": [],
+            "constraintsRemaining": 0,
+            "canAct": true
+          },
+          "sourceFiles": [
+            "src/pricing.mjs"
+          ],
+          "preservedProjectRules": true
+        },
+        {
+          "capability": "assess",
+          "chars": 14976,
+          "revision": {
+            "head": "b6c47a23c9e892acc6e7a1e9df8d27dc3e841be9",
+            "branch": "main",
+            "dirty": false,
+            "fingerprint": "f827a342731a747a3c5c7ef700d6e778f2adfa18baaeb1364b3d0a7bbede8574",
+            "files": 8,
+            "graph": "a460258b8d7c0043e99b3a8ebe1bb3f3776f4afe6692392c1973bd59a29586db",
+            "graphSource": "b4e6a8ab1f43a1aa862c5878c43b73e9b972c59eb19aac7f6f3daa64448a0967",
+            "graphReady": true,
+            "stable": true,
+            "constraintsDigest": "6e99a1033350bd772e641bc76d301c140c76ee1e18e7cb4eb42ca4cf6a2932b1"
+          },
+          "telemetry": {
+            "cacheHit": false,
+            "durationMs": 353,
+            "backendCalls": [
+              "get_query_revision",
+              "get_symbol_context",
+              "preflight_check",
+              "governing_rules",
+              "recall_decision",
+              "get_query_revision"
+            ],
+            "fallback": null,
+            "localModel": {
+              "state": "fallback"
+            },
+            "responseChars": 14976,
+            "estimatedTokens": 3743,
+            "tokenMethod": "ceil(characters/4), not provider usage"
+          },
+          "coverage": {
+            "status": "partial",
+            "unknown": [
+              "total: indexed relationships are observed evidence, not complete reachability or a runtime trace."
+            ],
+            "truncated": [],
+            "constraintsRemaining": 0,
+            "canAct": true
+          },
+          "sourceFiles": [
+            "src/pricing.mjs"
+          ],
+          "preservedProjectRules": true
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "harness": "claude",
+      "variant": "baseline",
+      "fixture": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-baseline-mwfsomvl",
+      "code": 0,
+      "latencyMs": 29809,
+      "timedOut": false,
+      "promptChars": 563,
+      "initTools": [
+        "Task",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "DesignSync",
+        "Edit",
+        "EnterWorktree",
+        "ExitWorktree",
+        "Glob",
+        "Grep",
+        "ListAgents",
+        "ListMcpResourcesTool",
+        "Monitor",
+        "NotebookEdit",
+        "PowerShell",
+        "PushNotification",
+        "Read",
+        "ReadMcpResourceDirTool",
+        "ReadMcpResourceTool",
+        "RemoteTrigger",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "SendMessage",
+        "Skill",
+        "TaskStop",
+        "ToolSearch",
+        "WebSearch",
+        "Workflow",
+        "Write",
+        "mcp__memtrace__analyze_relationships",
+        "mcp__memtrace__ask_docs",
+        "mcp__memtrace__calculate_cyclomatic_complexity",
+        "mcp__memtrace__check_job_status",
+        "mcp__memtrace__cleanup_episodes",
+        "mcp__memtrace__cleanup_stale_records",
+        "mcp__memtrace__cleanup_worktrees",
+        "mcp__memtrace__create_anchor",
+        "mcp__memtrace__delete_repository",
+        "mcp__memtrace__detect_changes",
+        "mcp__memtrace__embed_diag",
+        "mcp__memtrace__embed_reset_breaker",
+        "mcp__memtrace__explain",
+        "mcp__memtrace__export_query_audit",
+        "mcp__memtrace__find_api_calls",
+        "mcp__memtrace__find_api_endpoints",
+        "mcp__memtrace__find_ast_review_issues",
+        "mcp__memtrace__find_bridge_symbols",
+        "mcp__memtrace__find_central_symbols",
+        "mcp__memtrace__find_code",
+        "mcp__memtrace__find_code_review_issues",
+        "mcp__memtrace__find_cross_module_issues",
+        "mcp__memtrace__find_dead_code",
+        "mcp__memtrace__find_dependency_path",
+        "mcp__memtrace__find_duplicate_code",
+        "mcp__memtrace__find_hotspots",
+        "mcp__memtrace__find_import_cycles",
+        "mcp__memtrace__find_most_complex_functions",
+        "mcp__memtrace__find_symbol",
+        "mcp__memtrace__find_tool_definitions",
+        "mcp__memtrace__find_yaml_rule_matches",
+        "mcp__memtrace__fleet_acquire_lease",
+        "mcp__memtrace__fleet_audit",
+        "mcp__memtrace__fleet_branch_context",
+        "mcp__memtrace__fleet_get_episode",
+        "mcp__memtrace__fleet_get_escalation",
+        "mcp__memtrace__fleet_get_node_state",
+        "mcp__memtrace__fleet_list_escalations",
+        "mcp__memtrace__fleet_preflight",
+        "mcp__memtrace__fleet_publish_intent",
+        "mcp__memtrace__fleet_query_episodes",
+        "mcp__memtrace__fleet_record_episode",
+        "mcp__memtrace__fleet_release_lease",
+        "mcp__memtrace__fleet_renew_lease",
+        "mcp__memtrace__fleet_resolve_escalation",
+        "mcp__memtrace__fleet_status",
+        "mcp__memtrace__fleet_submit_verdict",
+        "mcp__memtrace__fleet_ydoc_append",
+        "mcp__memtrace__fleet_ydoc_read",
+        "mcp__memtrace__get_api_topology",
+        "mcp__memtrace__get_arc",
+        "mcp__memtrace__get_changes_since",
+        "mcp__memtrace__get_cochange_context",
+        "mcp__memtrace__get_codebase_briefing",
+        "mcp__memtrace__get_daily_briefing",
+        "mcp__memtrace__get_directory_tree",
+        "mcp__memtrace__get_env_contract",
+        "mcp__memtrace__get_episode_replay",
+        "mcp__memtrace__get_evolution",
+        "mcp__memtrace__get_function_quality_metrics",
+        "mcp__memtrace__get_impact",
+        "mcp__memtrace__get_process_flow",
+        "mcp__memtrace__get_query_revision",
+        "mcp__memtrace__get_repository_stats",
+        "mcp__memtrace__get_service_diagram",
+        "mcp__memtrace__get_source_window",
+        "mcp__memtrace__get_style_fingerprint",
+        "mcp__memtrace__get_symbol_context",
+        "mcp__memtrace__get_timeline",
+        "mcp__memtrace__governing_contracts",
+        "mcp__memtrace__governing_rules",
+        "mcp__memtrace__guided_refactor",
+        "mcp__memtrace__index_directory",
+        "mcp__memtrace__ingest_graph_fragment",
+        "mcp__memtrace__link_repositories",
+        "mcp__memtrace__link_symbols",
+        "mcp__memtrace__list_anchors",
+        "mcp__memtrace__list_communities",
+        "mcp__memtrace__list_indexed_repositories",
+        "mcp__memtrace__list_jobs",
+        "mcp__memtrace__list_processes",
+        "mcp__memtrace__list_watched_paths",
+        "mcp__memtrace__list_worktrees",
+        "mcp__memtrace__mem_diag",
+        "mcp__memtrace__pdg_query",
+        "mcp__memtrace__preflight_check",
+        "mcp__memtrace__query_graph",
+        "mcp__memtrace__read_doc",
+        "mcp__memtrace__recall_decision",
+        "mcp__memtrace__record_external_episode",
+        "mcp__memtrace__rename_symbol",
+        "mcp__memtrace__replay_history",
+        "mcp__memtrace__review_agent_sessions",
+        "mcp__memtrace__review_github_pr",
+        "mcp__memtrace__search_docs",
+        "mcp__memtrace__unwatch_directory",
+        "mcp__memtrace__verify_intent",
+        "mcp__memtrace__watch_directory",
+        "mcp__memtrace__why_is_this_here"
+      ],
+      "skills": [
+        "amazon-bedrock",
+        "aws-ai-ml",
+        "aws-auth",
+        "aws-billing-and-cost-management",
+        "aws-blocks",
+        "aws-cdk",
+        "aws-cloudformation",
+        "aws-compute",
+        "aws-containers",
+        "aws-database",
+        "aws-deployment",
+        "aws-iam",
+        "aws-messaging-and-streaming",
+        "aws-networking",
+        "aws-observability",
+        "aws-sdk-js-v3-usage",
+        "aws-sdk-python-usage",
+        "aws-sdk-swift-usage",
+        "aws-security",
+        "aws-serverless",
+        "aws-storage",
+        "aws-well-architected-review",
+        "launch-with-aws",
+        "signing-in-to-aws",
+        "deep-research",
+        "memtrace-skills:mt-impact",
+        "memtrace-skills:mt-onboard",
+        "memtrace-skills:mt-preflight",
+        "memtrace-skills:mt-recall",
+        "memtrace-skills:memtrace-api-topology",
+        "memtrace-skills:memtrace-change-impact-analysis",
+        "memtrace-skills:memtrace-cochange",
+        "memtrace-skills:memtrace-code-review",
+        "memtrace-skills:memtrace-codebase-exploration",
+        "memtrace-skills:memtrace-continuous-memory",
+        "memtrace-skills:memtrace-daily",
+        "memtrace-skills:memtrace-decision-memory",
+        "memtrace-skills:memtrace-docs",
+        "memtrace-skills:memtrace-episode-replay",
+        "memtrace-skills:memtrace-evolution",
+        "memtrace-skills:memtrace-first",
+        "memtrace-skills:memtrace-fleet-first",
+        "memtrace-skills:memtrace-fleet-publish-intent",
+        "memtrace-skills:memtrace-fleet-record-episode",
+        "memtrace-skills:memtrace-fleet-resolve",
+        "memtrace-skills:memtrace-graph",
+        "memtrace-skills:memtrace-guided-refactor",
+        "memtrace-skills:memtrace-impact",
+        "memtrace-skills:memtrace-incident-investigation",
+        "memtrace-skills:memtrace-index",
+        "memtrace-skills:memtrace-preflight",
+        "memtrace-skills:memtrace-quality",
+        "memtrace-skills:memtrace-refactoring-guide",
+        "memtrace-skills:memtrace-relationships",
+        "memtrace-skills:memtrace-search",
+        "memtrace-skills:memtrace-session-continuity",
+        "memtrace-skills:memtrace-style-fingerprint",
+        "discord:access",
+        "discord:configure",
+        "cowork-plugin-management:cowork-plugin-customizer",
+        "cowork-plugin-management:create-cowork-plugin",
+        "design:accessibility-review",
+        "design:design-critique",
+        "design:design-handoff",
+        "design:design-system",
+        "design:research-synthesis",
+        "design:user-research",
+        "design:ux-copy",
+        "design",
+        "design-sync",
+        "dataviz",
+        "update-config",
+        "verify",
+        "debug",
+        "code-review",
+        "simplify",
+        "batch",
+        "fewer-permission-prompts",
+        "doctor",
+        "loop",
+        "schedule",
+        "claude-api",
+        "workflow-authoring",
+        "run",
+        "run-skill-generator",
+        "plugin-authoring",
+        "anthropic-skills:built-in-browser",
+        "anthropic-skills:chrome-browser",
+        "anthropic-skills:computer-use",
+        "anthropic-skills:deep-research",
+        "anthropic-skills:docs",
+        "anthropic-skills:docx",
+        "anthropic-skills:google-workspace",
+        "anthropic-skills:import-memory",
+        "anthropic-skills:kundeopslag",
+        "anthropic-skills:minto-pyramid",
+        "anthropic-skills:morning",
+        "anthropic-skills:pdf",
+        "anthropic-skills:pitch-deck-builder",
+        "anthropic-skills:pptx",
+        "anthropic-skills:skill-creator",
+        "anthropic-skills:vc-ic-prep",
+        "anthropic-skills:web-artifacts-builder",
+        "anthropic-skills:xlsx"
+      ],
+      "mcpServers": [
+        {
+          "name": "memtrace",
+          "status": "connected",
+          "source": "dynamic"
+        }
+      ],
+      "actualUsage": {
+        "input_tokens": 8,
+        "cache_creation_input_tokens": 37814,
+        "cache_read_input_tokens": 152780,
+        "output_tokens": 2417,
+        "output_tokens_details": {
+          "thinking_tokens": 445
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 37814,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "global",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 739,
+            "cache_read_input_tokens": 53658,
+            "cache_creation_input_tokens": 969,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 969
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard",
+        "fallback_credit": null
+      },
+      "modelUsage": {
+        "claude-haiku-5-5": {
+          "inputTokens": 8,
+          "outputTokens": 2417,
+          "cacheReadInputTokens": 152780,
+          "cacheCreationInputTokens": 37814,
+          "webSearchRequests": 0,
+          "costUSD": 0.0102999,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "thinkingTokens": 445,
+          "cacheCreationEphemeral5mInputTokens": 0,
+          "cacheCreationEphemeral1hInputTokens": 37814,
+          "canonicalModel": "claude-haiku-5-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        }
+      },
+      "totalCostUsd": 0.0102999,
+      "resultSubtype": "success",
+      "toolCalls": [
+        {
+          "name": "ToolSearch",
+          "input": {
+            "query": "select:mcp__memtrace__preflight_check,mcp__memtrace__find_symbol,mcp__memtrace__get_symbol_context,mcp__memtrace__governing_rules,mcp__memtrace__find_code,mcp__memtrace__get_impact,mcp__memtrace__list_indexed_repositories",
+            "max_results": 10
+          }
+        },
+        {
+          "name": "Bash",
+          "input": {
+            "command": "ls -la && cat src/pricing.mjs && echo ---- && cat src/receipt.mjs && echo ---- && ls test* tests 2>/dev/null; ls -R . | head -50",
+            "description": "Show project layout and pricing/receipt source"
+          }
+        },
+        {
+          "name": "mcp__memtrace__get_symbol_context",
+          "input": {
+            "symbol": "total",
+            "repo_id": "context-bug-baseline-mwfsomvl",
+            "file_path": "src/pricing.mjs"
+          }
+        },
+        {
+          "name": "mcp__memtrace__preflight_check",
+          "input": {
+            "repo_id": "context-bug-baseline-mwfsomvl",
+            "symbol": "total",
+            "file_path": "src/pricing.mjs"
+          }
+        },
+        {
+          "name": "Bash",
+          "input": {
+            "command": "cat src/checkout.mjs; echo ----; cat src/money.mjs; echo ----; cat pricing.test.mjs",
+            "description": "Read checkout, money helper, and existing test"
+          }
+        },
+        {
+          "name": "Edit",
+          "input": {
+            "replace_all": false,
+            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-baseline-mwfsomvl\\src\\pricing.mjs",
+            "old_string": "(line.quantity || 1)",
+            "new_string": "(line.quantity ?? 1)"
+          }
+        },
+        {
+          "name": "Bash",
+          "input": {
+            "command": "node --test; node -e \"import('./src/pricing.mjs').then(m=>{const t=m.total;console.log('zero qty:',t([{quantity:0,unitPrice:9}]),'null qty:',t([{quantity:null,unitPrice:9}]),'missing qty:',t([{unitPrice:9}]),'qty 2:',t([{quantity:2,unitPrice:9}]))})\"",
+            "description": "Run test suite and spot-check quantity edge cases"
+          }
+        }
+      ],
+      "finalText": "The zero-quantity bug is fixed. A line with `quantity: 0` and `unitPrice: 9` now totals 0 instead of 9. `node --test` passes (1/1).\n\n**Root cause:** `src/pricing.mjs:3` used `(line.quantity || 1)`. In JavaScript, `0` is falsy, so a zero quantity fell back to the default of 1. I changed it to `(line.quantity ?? 1)`, which only substitutes 1 for `null` or `undefined`.\n\n**Callers (from Memtrace `get_symbol_context` and `preflight_check`):**\n- `src/receipt.mjs:3` — `makeReceipt` calls `total(lines)`, one argument, and sets `currency: 'DKK'`.\n- `src/checkout.mjs:2` — `checkout` calls `makeReceipt`, so it reaches `total` indirectly.\n- `pricing.test.mjs:1` — the existing test imports `total`.\n- Preflight rated the impact MEDIUM, with 5 dependents. Co-change history showed only one change in 30 days, all from the same commit.\n\n**Constraints applied:**\n- `roundCents` is still applied to the subtotal, and the currency stays `'DKK'` in `receipt.mjs`, which I did not touch.\n- One-argument calls are unchanged.\n- Only `src/pricing.mjs` was edited. No branches or Git state were touched.\n- `AGENTS.md` says to edit `pricing.mjs` and `receipt.mjs`; your instruction narrowed that to `pricing.mjs`, and I followed yours.\n\n**Checks run:**\n- `node --test`: 1 test, 1 pass, 0 fail.\n- Spot checks after the edit: `quantity: 0` → 0, `quantity: null` → 9, missing quantity → 9, `quantity: 2` → 18.\n\n**Uncertainty:**\n- The existing test covers only non-zero quantities, so nothing in the suite locks in the zero case. I did not add a regression test because you limited edits to `pricing.mjs`.\n- Memtrace's index may lag the working tree. I verified the change by reading the source and running the code directly, not by relying on the graph.",
+      "quality": {
+        "independentOraclePassed": true,
+        "oracleOutput": "All independent zero/null/missing quantity, currency and rounding assertions passed\n",
+        "existingTestsPassed": true,
+        "scopePreserved": true,
+        "changedFiles": [
+          "src/pricing.mjs"
+        ],
+        "diffFile": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-baseline-mwfsomvl\\.memcode\\engine\\worker.diff"
+      },
+      "stderr": ""
+    },
+    {
+      "harness": "claude",
+      "variant": "broker",
+      "fixture": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim",
+      "code": 0,
+      "latencyMs": 25949,
+      "timedOut": false,
+      "promptChars": 7478,
+      "initTools": [
+        "Bash",
+        "Edit",
+        "Read",
+        "Write",
+        "mcp__memcode-context__assess",
+        "mcp__memcode-context__find",
+        "mcp__memcode-context__understand"
+      ],
+      "skills": [],
+      "mcpServers": [
+        {
+          "name": "memcode-context",
+          "status": "connected",
+          "source": "dynamic"
+        }
+      ],
+      "actualUsage": {
+        "input_tokens": 6,
+        "cache_creation_input_tokens": 23434,
+        "cache_read_input_tokens": 44320,
+        "output_tokens": 2306,
+        "output_tokens_details": {
+          "thinking_tokens": 307
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 23434,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "global",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 881,
+            "cache_read_input_tokens": 27179,
+            "cache_creation_input_tokens": 1036,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 1036
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard",
+        "fallback_credit": null
+      },
+      "modelUsage": {
+        "claude-haiku-5-5": {
+          "inputTokens": 6,
+          "outputTokens": 2306,
+          "cacheReadInputTokens": 44320,
+          "cacheCreationInputTokens": 23434,
+          "webSearchRequests": 0,
+          "costUSD": 0.0062836,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "thinkingTokens": 307,
+          "cacheCreationEphemeral5mInputTokens": 0,
+          "cacheCreationEphemeral1hInputTokens": 23434,
+          "canonicalModel": "claude-haiku-5-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        }
+      },
+      "totalCostUsd": 0.0062836,
+      "resultSubtype": "success",
+      "toolCalls": [
+        {
+          "name": "mcp__memcode-context__find",
+          "input": {
+            "query": "total quantity unitPrice line.quantity || 1",
+            "scope": "src/pricing.mjs"
+          }
+        },
+        {
+          "name": "mcp__memcode-context__understand",
+          "input": {
+            "target": {
+              "symbol": "total",
+              "file": "src/pricing.mjs"
+            },
+            "question": "Why is quantity 0 charged as 9 when unitPrice is 9? Who calls total and what do callers depend on?"
+          }
+        },
+        {
+          "name": "mcp__memcode-context__assess",
+          "input": {
+            "targets": [
+              {
+                "symbol": "total",
+                "file": "src/pricing.mjs"
+              }
+            ],
+            "change": "implementation",
+            "intent": "Change default-quantity fallback so quantity 0 yields 0 while null/undefined still default to 1; keep roundCents and DKK; keep one-argument calls working."
+          }
+        },
+        {
+          "name": "Read",
+          "input": {
+            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\\src\\pricing.mjs"
+          }
+        },
+        {
+          "name": "Edit",
+          "input": {
+            "replace_all": false,
+            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\\src\\pricing.mjs",
+            "old_string": "(line.quantity || 1) * line.unitPrice",
+            "new_string": "(line.quantity ?? 1) * line.unitPrice"
+          }
+        },
+        {
+          "name": "Bash",
+          "input": {
+            "command": "cd \"C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\" && node -e \"import('./src/pricing.mjs').then(m=>{console.log('qty0:',m.total([{quantity:0,unitPrice:9}]));console.log('undef:',m.total([{unitPrice:9}]));console.log('null:',m.total([{quantity:null,unitPrice:9}]));console.log('qty2:',m.total([{quantity:2,unitPrice:9}]));console.log('mixed:',m.total([{quantity:0,unitPrice:9},{quantity:3,unitPrice:0.1}]))})\" && node --test",
+            "description": "Spot-check total() edge cases and run node --test"
+          }
+        }
+      ],
+      "finalText": "A line with quantity 0 and unit price 9 now totals 0 instead of 9. The fix is one token in `src/pricing.mjs`, and `node --test` passes.\n\n**Cause:** `total()` in `src/pricing.mjs:3` computed `(line.quantity || 1) * line.unitPrice`. `||` treats `0` as falsy, so a zero quantity fell back to the default of 1.\n\n**Fix:** changed `||` to `??`, so only `null` or `undefined` default to 1. `roundCents` and the DKK currency handling are untouched.\n\n**Checks run:**\n- Quantity 0, price 9 → 0 (was 9)\n- Quantity missing, price 9 → 9 (default kept)\n- Quantity null, price 9 → 9 (default kept)\n- Quantity 2, price 9 → 18\n- Mixed lines (qty 0 @ 9, qty 3 @ 0.1) → 0.3, rounded through `roundCents`\n- `node --test` → 1 test, 1 pass, 0 fail\n\n**Source references:**\n- `src/pricing.mjs:3`, the changed line\n- `src/receipt.mjs:2-4`, `makeReceipt` calls `total(lines)` and returns `{ amount, currency: 'DKK' }`\n- `src/checkout.mjs:2`, `checkout` calls `makeReceipt`\n- `src/money.mjs:1`, `roundCents`\n- `AGENTS.md:1-2`, the project constraints (DKK, roundCents, one-argument calls, edit only `src/pricing.mjs` and `src/receipt.mjs`, no Git state changes, run `node --test`)\n\n**Gateway results:**\n- `find` returned the `total` and `makeReceipt` candidates and the same constraints.\n- `understand` reported callers `makeReceipt` and `pricing.test.mjs`. It also reported `callers_conclusive: false` and coverage as partial, so this is observed static evidence, not a complete reachability trace.\n- `assess` rated the change MEDIUM risk. It listed 5 dependent symbols, and its impact list was `pricing.test.mjs`, `checkout.mjs` and `receipt.mjs`.\n\n**Uncertainty:**\n- The test suite is a single test, so it does not cover the zero-quantity case. The checks above were ad hoc `node -e` runs, not committed tests.\n- I did not touch `src/receipt.mjs`, though the constraint allows it, because the bug lives entirely in `total()`.\n- I did not change the Git state. `git status` will show only the edit to `src/pricing.mjs`.",
+      "quality": {
+        "independentOraclePassed": true,
+        "oracleOutput": "All independent zero/null/missing quantity, currency and rounding assertions passed\n",
+        "existingTestsPassed": true,
+        "scopePreserved": true,
+        "changedFiles": [
+          "src/pricing.mjs"
+        ],
+        "diffFile": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\\.memcode\\engine\\worker.diff"
+      },
+      "stderr": ""
+    },
+    {
+      "harness": "claude",
+      "variant": "local",
+      "fixture": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy",
+      "code": 0,
+      "latencyMs": 27155,
+      "timedOut": false,
+      "promptChars": 7818,
+      "initTools": [
+        "Bash",
+        "Edit",
+        "Read",
+        "Write",
+        "mcp__memcode-context__assess",
+        "mcp__memcode-context__find",
+        "mcp__memcode-context__understand"
+      ],
+      "skills": [],
+      "mcpServers": [
+        {
+          "name": "memcode-context",
+          "status": "connected",
+          "source": "dynamic"
+        }
+      ],
+      "actualUsage": {
+        "input_tokens": 10,
+        "cache_creation_input_tokens": 21755,
+        "cache_read_input_tokens": 94076,
+        "output_tokens": 1977,
+        "output_tokens_details": {
+          "thinking_tokens": 270
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 21755,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "global",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 651,
+            "cache_read_input_tokens": 26149,
+            "cache_creation_input_tokens": 387,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 387
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard",
+        "fallback_credit": null
+      },
+      "modelUsage": {
+        "claude-haiku-5-5": {
+          "inputTokens": 10,
+          "outputTokens": 1977,
+          "cacheReadInputTokens": 94076,
+          "cacheCreationInputTokens": 21755,
+          "webSearchRequests": 0,
+          "costUSD": 0.00628126,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "thinkingTokens": 270,
+          "cacheCreationEphemeral5mInputTokens": 0,
+          "cacheCreationEphemeral1hInputTokens": 21755,
+          "canonicalModel": "claude-haiku-5-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        }
+      },
+      "totalCostUsd": 0.00628126,
+      "resultSubtype": "success",
+      "toolCalls": [
+        {
+          "name": "mcp__memcode-context__understand",
+          "input": {
+            "target": {
+              "symbol": "total",
+              "file": "src/pricing.mjs"
+            },
+            "question": "Who calls total, and does any caller pass more than one argument or rely on the quantity default?"
+          }
+        },
+        {
+          "name": "mcp__memcode-context__assess",
+          "input": {
+            "targets": [
+              {
+                "symbol": "total",
+                "file": "src/pricing.mjs"
+              }
+            ],
+            "change": "implementation",
+            "intent": "Change quantity defaulting from || to ?? so quantity 0 yields 0 while null/undefined still default to 1; keep one-argument signature and roundCents rounding."
+          }
+        },
+        {
+          "name": "Read",
+          "input": {
+            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy\\src\\pricing.mjs"
+          }
+        },
+        {
+          "name": "Edit",
+          "input": {
+            "replace_all": false,
+            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy\\src\\pricing.mjs",
+            "old_string": "(line.quantity || 1) * line.unitPrice",
+            "new_string": "(line.quantity ?? 1) * line.unitPrice"
+          }
+        },
+        {
+          "name": "Bash",
+          "input": {
+            "command": "node --test",
+            "description": "Run node test suite"
+          }
+        },
+        {
+          "name": "Bash",
+          "input": {
+            "command": "node --input-type=module -e \"import { total } from './src/pricing.mjs'; console.log(total([{quantity:0,unitPrice:9}]), total([{unitPrice:9}]), total([{quantity:null,unitPrice:9}]), total([{quantity:2,unitPrice:9}]))\"",
+            "description": "Check total for zero, missing, null, and 2 quantities"
+          }
+        }
+      ],
+      "finalText": "Fixed. A line with quantity 0 and unit price 9 now totals 0 instead of 9.\n\n**Root cause:** `src/pricing.mjs:3` used `(line.quantity || 1)`. Zero is falsy, so it fell back to the default of 1.\n\n**Fix:** I changed it to `(line.quantity ?? 1)`. Only `null` and `undefined` now default to 1, and zero stays zero. I changed nothing else, so `roundCents` and the DKK currency in `makeReceipt` are untouched.\n\n**Callers** (from `understand` and `assess`, observed static edges):\n- `src/receipt.mjs` `makeReceipt` calls `total(lines)` with one argument.\n- `src/checkout.mjs` `checkout` reaches `total` through `makeReceipt`.\n- `pricing.test.mjs` imports `total`.\n\nAll of them pass one argument, so the signature is unchanged. `assess` rated the change MEDIUM risk and reported 5 affected symbols.\n\n**Checks run:**\n- `node --test`: 1 test, 1 pass, 0 fail. The existing test does not cover zero quantity.\n- A direct check of `total`: quantity 0 gives 0, a missing quantity gives 9, quantity `null` gives 9, and quantity 2 gives 18.\n\n**Constraints followed** (from `AGENTS.md`): DKK currency, totals still rounded by `roundCents`, one-argument calls preserved, only `src/pricing.mjs` edited, no Git state changes.\n\n**Uncertainty:** The graph reports observed static relationships, not runtime reachability, so the caller list may be incomplete. I did not add a regression test for zero quantity, because the constraints limit edits to `src/pricing.mjs` and `src/receipt.mjs`. A test would need to live in `pricing.test.mjs`, which is outside that scope. If you want one, I can add it once you approve the wider scope.",
+      "quality": {
+        "independentOraclePassed": true,
+        "oracleOutput": "All independent zero/null/missing quantity, currency and rounding assertions passed\n",
+        "existingTestsPassed": true,
+        "scopePreserved": true,
+        "changedFiles": [
+          "src/pricing.mjs"
+        ],
+        "diffFile": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy\\.memcode\\engine\\worker.diff"
+      },
+      "stderr": ""
+    }
+  ],
+  "scopeVerification": [
+    {
+      "variant": "baseline",
+      "scopeFile": {
+        "version": 1,
+        "members": [
+          {
+            "repo_id": "context-bug-baseline-mwfsomvl",
+            "path": "c:/Users/AlexT/AppData/Local/Temp/memcode-context-eval-HgvpfS/context-bug-baseline-mwfsomvl"
+          }
+        ],
+        "scope_source": {
+          "kind": "manifest",
+          "manifest_path": "\\\\?\\C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-baseline-mwfsomvl\\.memcode\\engine\\workspace.toml"
+        },
+        "published_by": {
+          "pid": 81848,
+          "command": "mcp --workspace-file C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-baseline-mwfsomvl\\.memcode\\engine\\workspace.toml",
+          "at_epoch_ms": 1794623817598
+        }
+      }
+    },
+    {
+      "variant": "broker",
+      "scopeFile": {
+        "version": 1,
+        "members": [
+          {
+            "repo_id": "context-bug-broker-mwfspmim",
+            "path": "c:/Users/AlexT/AppData/Local/Temp/memcode-context-eval-HgvpfS/context-bug-broker-mwfspmim"
+          }
+        ],
+        "scope_source": {
+          "kind": "manifest",
+          "manifest_path": "\\\\?\\C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\\.memcode\\engine\\workspace.toml"
+        },
+        "published_by": {
+          "pid": 98160,
+          "command": "mcp --workspace-file C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\\.memcode\\engine\\workspace.toml",
+          "at_epoch_ms": 1794623863753
+        }
+      }
+    },
+    {
+      "variant": "local",
+      "scopeFile": {
+        "version": 1,
+        "members": [
+          {
+            "repo_id": "context-bug-local-mwfsqjdy",
+            "path": "c:/Users/AlexT/AppData/Local/Temp/memcode-context-eval-HgvpfS/context-bug-local-mwfsqjdy"
+          }
+        ],
+        "scope_source": {
+          "kind": "manifest",
+          "manifest_path": "\\\\?\\C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy\\.memcode\\engine\\workspace.toml"
+        },
+        "published_by": {
+          "pid": 106100,
+          "command": "mcp --workspace-file C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy\\.memcode\\engine\\workspace.toml",
+          "at_epoch_ms": 1794623906312
+        }
+      }
+    }
+  ]
+}

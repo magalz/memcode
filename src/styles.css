@@ -2,6 +2,10 @@
 @import url("./styles-select.css");
 @import url("./styles-roadmap.css");
 @import url("./styles-fleet.css");
+@import url("./styles-cycles.css");
+@import url("./styles-intelligence.css");
+@import url("./styles-board.css");
+@import url("./styles-planning.css");
 
 :root {
   font-family:

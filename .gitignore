@@ -1,6 +1,9 @@
 node_modules/
 dist/
 dist-electron/
+dist-runtime/
+src-tauri/target/
+src-tauri/gen/
 release/
 .memdb/
 .memtrace/

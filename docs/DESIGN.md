@@ -20,7 +20,7 @@ scale, fine borders, soft shadows and a few deliberate contrasts.
 The board and list carry the same hierarchy: identifier, outcome, context, runbook
 progress, worker. Status should help scanning without turning the workspace into a
 wall of colored badges. Detail views keep the conversation primary and evidence
-close. Browser content lives in a separate Electron view, not a privileged iframe.
+close. Browser content lives in an isolated native WebView with no app RPC capability.
 
 Motion should explain state, finish quickly and honor reduced-motion preferences.
 Every visible control needs a meaningful action, disabled explanation, or empty

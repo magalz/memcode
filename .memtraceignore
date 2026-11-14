@@ -1,6 +1,13 @@
-node_modules
-dist
-dist-electron
-release
-test-results
-playwright-report
+# Analyze first-party source, not build products, local engine state or worker output.
+node_modules/
+dist/
+dist-electron/
+dist-runtime/
+src-tauri/target/
+src-tauri/gen/
+.memcode/
+.memdb/
+.memtrace/
+release/
+test-results/
+playwright-report/

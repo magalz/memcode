@@ -1,0 +1,76 @@
+{
+  "at": "2026-11-14T02:49:53.161Z",
+  "fixture": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm",
+  "readOnly": true,
+  "limitations": [
+    "Protocol interoperability only; no complete coding-task comparison for Codex or Cursor.",
+    "Codex adds the explicit gateway through a per-call server map. Inherited app/plugin MCP startup is still observed; skills, authentication and managed policy are preserved. Catalog isolation is not certified.",
+    "Cursor adds a project-local gateway with explicit per-tool MCP allow rules; inherited global tools/skills are preserved. No exclusive catalog or shell-search enforcement claim."
+  ],
+  "adapters": [
+    {
+      "id": "codex",
+      "model": "gpt-6-luna",
+      "code": 0,
+      "latencyMs": 17483,
+      "timedOut": false,
+      "capabilities": [
+        "find",
+        "understand",
+        "assess"
+      ],
+      "passed": true,
+      "usage": {
+        "input_tokens": 125875,
+        "cached_input_tokens": 104960,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 443,
+        "reasoning_output_tokens": 0
+      },
+      "result": [
+        "I’ll use only the three approved MemCode retrieval calls, then summarize their evidence and any coverage limits.",
+        "- **Source:** `total` is defined in `src/pricing.mjs`. It currently accepts `lines` and an optional `discountRate = 0`, validates the rate, and rounds the discounted total with `roundCents`.\n- **Observed callers:** `makeReceipt` in `src/receipt.mjs` passes both `lines` and `discountRate`; `checkout` in `src/checkout.mjs` calls `makeReceipt(lines)` with one argument. The index also shows `pricing.test.mjs` as a caller, but caller coverage is explicitly inconclusive.\n- **Project constraint:** Keep currency in DKK, round totals with `roundCents`, and preserve existing one-argument calls. The rules also restrict edits to `src/pricing.mjs` and `src/receipt.mjs`, prohibit Git-state changes, and specify `node --test`.\n- **Coverage:** Partial. `find` reported graph/source alignment unverified and possible stale or missing relationships; `understand` and `assess` likewise say indexed relationships are not complete reachability or runtime traces. The assessment found five affected nodes and marked risk medium, based on observed static dependencies."
+      ],
+      "stderr": "ansport<rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_client_adapter::StreamableHttpClientAdapter>>>>] error: Client error: HTTP request failed: http/request failed: error sending request for url (http://127.0.0.1:4853/mcp-v2), when send initialize request\n2026-11-14T02:50:11.438980Z  WARN codex_mcp::rmcp_client: failed to initialize MCP client during shutdown: MCP startup failed: handshaking with MCP server failed: Send message error Transport [codex_rmcp_client::tool_list_changes::ToolListChanges<codex_rmcp_client::event_notification_transport::EventNotificationTransport<rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_client_adapter::StreamableHttpClientAdapter>>>>] error: Client error: HTTP request failed: http/request failed: error sending request for url (http://127.0.0.1:4853/mcp-v2), when send initialize request: Send message error Transport [codex_rmcp_client::tool_list_changes::ToolListChanges<codex_rmcp_client::event_notification_transport::EventNotificationTransport<rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_client_adapter::StreamableHttpClientAdapter>>>>] error: Client error: HTTP request failed: http/request failed: error sending request for url (http://127.0.0.1:4853/mcp-v2), when send initialize request\n",
+      "streamPath": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\.memcode\\conformance-codex\\stream.jsonl"
+    },
+    {
+      "id": "cursor",
+      "model": "composer-2.5",
+      "code": 0,
+      "latencyMs": 20366,
+      "timedOut": false,
+      "capabilities": [
+        "find",
+        "understand",
+        "assess"
+      ],
+      "passed": true,
+      "usage": {
+        "inputTokens": 30174,
+        "outputTokens": 1100,
+        "cacheReadTokens": 23424,
+        "cacheWriteTokens": 0
+      },
+      "result": {
+        "type": "result",
+        "subtype": "success",
+        "duration_ms": 15620,
+        "duration_api_ms": 15620,
+        "is_error": false,
+        "result": "Discovering the memcode-context MCP tools, then invoking the three required calls.\n\n\n## MemCode context protocol conformance (read-only)\n\nAll three **memcode-context** gateway calls completed successfully (`find`, `understand`, `assess`). No Fleet or other MCP servers were used.\n\n### Source file\n**`src/pricing.mjs`** — `total(lines, discountRate = 0)` (verified working-file excerpt, lines 2–8): validates `discountRate` in \\[0, 1\\], sums line items, returns `roundCents(subtotal * (1 - discountRate))`. Callee: `roundCents` in `src/money.mjs`.\n\n### Observed caller\nPrimary indexed **CALLS** edge: **`makeReceipt`** in `src/receipt.mjs` (line 3: `total(lines, discountRate)`). Also: **`pricing.test.mjs`** imports/calls `total`; upstream chain includes **`checkout`** → `makeReceipt` → `total` (impact depth 2).\n\n`callers_conclusive: false` — listed callers are indexed static evidence, not a full runtime trace.\n\n### Project constraint\nFrom **`AGENTS.md`** (refreshed in all three responses): keep currency **DKK**; keep totals rounded via **`roundCents`**; **preserve existing one-argument calls**; only edit **`src/pricing.mjs`** and **`src/receipt.mjs`**; do not switch branches or edit Git state; run **`node --test`**.\n\n### `find('invoice amount')`\nSurfaced the pricing/receipt path: `total`, `makeReceipt` / `amount`, `checkout`, and `roundCents` — consistent with “invoice amount” semantics in this repo.\n\n### `assess` (signature change: “Add an optional discount argument”)\nWorking tree already shows optional **`discountRate`** on `total` and `makeReceipt`. Assess still flags **MEDIUM** upstream impact (`pricing.test.mjs`, `receipt.mjs`, `checkout.mjs`) and suggests re-running impact/tests after edits. Checklist notes ~4 branch paths and dependent symbols.\n\n### Coverage honesty\n| Signal | Value |\n|--------|--------|\n| **coverage.status** | **partial** (all three calls) |\n| **revision.dirty** | **true** (working tree differs from HEAD `f3f629f…`) |\n| **graphReady** | **false** |\n| **Unknowns** | `get_query_revision: partial`; graph/source alignment unverified — **live excerpts authoritative**; relationships may be stale |\n| **recall_decision** | **cannot_prove** (no applicable decision nodes in as_of view) |\n| **canAct** | **true** (constraints fully surfaced) |\n\n**Stale/partial takeaway:** Text from verified working files matches the current dirty tree; the graph may lag that tree (`graphReady: false`). Relationship and impact data are useful but not guaranteed complete until alignment is verified and tests are run (host responsibility, not executed here).",
+        "session_id": "fa20ec5c-334d-4248-965b-71d50dd879cc",
+        "request_id": "4df63f1a-222e-41f6-876d-2ce87749de6a",
+        "usage": {
+          "inputTokens": 30174,
+          "outputTokens": 1100,
+          "cacheReadTokens": 23424,
+          "cacheWriteTokens": 0
+        }
+      },
+      "stderr": "",
+      "streamPath": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\.memcode\\conformance-cursor\\stream.jsonl"
+    }
+  ],
+  "trackedDiffUnchanged": true
+}

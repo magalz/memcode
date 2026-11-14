@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planRoute, qualifyTier, routingInputs } from "../electron/router.ts";
+import { planRoute, qualifyTier, routingInputs } from "../runtime/router.ts";
 import { initialState } from "../src/seed.ts";
 import type { Evidence, HarnessRuntime } from "../src/shared.ts";
 

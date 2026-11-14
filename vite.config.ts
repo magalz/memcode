@@ -15,6 +15,20 @@ export default defineConfig({
         ),
     },
   ],
-  server: { host: "127.0.0.1", port: 5197, strictPort: true },
+  server: {
+    host: "127.0.0.1",
+    port: 5197,
+    strictPort: true,
+    watch: {
+      usePolling: true,
+      interval: 300,
+      ignored: [
+        "**/src-tauri/**",
+        "**/dist-runtime/**",
+        "**/.memdb/**",
+        "**/.memtrace/**",
+      ],
+    },
+  },
   build: { target: "es2023" },
 });

@@ -1,3 +1,29 @@
+import type {
+  Cycle,
+  CreateCycle,
+  CustomField,
+  PlanningHistory,
+  SavedView,
+  TaskPlanningFields,
+  WorkflowState,
+} from "./planning/types";
+import type { QualitySnapshot } from "./intelligence";
+import type { ContextAssistantSettings } from "./context-settings";
+export type { ContextAssistantSettings } from "./context-settings";
+export type { QualitySnapshot, IntelligenceDetail } from "./intelligence";
+export type {
+  Cycle,
+  CreateCycle,
+  CustomField,
+  PlanningHistory,
+  SavedView,
+  TaskPlanningFields,
+  WorkflowState,
+  ViewConfig,
+  ViewMode,
+  GroupBy,
+  WorkFilters,
+} from "./planning/types";
 export const stages = ["planned", "working", "review", "done"] as const;
 export type Stage = (typeof stages)[number];
 export type Harness = "codex" | "claude" | "cursor";
@@ -98,7 +124,7 @@ export interface Evidence {
   note: string;
   measuredAt: string;
 }
-export interface WorkItem {
+export interface WorkItem extends TaskPlanningFields {
   id: string;
   identifier: string;
   projectId: string;
@@ -149,6 +175,7 @@ export interface Project {
   example?: boolean;
 }
 export interface Settings {
+  contextAssistant?: ContextAssistantSettings;
   memtracePath: string;
   speechEndpoint: string;
   defaultHarness: Harness;
@@ -176,6 +203,12 @@ export interface CreateEpic {
   phase: Epic["phase"];
 }
 export interface AppState {
+  qualitySnapshots: QualitySnapshot[];
+  cycles: Cycle[];
+  savedViews: SavedView[];
+  workflowStates: WorkflowState[];
+  customFields: CustomField[];
+  planning: PlanningHistory;
   version: 1;
   projects: Project[];
   tasks: WorkItem[];
@@ -191,7 +224,7 @@ export interface RuntimeInfo {
   memtraceAvailable: boolean;
   dataPath: string;
 }
-export interface CreateTask {
+export interface CreateTask extends TaskPlanningFields {
   projectId: string;
   title: string;
   description: string;
@@ -214,6 +247,30 @@ export interface PreviewInput {
   bounds: { x: number; y: number; width: number; height: number };
 }
 export interface MemCodeAPI {
+  refreshIntelligence(
+    projectId: string,
+    refreshIndex?: boolean,
+  ): Promise<QualitySnapshot>;
+  queryIntelligence(
+    projectId: string,
+    section: string,
+    input?: Record<string, unknown>,
+  ): Promise<unknown>;
+  createCycle(input: CreateCycle): Promise<Cycle>;
+  updateCycle(
+    id: string,
+    patch: Partial<Omit<CreateCycle, "projectId">>,
+  ): Promise<void>;
+  startCycle(id: string): Promise<void>;
+  completeCycle(
+    id: string,
+    targetCycleId?: string | null,
+  ): Promise<{ moved: number }>;
+  saveView(input: Omit<SavedView, "id"> & { id?: string }): Promise<SavedView>;
+  deleteView(id: string): Promise<void>;
+  saveWorkflow(projectId: string, states: WorkflowState[]): Promise<void>;
+  saveCustomFields(projectId: string, fields: CustomField[]): Promise<void>;
+  bulkUpdateTasks(ids: string[], patch: TaskPatch): Promise<void>;
   refreshFleet(projectId: string): Promise<void>;
   resolveFleetConflict(
     id: string,
@@ -235,26 +292,7 @@ export interface MemCodeAPI {
   installDogfoodBacklog(
     projectId: string,
   ): Promise<{ epics: number; stories: number }>;
-  updateTask(
-    id: string,
-    patch: Partial<
-      Pick<
-        WorkItem,
-        | "title"
-        | "description"
-        | "stage"
-        | "priority"
-        | "harness"
-        | "checklist"
-        | "assignment"
-        | "modelOverride"
-        | "epicId"
-        | "dependsOn"
-        | "scope"
-        | "kind"
-      >
-    >,
-  ): Promise<void>;
+  updateTask(id: string, patch: TaskPatch): Promise<void>;
   addMessage(id: string, text: string): Promise<void>;
   qualifyTask(id: string): Promise<void>;
   startWorker(id: string): Promise<void>;
@@ -273,6 +311,24 @@ export interface MemCodeAPI {
   transcribe(wav: ArrayBuffer): Promise<string>;
   windowAction(action: "minimize" | "maximize" | "close"): Promise<void>;
 }
+export type TaskPatch = Partial<
+  Pick<
+    WorkItem,
+    | "title"
+    | "description"
+    | "stage"
+    | "priority"
+    | "harness"
+    | "checklist"
+    | "assignment"
+    | "modelOverride"
+    | "epicId"
+    | "dependsOn"
+    | "scope"
+    | "kind"
+  > &
+    TaskPlanningFields
+>;
 
 export interface FleetConflict {
   id: string;

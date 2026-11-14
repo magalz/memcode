@@ -1,6 +1,7 @@
 import { harnessNames } from "../shared";
 import { Select } from "./Select";
 import { StoryMetadata, WorkerAssignment } from "./WorkerAssignment";
+import { PlanningProperties } from "./PlanningProperties";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowDown,
@@ -44,6 +45,7 @@ import type {
   Message,
   Epic,
   FleetConflict,
+  AppState,
 } from "../shared";
 import { stages } from "../shared";
 import { isActive, progress, stageLabel } from "../domain";
@@ -62,6 +64,7 @@ import {
 type Act = (action: () => Promise<unknown>) => Promise<void>;
 type Tab = "conversation" | "runbook" | "changes" | "artifacts" | "browser";
 interface Props {
+  state: AppState;
   task: WorkItem;
   project: Project;
   artifacts: Artifact[];
@@ -71,12 +74,15 @@ interface Props {
   onDecisions: () => void;
   tasks: WorkItem[];
   onClose: () => void;
+  onOpenTask: (task: WorkItem) => void;
+  onCreateChild: () => void;
   notify: (s: string) => void;
   act: Act;
   obscured?: boolean;
 }
 
 export function WorkDetail({
+  state,
   task,
   project,
   artifacts,
@@ -86,6 +92,8 @@ export function WorkDetail({
   onDecisions,
   tasks,
   onClose,
+  onOpenTask,
+  onCreateChild,
   notify,
   act,
   obscured = false,
@@ -714,6 +722,15 @@ export function WorkDetail({
               update={(patch) =>
                 void act(() => window.memcode.updateTask(task.id, patch))
               }
+            />
+            <PlanningProperties
+              state={state}
+              task={task}
+              update={(patch) =>
+                void act(() => window.memcode.updateTask(task.id, patch))
+              }
+              open={onOpenTask}
+              createChild={onCreateChild}
             />
             <section className="inspector-section context-section">
               <div className="inspector-label">

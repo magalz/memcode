@@ -1,6 +1,6 @@
 # MemCode
 
-MemCode is an independent Electron app. It uses the installed Memtrace engine;
+MemCode is an independent Tauri app. It uses the installed Memtrace engine;
 do not copy the Memtrace backend into this repository.
 
 ## Product
@@ -18,7 +18,8 @@ do not copy the Memtrace backend into this repository.
 
 - Use Memtrace graph context for nontrivial discovery and impact when indexed.
   Follow results with bounded source reads. Index this repository, never its parent.
-- Keep Node capabilities in Electron main; expose typed, validated IPC methods.
+- Keep Node capabilities in the local runtime sidecar. Tauri owns native windows,
+  dialogs and previews. Use the typed, validated stdio/Rust IPC boundary.
 - Isolate browser/artifact content from the app and its preload.
 - Never interpolate prompts into shell commands. Spawn with argument arrays.
 - An epic owns one Git branch. Story workers share the project checkout on that
@@ -26,7 +27,7 @@ do not copy the Memtrace backend into this repository.
   or worktrees. Preserve shared changes on stop/failure. Pause affected workers
   and expose unresolved conflicts for a human decision.
 - Prefer small modules and native APIs over extra frameworks.
-- Run `npm run typecheck`, `npm test`, `npm run build` and the Electron smoke
+- Run `npm run typecheck`, `npm test`, `npm run build` and the Tauri smoke
   check for relevant changes. Inspect the actual desktop UI for visual changes.
 
 ## Iteration
