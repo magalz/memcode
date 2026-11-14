@@ -5,13 +5,42 @@ import { tmpdir } from "node:os";
 import { join, resolve, basename } from "node:path";
 import { ContextBroker } from "../runtime/context/broker";
 import { startContextSession } from "../runtime/context/host";
-import { sourceRevision, gitText } from "../runtime/context/source";
+import {
+  sourceRevision,
+  gitText,
+  repoFiles,
+  checkedPath,
+} from "../runtime/context/source";
 import { claudeProfileArgs } from "../runtime/context/profile";
 import { localAssistant, loopbackUrl } from "../runtime/context/local-model";
 import { contextAssistantDefaults } from "../src/context-settings";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { ContextBinding, GraphClient } from "../runtime/context/contracts";
+
+test("context scans and source reads exclude live engine stores even before Git ignores them", async () => {
+  const root = await mkdtemp(join(tmpdir(), "memcode-store-scan-"));
+  await gitText(root, ["init", "--initial-branch=main"]);
+  for (const directory of [".memdb", ".memtrace", "src"])
+    await mkdir(join(root, directory));
+  await writeFile(
+    join(root, ".memdb", "active.lock"),
+    "Runtime database, not source",
+  );
+  await writeFile(
+    join(root, ".memtrace", "job.json"),
+    "Runtime job, not source",
+  );
+  await writeFile(join(root, "src", "index.ts"), "export const value = 1;\n");
+  assert.deepEqual(await repoFiles(root), ["src/index.ts"]);
+  await assert.rejects(
+    checkedPath(
+      { project: { path: root } } as ContextBinding,
+      ".memdb/active.lock",
+    ),
+    /visibility boundary/,
+  );
+});
 
 async function fixture(scope: string[] = []) {
   const root = await mkdtemp(join(tmpdir(), "memcode-context-test-"));
@@ -428,7 +457,7 @@ test("local planning errors fall back, rank IDs are validated, facts remain lite
   }
 });
 
-test("real stdio gateway exposes exactly three tools and binds HTTP identity in the host", async () => {
+test("real stdio gateway exposes exactly three retrieval tools and binds HTTP identity in the host", async () => {
   const f = await fixture();
   const session = await startContextSession(
     f.engine,

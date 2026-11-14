@@ -2,7 +2,18 @@ import { harnessNames } from "../shared";
 import { Select } from "./Select";
 import { StoryMetadata, WorkerAssignment } from "./WorkerAssignment";
 import { PlanningProperties } from "./PlanningProperties";
-import { useEffect, useRef, useState } from "react";
+import { WorkerBrowser } from "./WorkerBrowser";
+import { ArtifactPreview } from "./ArtifactPreview";
+import { artifactTypeLabel } from "../artifact-format";
+import { isWebLink, type FileReference } from "../file-reference";
+import { reviewLocation } from "../review-labels";
+import type { ReviewReference, ReviewComment } from "../review";
+import { ReviewComposer } from "./ReviewComposer";
+import { ReviewNotes } from "./ReviewNotes";
+import "../styles-review.css";
+import "../styles-annotations.css";
+import { WorkerChanges } from "./WorkerChanges";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowLeft,
@@ -62,12 +73,26 @@ import {
 } from "./UI";
 
 type Act = (action: () => Promise<unknown>) => Promise<void>;
-type Tab = "conversation" | "runbook" | "changes" | "artifacts" | "browser";
+const WorkerTerminal = lazy(() =>
+  import("./WorkerTerminal").then((module) => ({
+    default: module.WorkerTerminal,
+  })),
+);
+const MessageMarkdown = lazy(() => import("./MessageMarkdown"));
+type Tab =
+  | "conversation"
+  | "runbook"
+  | "changes"
+  | "artifacts"
+  | "browser"
+  | "terminal"
+  | "file";
 interface Props {
   state: AppState;
   task: WorkItem;
   project: Project;
   artifacts: Artifact[];
+  initialArtifact?: Artifact;
   runtime: RuntimeInfo;
   epics: Epic[];
   conflicts: FleetConflict[];
@@ -86,6 +111,7 @@ export function WorkDetail({
   task,
   project,
   artifacts,
+  initialArtifact,
   runtime,
   epics,
   conflicts,
@@ -100,6 +126,17 @@ export function WorkDetail({
 }: Props) {
   const [tab, setTab] = useState<Tab>("conversation");
   const [draft, setDraft] = useState("");
+  const [commentFocus, setCommentFocus] = useState(0);
+  const [commentsOpen, setCommentsOpen] = useState(false),
+    [focusedCommentId, setFocusedCommentId] = useState<string>(),
+    [editingComment, setEditingComment] = useState<ReviewComment>(),
+    [attachedComments, setAttachedComments] = useState<string[]>([]);
+  const comments = (state.reviewComments ?? []).filter(
+    (comment) => comment.taskId === task.id,
+  );
+  const [browserLink, setBrowserLink] = useState<{ url: string; id: string }>();
+  const [file, setFile] = useState<FileReference>(),
+    [references, setReferences] = useState<ReviewReference[]>([]);
   const [check, setCheck] = useState("");
   const [busy, setBusy] = useState(false);
   const plan = () =>
@@ -113,8 +150,10 @@ export function WorkDetail({
         setBusy(false);
       }
     });
-  const [artifact, setArtifact] = useState<Artifact | null>(null);
-  const [text, setText] = useState("");
+  const [selectedArtifact, setArtifact] = useState<Artifact | null>(null);
+  const artifact =
+    artifacts.find((item) => item.id === selectedArtifact?.id) ??
+    selectedArtifact;
   const messagesRef = useRef<HTMLDivElement>(null);
   const dictation = useDictation(
     (text) => setDraft((value) => [value, text].filter(Boolean).join("\n")),
@@ -123,8 +162,21 @@ export function WorkDetail({
   useEffect(() => {
     setTab("conversation");
     setDraft("");
+    setCommentsOpen(false);
+    setFocusedCommentId(undefined);
+    setEditingComment(undefined);
+    setAttachedComments([]);
+    setBrowserLink(undefined);
     setArtifact(null);
+    setFile(undefined);
+    setReferences([]);
   }, [task.id]);
+  useEffect(() => {
+    if (initialArtifact) {
+      setArtifact(initialArtifact);
+      setTab("artifacts");
+    }
+  }, [initialArtifact?.id, task.id]);
   useEffect(() => {
     const el = messagesRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -133,8 +185,15 @@ export function WorkDetail({
     setBusy(true);
     try {
       if (draft.trim()) {
-        await window.memcode.addMessage(task.id, draft.trim());
+        if (attachedComments.length)
+          await window.memcode.shareReviewComments(
+            task.id,
+            attachedComments,
+            draft.trim(),
+          );
+        else await window.memcode.addMessage(task.id, draft.trim());
         setDraft("");
+        setAttachedComments([]);
       }
       await window.memcode.startWorker(task.id);
     } catch (error) {
@@ -146,12 +205,20 @@ export function WorkDetail({
   const send = async () => {
     if (!draft.trim()) return;
     await act(async () => {
-      await window.memcode.addMessage(task.id, draft.trim());
+      if (attachedComments.length)
+        await window.memcode.shareReviewComments(
+          task.id,
+          attachedComments,
+          draft.trim(),
+        );
+      else await window.memcode.addMessage(task.id, draft.trim());
       setDraft("");
+      setAttachedComments([]);
       if (isActive(task))
         notify(
           "Note saved for the next worker pass. The current run continues with its existing brief.",
         );
+      else if (!task.example) await window.memcode.startWorker(task.id);
     });
   };
   const toggle = (id: string) =>
@@ -176,12 +243,62 @@ export function WorkDetail({
   };
   const openArtifact = async (item: Artifact) => {
     setArtifact(item);
-    if (item.kind === "text")
-      await act(async () =>
-        setText(await window.memcode.readArtifact(item.id)),
-      );
     setTab("artifacts");
   };
+  const comment = (reference: ReviewReference) => {
+    if (reference.taskId !== task.id) return;
+    setReferences([reference]);
+    setEditingComment(undefined);
+    setCommentsOpen(false);
+  };
+  const focusComment = async (note: ReviewComment) => {
+    void window.memcode.previewAction("clear-selection").catch(() => {});
+    setCommentFocus((value) => value + 1);
+    setFocusedCommentId(note.id);
+    setCommentsOpen(true);
+    setReferences([]);
+    if (note.reference.kind === "changes") setTab("changes");
+    else if (note.reference.kind === "terminal") setTab("terminal");
+    else if (note.reference.path)
+      await openLink(
+        note.reference.path +
+          (note.reference.kind === "file" && note.reference.lineStart
+            ? ":" + note.reference.lineStart
+            : ""),
+      );
+  };
+  const openLink = async (href: string, basePath?: string) => {
+    try {
+      if (isWebLink(href)) {
+        setBrowserLink({ url: href, id: crypto.randomUUID() });
+        setTab("browser");
+        return;
+      }
+      const target = await window.memcode.resolveFile(task.id, href, basePath);
+      const saved = artifacts.find((item) => item.id === target.artifactId);
+      if (saved) {
+        setArtifact(saved);
+        setTab("artifacts");
+      } else {
+        setFile(target);
+        setTab("file");
+      }
+    } catch (error) {
+      notify((error as Error).message);
+    }
+  };
+  useEffect(
+    () =>
+      window.memcode.onReview((event) => {
+        if (event.action === "comment") comment(event.reference);
+        else if (event.action === "focus-comment" && event.taskId === task.id) {
+          const note = comments.find((c) => c.id === event.commentId);
+          if (note) void focusComment(note);
+        } else if (event.action === "link" && event.taskId === task.id)
+          void openLink(event.href, event.basePath);
+      }),
+    [task.id, artifacts, state.reviewComments],
+  );
   const available = runtime.harnesses.find(
     (h) => h.id === task.harness,
   )?.available;
@@ -202,6 +319,10 @@ export function WorkDetail({
       count: artifacts.length,
     },
     { id: "browser", label: "Browser", icon: Globe2 },
+    { id: "terminal", label: "Terminal", icon: Terminal },
+    ...(file
+      ? [{ id: "file" as const, label: file.name, icon: FileCode2 }]
+      : []),
   ];
   return (
     <div
@@ -329,6 +450,26 @@ export function WorkDetail({
         </div>
         <div className="detail-body">
           <div className="detail-content">
+            {tab === "terminal" && (
+              <Suspense fallback={<Spinner />}>
+                <WorkerTerminal
+                  task={task}
+                  onComment={comment}
+                  comments={comments.filter(
+                    (comment) => comment.reference.kind === "terminal",
+                  )}
+                  focusedCommentId={focusedCommentId}
+                  focusVersion={commentFocus}
+                  onFocusComment={(id) => {
+                    const note = comments.find((c) => c.id === id);
+                    if (note) void focusComment(note);
+                  }}
+                  onBrowser={(url) => {
+                    void openLink(url);
+                  }}
+                />
+              </Suspense>
+            )}
             {tab === "conversation" && (
               <>
                 <div className="conversation-scroll" ref={messagesRef}>
@@ -341,6 +482,13 @@ export function WorkDetail({
                       key={message.id}
                       message={message}
                       harness={task.harness}
+                      onOpenLink={(href) => void openLink(href)}
+                      comments={comments}
+                      onOpenReference={(reference, id) => {
+                        const note = comments.find((c) => c.id === id);
+                        if (note) void focusComment(note);
+                        else if (reference.path) void openLink(reference.path);
+                      }}
                     />
                   ))}
                   {task.run.state === "preparing" && (
@@ -376,6 +524,31 @@ export function WorkDetail({
                       (dictation.phase === "recording" ? "recording" : "")
                     }
                   >
+                    {attachedComments.length > 0 && (
+                      <div className="followup-comment-chips">
+                        {attachedComments.map((id) => {
+                          const note = comments.find((c) => c.id === id);
+                          return note ? (
+                            <span key={id}>
+                              <MessageSquare size={11} />
+                              {note.reference.name} ·{" "}
+                              {reviewLocation(note.reference)}
+                              <button
+                                className="icon-button"
+                                aria-label="Remove attached comment"
+                                onClick={() =>
+                                  setAttachedComments((values) =>
+                                    values.filter((value) => value !== id),
+                                  )
+                                }
+                              >
+                                <X size={10} />
+                              </button>
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
                     <textarea
                       aria-label="Message to worker"
                       placeholder={
@@ -428,8 +601,14 @@ export function WorkDetail({
                         </button>
                         <button
                           className="send-button"
-                          title="Save message · Ctrl+Enter"
-                          aria-label="Save message"
+                          title={
+                            active
+                              ? "Queue follow-up · Ctrl+Enter"
+                              : "Send follow-up · Ctrl+Enter"
+                          }
+                          aria-label={
+                            active ? "Queue follow-up" : "Send follow-up"
+                          }
                           disabled={!draft.trim()}
                           onClick={() => void send()}
                         >
@@ -519,73 +698,43 @@ export function WorkDetail({
                 </div>
               </div>
             )}
-            {tab === "changes" &&
-              (task.diff ? (
-                <div className="diff-view">
-                  <p className="shared-diff-note">
-                    Combined changes on the epic branch. Other Fleet workers may
-                    have contributed to this diff; per-worker attribution has
-                    not been verified.
-                  </p>
-                  <div className="diff-summary">
-                    <GitBranch size={14} />
-                    <span>{task.run.branch}</span>
-                    <span className="diff-review-label">Review candidate</span>
-                  </div>
-                  <pre>
-                    {task.diff.split("\n").map((line, index) => (
-                      <span
-                        className={
-                          line.startsWith("+")
-                            ? "added"
-                            : line.startsWith("-")
-                              ? "removed"
-                              : line.startsWith("@@")
-                                ? "hunk"
-                                : ""
-                        }
-                        key={index}
-                      >
-                        <small>{index + 1}</small>
-                        {line || " "}
-                        <br />
-                      </span>
-                    ))}
-                  </pre>
-                </div>
-              ) : (
-                <Empty
-                  icon={<Code2 size={27} />}
-                  title="The change will tell its story."
-                  description={
-                    task.example
-                      ? "In a real session, the epic branch’s combined diff appears here for review."
-                      : "When the worker finishes, its tracked and new-file changes appear here. A successful exit alone never marks the work done."
-                  }
-                />
-              ))}
+            {tab === "changes" && (
+              <WorkerChanges
+                task={task}
+                onComment={comment}
+                comments={comments.filter(
+                  (comment) => comment.reference.kind === "changes",
+                )}
+                focusedCommentId={focusedCommentId}
+                focusVersion={commentFocus}
+                onFocusComment={(id) => {
+                  const note = comments.find((c) => c.id === id);
+                  if (note) void focusComment(note);
+                }}
+              />
+            )}
+            {tab === "file" && file && (
+              <ArtifactPreview
+                key={file.path}
+                file={file}
+                commentId={focusedCommentId}
+                commentFocus={commentFocus}
+                taskId={task.id}
+                obscured={obscured}
+                onBack={() => setTab("conversation")}
+              />
+            )}
             {tab === "artifacts" &&
               (artifact ? (
-                artifact.kind === "text" ? (
-                  <div className="text-artifact">
-                    <button
-                      className="text-button"
-                      onClick={() => setArtifact(null)}
-                    >
-                      <ArrowLeft size={12} />
-                      All artifacts
-                    </button>
-                    <h3>{artifact.name}</h3>
-                    <pre>{text}</pre>
-                  </div>
-                ) : (
-                  <PreviewPane
-                    artifact={artifact}
-                    taskId={task.id}
-                    obscured={obscured}
-                    notify={notify}
-                  />
-                )
+                <ArtifactPreview
+                  key={artifact.id}
+                  artifact={artifact}
+                  commentId={focusedCommentId}
+                  commentFocus={commentFocus}
+                  taskId={task.id}
+                  obscured={obscured}
+                  onBack={() => setArtifact(null)}
+                />
               ) : artifacts.length ? (
                 <div className="detail-artifacts">
                   <div className="eyebrow">
@@ -612,7 +761,7 @@ export function WorkDetail({
                       <span>
                         <strong>{item.name}</strong>
                         <small>
-                          {item.source} · {item.kind.toUpperCase()}
+                          {item.source} · {artifactTypeLabel(item.name)}
                         </small>
                       </span>
                       <ArrowUpRight size={15} />
@@ -627,11 +776,83 @@ export function WorkDetail({
                 />
               ))}
             {tab === "browser" && (
-              <PreviewPane
-                taskId={task.id}
-                artifact={artifacts.find((a) => a.kind === "html")}
+              <WorkerBrowser
+                key={task.id}
+                task={task}
                 obscured={obscured}
                 notify={notify}
+                opening={browserLink}
+                onOpeningConsumed={() => setBrowserLink(undefined)}
+              />
+            )}
+            {comments.length > 0 && !references.length && !commentsOpen && (
+              <div className="review-attachment-bar">
+                <MessageSquare size={12} />
+                {comments.some((comment) => comment.status === "saved")
+                  ? comments.filter((comment) => comment.status === "saved")
+                      .length + " comments saved locally"
+                  : comments.length + " comments on this card"}
+                <button onClick={() => setCommentsOpen(true)}>
+                  Review comments
+                  <ArrowUpRight size={11} />
+                </button>
+              </div>
+            )}
+            {commentsOpen && !references.length && (
+              <ReviewNotes
+                comments={comments}
+                focusedId={focusedCommentId}
+                onFocus={(note) => void focusComment(note)}
+                onClose={() => setCommentsOpen(false)}
+                onEdit={(note) => {
+                  setEditingComment(note);
+                  setReferences([note.reference]);
+                  setCommentsOpen(false);
+                }}
+                onDelete={(note) =>
+                  void act(() =>
+                    window.memcode.deleteReviewComment(task.id, note.id),
+                  )
+                }
+                onAttach={(ids) => {
+                  setAttachedComments(ids);
+                  setCommentsOpen(false);
+                  setTab("conversation");
+                  setDraft(
+                    (value) =>
+                      value || "Please address the selected review comments.",
+                  );
+                }}
+              />
+            )}
+            {references.length > 0 && (
+              <ReviewComposer
+                references={references}
+                onRemove={(index) =>
+                  setReferences((value) => value.filter((_, i) => i !== index))
+                }
+                editing={editingComment}
+                onClose={() => {
+                  setReferences([]);
+                  setEditingComment(undefined);
+                  void window.memcode
+                    .previewAction("clear-selection")
+                    .catch(() => {});
+                }}
+                onSave={async (text, refs) => {
+                  for (const reference of refs) {
+                    const saved = await window.memcode.saveReviewComment({
+                      taskId: task.id,
+                      reference,
+                      text,
+                      id: editingComment?.id,
+                    });
+                    setFocusedCommentId(saved.id);
+                  }
+                  notify(
+                    "Comment saved on the selection. Add it to a follow-up when you’re ready.",
+                  );
+                }}
               />
             )}
           </div>
@@ -889,9 +1110,15 @@ function LayersIcon() {
 function MessageBlock({
   message,
   harness,
+  onOpenLink,
+  comments,
+  onOpenReference,
 }: {
   message: Message;
   harness: WorkItem["harness"];
+  onOpenLink: (href: string) => void;
+  comments: ReviewComment[];
+  onOpenReference: (reference: ReviewReference, id?: string) => void;
 }) {
   if (message.role === "tool")
     return (
@@ -931,185 +1158,43 @@ function MessageBlock({
           <span className="message-role">WORKER</span>
         )}
       </header>
-      <div className="message-body">{message.text}</div>
-    </article>
-  );
-}
-
-function PreviewPane({
-  artifact,
-  taskId,
-  obscured,
-  notify,
-}: {
-  artifact?: Artifact;
-  taskId: string;
-  obscured: boolean;
-  notify: (s: string) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [address, setAddress] = useState("http://localhost:3000");
-  const [url, setUrl] = useState("");
-  const [title, setTitle] = useState(artifact?.name ?? "Local browser");
-  const [error, setError] = useState("");
-  const [loaded, setLoaded] = useState(!!artifact);
-  const [popover, setPopover] = useState(false);
-  useEffect(() => {
-    const changed = (event: Event) =>
-      setPopover((event as CustomEvent<boolean>).detail);
-    window.addEventListener("memcode:popover", changed);
-    return () => window.removeEventListener("memcode:popover", changed);
-  }, []);
-  useEffect(() => {
-    if (artifact) setLoaded(true);
-  }, [artifact?.id]);
-  useEffect(
-    () =>
-      window.memcode.onPreview((event) => {
-        setTitle(event.title || "Local preview");
-        if (event.error) setError(event.error);
-        else setError("");
-      }),
-    [],
-  );
-  useEffect(() => {
-    if (!loaded || obscured || popover) {
-      void window.memcode.hidePreview();
-      return;
-    }
-    const show = () => {
-      const rect = ref.current?.getBoundingClientRect();
-      if (!rect || rect.width < 10 || rect.height < 10) return;
-      void window.memcode
-        .showPreview({
-          taskId,
-          ...(artifact ? { artifactId: artifact.id } : { url }),
-          bounds: {
-            x: Math.round(rect.x),
-            y: Math.round(rect.y),
-            width: Math.round(rect.width),
-            height: Math.round(rect.height),
-          },
-        })
-        .catch((e) => setError(e.message));
-    };
-    const observer = new ResizeObserver(show);
-    if (ref.current) observer.observe(ref.current);
-    window.addEventListener("resize", show);
-    window.addEventListener("scroll", show, true);
-    show();
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", show);
-      window.removeEventListener("scroll", show, true);
-      void window.memcode.hidePreview();
-    };
-  }, [loaded, url, artifact?.id, obscured, popover]);
-  const action = async (value: "back" | "forward" | "reload" | "capture") => {
-    try {
-      await window.memcode.previewAction(value);
-      if (value === "capture")
-        notify("Screenshot saved to this work item’s artifacts.");
-    } catch (e) {
-      notify((e as Error).message);
-    }
-  };
-  const navigate = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!address.trim()) return;
-    setError("");
-    setUrl(address.trim());
-    setLoaded(true);
-  };
-  return (
-    <div className="browser-pane">
-      <div className="browser-tabline">
-        <Globe2 size={12} />
-        <span>{title}</span>
-        <span className="browser-local-badge">LOCAL PREVIEW</span>
-      </div>
-      <form className="browser-controls" onSubmit={navigate}>
-        <button
-          type="button"
-          className="icon-button"
-          title="Back"
-          onClick={() => void action("back")}
-        >
-          <ArrowLeft size={14} />
-        </button>
-        <button
-          type="button"
-          className="icon-button"
-          title="Forward"
-          onClick={() => void action("forward")}
-        >
-          <ArrowRight size={14} />
-        </button>
-        <button
-          type="button"
-          className="icon-button"
-          title="Reload preview"
-          onClick={() => void action("reload")}
-        >
-          <RefreshCw size={12} />
-        </button>
-        <div className="browser-address">
-          <ShieldCheck size={12} />
-          <input
-            aria-label="Local preview address"
-            value={artifact ? artifact.name : address}
-            readOnly={!!artifact}
-            onChange={(e) => setAddress(e.target.value)}
-            spellCheck={false}
-          />
-          {!artifact && (
-            <button type="submit" title="Open local address">
-              <ArrowRight size={12} />
-            </button>
-          )}
-        </div>
-        <button
-          type="button"
-          className="icon-button"
-          title="Save screenshot"
-          disabled={!loaded}
-          onClick={() => void action("capture")}
-        >
-          <Image size={14} />
-        </button>
-      </form>
-      {error && (
-        <div className="browser-error">
-          <Circle size={12} />
-          {error}
-        </div>
-      )}
-      <div className="browser-content" ref={ref}>
-        {!loaded && (
-          <Empty
-            icon={<Globe2 size={28} />}
-            title="Your browser, beside the work."
-            description="Open a development server on localhost, or preview an HTML artifact produced by the worker."
-            action={
-              <button
-                className="button secondary"
-                onClick={() => {
-                  setUrl(address);
-                  setLoaded(true);
-                }}
-              >
-                Open localhost:3000
-                <ArrowUpRight size={13} />
-              </button>
-            }
-          />
+      <div className="message-body">
+        {message.references?.length ? (
+          <>
+            <p>
+              {message.reviewText ?? message.text.split("\n\nReference 1:")[0]}
+            </p>
+            {message.references.map((reference, index) => {
+              const note = comments.find(
+                (c) => c.id === message.commentIds?.[index],
+              );
+              return (
+                <button
+                  key={index}
+                  className="message-review-ref"
+                  onClick={() => onOpenReference(reference, note?.id)}
+                >
+                  <strong>{reference.name}</strong>
+                  <small>{reviewLocation(reference)}</small>
+                  {note &&
+                    note.text !==
+                      (message.reviewText ??
+                        message.text.split("\n\nReference 1:")[0]) && (
+                      <p>{note.text}</p>
+                    )}
+                  <blockquote>{reference.quote}</blockquote>
+                </button>
+              );
+            })}
+          </>
+        ) : message.role === "assistant" ? (
+          <Suspense fallback={message.text}>
+            <MessageMarkdown text={message.text} onOpenLink={onOpenLink} />
+          </Suspense>
+        ) : (
+          message.text
         )}
       </div>
-      <footer className="browser-footer">
-        <ShieldCheck size={10} />
-        Separate browser context. No access to the desktop bridge.
-        <span>{artifact?.source ?? "Local development"}</span>
-      </footer>
-    </div>
+    </article>
   );
 }

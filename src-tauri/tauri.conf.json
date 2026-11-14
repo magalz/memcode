@@ -32,7 +32,13 @@
   },
   "bundle": {
     "active": false,
-    "resources": { "../dist-runtime/service.cjs": "runtime/service.cjs", "../dist-runtime/context-gateway.cjs": "runtime/context-gateway.cjs" },
+    "resources": {
+      "../dist-runtime/service.cjs": "runtime/service.cjs",
+      "../dist-runtime/context-gateway.cjs": "runtime/context-gateway.cjs",
+      "../dist-artifact-viewer/": "artifact-viewer/",
+      "../dist-artifact-annotations/": "artifact-annotations/",
+      "../node_modules/playwright-core/": "runtime/node_modules/playwright-core/"
+    },
     "icon": ["icons/icon.ico", "icons/icon.png", "icons/icon.icns"]
   }
 }

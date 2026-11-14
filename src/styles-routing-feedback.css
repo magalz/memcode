@@ -1,0 +1,28 @@
+.routing-scope-note {
+  padding: 10px 11px;
+  margin: 13px 0 3px;
+  border: 1px solid #e9dfbc;
+  border-radius: 6px;
+  background: #fcf8ed;
+  color: #95835f;
+  font-size: 10px;
+  line-height: 1.7;
+}
+.routing-remeasure {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  color: #4b987a;
+  font-size: 10px;
+  padding-top: 12px;
+  margin-top: 11px;
+  border-top: 1px solid #dfebd8;
+}
+.routing-remeasure > svg:last-child {
+  margin-left: auto;
+}
+.routing-source-files code {
+  font-size: 8px;
+  overflow-wrap: anywhere;
+}

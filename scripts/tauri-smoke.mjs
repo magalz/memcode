@@ -157,7 +157,10 @@ try {
     }
   });
   assert.notEqual(denied, "unexpected access");
-  await guest.screenshot({ path: join(out, "tauri-isolated-preview.png") });
+  await guest.screenshot({
+    path: join(out, "tauri-isolated-preview.png"),
+    timeout: 10000,
+  });
   // Creating a preview converts the native window into a multi-webview window.
   // Window actions must keep working after that transition.
   await call("window:action", "maximize");
@@ -204,7 +207,7 @@ try {
     exited.then(() => true),
     new Promise((resolve) => setTimeout(() => resolve(false), 25000).unref()),
   ]);
-  await browser?.close().catch(() => {});
+  // Exit disconnects CDP; never send Browser.close to a system WebView process.
   if (!stopped) {
     child.kill();
     throw new Error(
@@ -216,3 +219,4 @@ try {
   });
 }
 console.log(JSON.stringify({ ...report, gracefulShutdown: "passed" }, null, 2));
+process.exit(0);

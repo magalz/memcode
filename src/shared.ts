@@ -9,6 +9,7 @@ import type {
 } from "./planning/types";
 import type { QualitySnapshot } from "./intelligence";
 import type { ContextAssistantSettings } from "./context-settings";
+import type { BrowserRequest, BrowserReply } from "./browser";
 export type { ContextAssistantSettings } from "./context-settings";
 export type { QualitySnapshot, IntelligenceDetail } from "./intelligence";
 export type {
@@ -87,6 +88,9 @@ export interface Message {
   role: "user" | "assistant" | "system" | "tool";
   text: string;
   at: string;
+  references?: import("./review").ReviewReference[];
+  commentIds?: string[];
+  reviewText?: string;
 }
 export interface ChecklistItem {
   id: string;
@@ -94,6 +98,7 @@ export interface ChecklistItem {
   done: boolean;
 }
 export interface Artifact {
+  revision?: string;
   id: string;
   name: string;
   kind: "html" | "image" | "text";
@@ -157,9 +162,11 @@ export interface WorkItem extends TaskPlanningFields {
     exitCode?: number;
     error?: string;
     sessionId?: string;
+    changeRunId?: string;
   };
   evidence?: Evidence;
   diff?: string;
+  changesRevision?: string;
   example?: boolean;
 }
 export interface Project {
@@ -203,6 +210,8 @@ export interface CreateEpic {
   phase: Epic["phase"];
 }
 export interface AppState {
+  fleetPlans?: FleetPlan[];
+  fleetProposals?: FleetProposal[];
   qualitySnapshots: QualitySnapshot[];
   cycles: Cycle[];
   savedViews: SavedView[];
@@ -215,8 +224,34 @@ export interface AppState {
   epics: Epic[];
   fleetConflicts: FleetConflict[];
   artifacts: Artifact[];
+  reviewComments?: import("./review").ReviewComment[];
   activeProjectId: string;
   settings: Settings;
+}
+export interface FleetPlan {
+  taskId: string;
+  projectId: string;
+  branch: string;
+  scope: string[];
+  plan: string;
+  publishedAt: string;
+  inspectedAt?: string;
+  active: boolean;
+  adoptedFrom?: string;
+  adoptedPlan?: string;
+}
+export interface FleetProposal {
+  id: string;
+  projectId: string;
+  branch: string;
+  proposerTaskId: string;
+  ownerTaskId: string;
+  alternative: string;
+  reason: string;
+  state: "pending" | "accepted" | "rejected" | "withdrawn";
+  createdAt: string;
+  respondedAt?: string;
+  response?: string;
 }
 export interface RuntimeInfo {
   appVersion: string;
@@ -244,9 +279,42 @@ export interface PreviewInput {
   taskId: string;
   url?: string;
   artifactId?: string;
+  filePath?: string;
+  fileRevision?: string;
+  commentId?: string;
+  commentFocus?: number;
+  line?: number;
   bounds: { x: number; y: number; width: number; height: number };
 }
 export interface MemCodeAPI {
+  saveReviewComment(input: {
+    id?: string;
+    taskId: string;
+    reference: import("./review").ReviewReference;
+    text: string;
+  }): Promise<import("./review").ReviewComment>;
+  deleteReviewComment(taskId: string, id: string): Promise<void>;
+  shareReviewComments(
+    taskId: string,
+    ids: string[],
+    text: string,
+  ): Promise<string>;
+  resolveFile(
+    taskId: string,
+    href: string,
+    basePath?: string,
+  ): Promise<import("./file-reference").FileReference>;
+  onReview(
+    listener: (event: import("./review").ReviewEvent) => void,
+  ): () => void;
+  workerChanges(taskId: string): Promise<import("./changes").WorkerChanges>;
+  terminal(
+    taskId: string,
+    request: import("./terminal").TerminalRequest,
+  ): Promise<import("./terminal").TerminalReply>;
+  onTerminal(
+    listener: (event: import("./terminal").TerminalOutput) => void,
+  ): () => void;
   refreshIntelligence(
     projectId: string,
     refreshIndex?: boolean,
@@ -293,15 +361,20 @@ export interface MemCodeAPI {
     projectId: string,
   ): Promise<{ epics: number; stories: number }>;
   updateTask(id: string, patch: TaskPatch): Promise<void>;
-  addMessage(id: string, text: string): Promise<void>;
+  addMessage(
+    id: string,
+    text: string,
+    references?: import("./review").ReviewReference[],
+  ): Promise<void>;
   qualifyTask(id: string): Promise<void>;
   startWorker(id: string): Promise<void>;
   stopWorker(id: string): Promise<void>;
   saveSettings(settings: Settings): Promise<RuntimeInfo>;
   showPreview(input: PreviewInput): Promise<void>;
+  browser(taskId: string, request: BrowserRequest): Promise<BrowserReply>;
   hidePreview(): Promise<void>;
   previewAction(
-    action: "back" | "forward" | "reload" | "capture",
+    action: "back" | "forward" | "reload" | "capture" | "clear-selection",
   ): Promise<void>;
   onPreview(
     listener: (event: { url: string; title: string; error?: string }) => void,
@@ -331,6 +404,7 @@ export type TaskPatch = Partial<
 >;
 
 export interface FleetConflict {
+  resolutionKind?: "human" | "coordination";
   id: string;
   projectId: string;
   epicId?: string;

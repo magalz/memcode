@@ -134,6 +134,18 @@ export async function verifyPlanning(page, call, out) {
     "2",
   );
   await expect(page.locator(".work-card").first()).toBeVisible();
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    const board = document.querySelector(".work-board");
+    await Promise.all(
+      (board?.getAnimations({ subtree: true }) ?? [])
+        .filter(
+          (animation) =>
+            animation.effect?.getComputedTiming().iterations !== Infinity,
+        )
+        .map((animation) => animation.finished.catch(() => {})),
+    );
+  });
   const lane = page.locator(".column-cards").first();
   const before = await page.evaluate(() => ({
     view: document.querySelector(".workspace-scroll").scrollTop,

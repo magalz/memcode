@@ -82,6 +82,30 @@ export class EpicWorkspace {
       throw new Error(
         "Another epic has active workers in this project. Stop or finish that fleet before switching epic branches.",
       );
+    // Local runtime stores are not source changes. Install these exclusions
+    // before checking whether it is safe to switch an otherwise clean project.
+    const ignorePath = await git(project.path, [
+      "rev-parse",
+      "--git-path",
+      "info/exclude",
+    ]);
+    const target = isAbsolute(ignorePath)
+      ? ignorePath
+      : resolve(project.path, ignorePath);
+    const ignored = await readFile(target, "utf8").catch(() => "");
+    const missing = ["/.memcode/", "/.memdb/", "/.memtrace/"].filter(
+      (entry) => !ignored.split(/\r?\n/).includes(entry),
+    );
+    if (missing.length) {
+      await mkdir(dirname(target), { recursive: true });
+      await appendFile(
+        target,
+        "\n# MemCode local runtime stores and worker output\n" +
+          missing.join("\n") +
+          "\n",
+        "utf8",
+      );
+    }
     const actual = await git(project.path, ["branch", "--show-current"]);
     if (!actual)
       throw new Error(
@@ -116,23 +140,6 @@ export class EpicWorkspace {
     }
     epic.branch = branch;
     epic.baseRevision ??= await git(project.path, ["rev-parse", "HEAD"]);
-    const ignorePath = await git(project.path, [
-      "rev-parse",
-      "--git-path",
-      "info/exclude",
-    ]);
-    const target = isAbsolute(ignorePath)
-      ? ignorePath
-      : resolve(project.path, ignorePath);
-    const ignored = await readFile(target, "utf8").catch(() => "");
-    if (!ignored.split(/\r?\n/).includes("/.memcode/")) {
-      await mkdir(dirname(target), { recursive: true });
-      await appendFile(
-        target,
-        "\n# MemCode local worker briefs and artifacts\n/.memcode/\n",
-        "utf8",
-      );
-    }
     project.branch = branch;
     task.run.workspace = project.path;
     task.run.branch = branch;

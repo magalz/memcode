@@ -1,7 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod bridge;
+mod browser;
+#[cfg(windows)]
+mod browser_capture;
 mod native;
+mod terminal;
 
 use bridge::RuntimeBridge;
 use serde_json::Value;
@@ -14,8 +18,10 @@ async fn rpc(
     method: String,
     input: Option<Value>,
 ) -> Result<Value, String> {
-    if webview.label() != "main" || !native::main_origin(&webview.url().map_err(|e| e.to_string())?)
-    {
+    // Main navigation is pinned to main_origin below and capabilities exclude
+    // guests. Querying CoreWebView2's live URL on every RPC adds a synchronous
+    // UI-thread hop, which can block replies during native browser operations.
+    if webview.label() != "main" {
         return Err("Only the MemCode application view can call the local runtime.".into());
     }
     if method.len() > 100 || method == "runtime:shutdown" {
@@ -25,10 +31,13 @@ async fn rpc(
 }
 
 fn main() {
+    let browser = browser::BrowserState::new();
     let runtime = RuntimeBridge::new();
     tauri::Builder::default()
         .manage(runtime)
         .manage(native::PreviewState::default())
+        .manage(browser)
+        .manage(terminal::TerminalState::default())
         .invoke_handler(tauri::generate_handler![rpc])
         .setup(|app| {
             let handle = app.handle().clone();

@@ -5,12 +5,26 @@ import { join } from "node:path";
 import type { ContextBinding, GraphClient } from "./contracts";
 import { ContextBroker } from "./broker";
 import {
+  terminalRequestSchema,
+  type TerminalRequest,
+  type TerminalReply,
+} from "../../src/terminal";
+import {
+  browserRequestSchema,
+  type BrowserRequest,
+  type BrowserReply,
+} from "../../src/browser";
+import {
   discoverLocalModel,
   localAssistant,
   type RetrievalAssistant,
 } from "./local-model";
 import { discoverOnnxAssistant } from "./onnx";
 import { OnnxAssistant } from "./onnx";
+import {
+  coordinationSchema,
+  type CoordinationRequest,
+} from "../fleet-requests";
 import {
   contextAssistantDefaults,
   type ContextAssistantSettings,
@@ -20,6 +34,7 @@ export interface ContextSession {
   endpoint: string;
   token: string;
   configPath: string;
+  browserConfigPath?: string;
   close(): Promise<void>;
   broker: ContextBroker;
 }
@@ -32,6 +47,9 @@ export async function startContextSession(
     assistant?: RetrievalAssistant;
     discoverModel?: boolean;
     settings?: ContextAssistantSettings;
+    browser?: (request: BrowserRequest) => Promise<BrowserReply>;
+    coordination?: (request: CoordinationRequest) => Promise<unknown>;
+    terminal?: (request: TerminalRequest) => Promise<TerminalReply>;
   } = {},
 ): Promise<ContextSession> {
   await mkdir(directory, { recursive: true });
@@ -74,7 +92,10 @@ export async function startContextSession(
       res.writeHead(401).end();
       return;
     }
-    if (req.method !== "POST" || req.url !== "/context") {
+    if (
+      req.method !== "POST" ||
+      (req.url !== "/context" && !(req.url === "/browser" && options.browser))
+    ) {
       res.writeHead(404).end();
       return;
     }
@@ -82,10 +103,34 @@ export async function startContextSession(
       let body = "";
       for await (const chunk of req) {
         body += chunk;
-        if (Buffer.byteLength(body) > 12000)
-          throw new Error("Context request exceeds 12 KiB");
+        if (Buffer.byteLength(body) > 96000)
+          throw new Error("Worker request exceeds 96 KiB");
       }
-      const result = await broker.execute(JSON.parse(body));
+      const input = JSON.parse(body);
+      const result =
+        req.url === "/browser"
+          ? await options.browser!(browserRequestSchema.parse(input))
+          : input.capability === "terminal" && options.terminal
+            ? await options.terminal(
+                terminalRequestSchema.parse(
+                  Object.fromEntries(
+                    Object.entries(input).filter(
+                      ([key]) => key !== "capability",
+                    ),
+                  ),
+                ),
+              )
+            : input.capability === "coordinate" && options.coordination
+              ? await options.coordination(
+                  coordinationSchema.parse(
+                    Object.fromEntries(
+                      Object.entries(input).filter(
+                        ([key]) => key !== "capability",
+                      ),
+                    ),
+                  ),
+                )
+              : await broker.execute(input);
       res
         .writeHead(200, {
           "Content-Type": "application/json",
@@ -110,14 +155,39 @@ export async function startContextSession(
     throw new Error("Context host failed to bind loopback");
   const endpoint = `http://127.0.0.1:${address.port}/context`,
     configPath = join(directory, "context-session.json");
-  await writeFile(configPath, JSON.stringify({ version: 1, endpoint, token }), {
-    mode: 0o600,
-  });
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      version: 1,
+      endpoint,
+      token,
+      coordination: !!options.coordination,
+      terminal: !!options.terminal,
+    }),
+    {
+      mode: 0o600,
+    },
+  );
+  const browserConfigPath = options.browser
+    ? join(directory, "browser-session.json")
+    : undefined;
+  if (browserConfigPath)
+    await writeFile(
+      browserConfigPath,
+      JSON.stringify({
+        version: 1,
+        kind: "browser",
+        endpoint: endpoint.replace(/\/context$/, "/browser"),
+        token,
+      }),
+      { mode: 0o600 },
+    );
   let closing: Promise<void> | undefined;
   return {
     endpoint,
     token,
     configPath,
+    browserConfigPath,
     broker,
     close: () =>
       (closing ??= (async () => {

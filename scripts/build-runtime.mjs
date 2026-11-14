@@ -7,6 +7,7 @@ await build({
   format: "cjs",
   target: "node22",
   sourcemap: true,
+  external: ["playwright-core"],
 });
 console.log("MemCode local runtime bundled.");
 await import("./build-context.mjs");

@@ -228,7 +228,12 @@ test("worker joins its epic branch and returns shared changes plus separate arti
       await readFile(join(repo, "result.txt"), "utf8"),
       "A real fixture change",
     );
-    assert.match(task.diff!, /result.txt/);
+    const { readWorkerChanges } = await import("../runtime/changes");
+    const changes = await readWorkerChanges(task);
+    assert.equal(changes.files, 1);
+    assert.equal(changes.checkpoints[0].files[0].path, "result.txt");
+    assert.equal(changes.additions, 1);
+    assert.equal(task.diff, undefined);
     assert.equal(state.artifacts.filter((a) => a.taskId === task.id).length, 1);
     assert.match(await git(repo, ["status", "--porcelain"]), /result.txt/);
     assert.equal(

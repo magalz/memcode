@@ -2,9 +2,19 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AppState, MemCodeAPI } from "./shared";
+import { errorMessage } from "./errors";
 
-const call = <T = void>(method: string, input: unknown = null) =>
-  invoke<T>("rpc", { method, input });
+const call = async <T = void>(
+  method: string,
+  input: unknown = null,
+): Promise<T> => {
+  try {
+    return await invoke<T>("rpc", { method, input });
+  } catch (error) {
+    // Native Tauri rejects with strings; renderer actions expect Error.message.
+    throw new Error(errorMessage(error), { cause: error });
+  }
+};
 function wavBase64(wav: ArrayBuffer): string {
   const bytes = new Uint8Array(wav);
   let binary = "";
@@ -17,6 +27,15 @@ export async function installNativeBridge(): Promise<void> {
     throw new Error("Open MemCode through its Tauri desktop app.");
   const states = new Set<(state: AppState) => void>();
   const previews = new Set<Parameters<MemCodeAPI["onPreview"]>[0]>();
+  const terminals = new Set<Parameters<MemCodeAPI["onTerminal"]>[0]>();
+  const reviews = new Set<Parameters<MemCodeAPI["onReview"]>[0]>();
+  await listen<import("./review").ReviewEvent>("review:event", (event) =>
+    reviews.forEach((listener) => listener(event.payload)),
+  );
+  await listen<import("./terminal").TerminalOutput>(
+    "terminal:output",
+    (event) => terminals.forEach((listener) => listener(event.payload)),
+  );
   await listen<AppState>("workspace:state", (event) =>
     states.forEach((listener) => listener(event.payload)),
   );
@@ -25,6 +44,27 @@ export async function installNativeBridge(): Promise<void> {
     (event) => previews.forEach((listener) => listener(event.payload)),
   );
   const api: MemCodeAPI = {
+    saveReviewComment: (input) => call("review:save", input),
+    deleteReviewComment: (taskId, id) => call("review:delete", { taskId, id }),
+    shareReviewComments: (taskId, ids, text) =>
+      call("review:share", { taskId, ids, text }),
+    resolveFile: (taskId, href, basePath) =>
+      call("file:resolve", { taskId, href, basePath }),
+    onReview: (listener) => {
+      reviews.add(listener);
+      return () => {
+        reviews.delete(listener);
+      };
+    },
+    workerChanges: (taskId) => call("worker:changes", taskId),
+    terminal: (taskId, request) =>
+      call("terminal:request", { taskId, request }),
+    onTerminal: (listener) => {
+      terminals.add(listener);
+      return () => {
+        terminals.delete(listener);
+      };
+    },
     load: () => call("workspace:load"),
     onState: (listener) => {
       states.add(listener);
@@ -49,7 +89,8 @@ export async function installNativeBridge(): Promise<void> {
       call("intelligence:refresh", { projectId, refreshIndex }),
     queryIntelligence: (projectId, section, input) =>
       call("intelligence:query", { projectId, section, input }),
-    addMessage: (id, text) => call("task:message", { id, text }),
+    addMessage: (id, text, references) =>
+      call("task:message", { id, text, references }),
     qualifyTask: (id) => call("task:qualify", id),
     startWorker: (id) => call("worker:start", id),
     stopWorker: (id) => call("worker:stop", id),
@@ -72,6 +113,7 @@ export async function installNativeBridge(): Promise<void> {
       call("fields:save", { projectId, fields }),
     saveSettings: (settings) => call("settings:save", settings),
     showPreview: (input) => call("preview:show", input),
+    browser: (taskId, request) => call("browser:request", { taskId, request }),
     hidePreview: () => call("preview:hide"),
     previewAction: (action) => call("preview:action", action),
     readArtifact: (id) => call("artifact:read", id),

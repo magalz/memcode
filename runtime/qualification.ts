@@ -23,20 +23,43 @@ export async function collectEvidence(
       note: "Analyze this project to add measured code context.",
       measuredAt,
     };
-  const searches = task.scope?.length
-    ? task.scope.slice(0, 3).map((file) => ({
-        file_path: file,
-        query: basename(file).replace(/\.[^.]+$/, ""),
-      }))
-    : [{ query: task.title + " " + task.description }];
   const rows = new Map<string, any>();
   let incomplete = false,
     graphRevision: string | undefined;
-  for (const search of searches) {
+  if (task.scope?.length) {
+    const scopedRows: any[][] = [];
+    for (const file of task.scope.slice(0, 3)) {
+      const context = await client.call(project, "get_symbol_context", {
+        repo_id: project.repoId,
+        branch: project.branch,
+        symbol: basename(file),
+        file_path: file,
+        limit: 64,
+      });
+      graphRevision = context._meta?.graph_revision?.token ?? graphRevision;
+      const callables = (context.contains ?? []).filter(
+        (row: any) => row.kind === "Function" || row.kind === "Method",
+      );
+      callables.sort(
+        (a: any, b: any) =>
+          Number(b.kind === "Function") - Number(a.kind === "Function"),
+      );
+      scopedRows.push(callables);
+      incomplete ||=
+        !context.found || !!context.truncated || !!context.graph_truncated;
+    }
+    // Sample each declared file before taking more symbols from any one file.
+    for (let index = 0; index < 8; index++)
+      for (const group of scopedRows) {
+        const row = group[index];
+        if (row)
+          rows.set(row.file_path + "::" + (row.node_id ?? row.name), row);
+      }
+  } else {
     const result = await client.call(project, "find_code", {
       repo_id: project.repoId,
       branch: project.branch,
-      ...search,
+      query: (task.title + " " + task.description).slice(0, 1000),
       limit: 6,
       include_context: true,
     });
@@ -47,10 +70,11 @@ export async function collectEvidence(
     for (const row of result.results ?? [])
       rows.set(row.file_path + "::" + row.name, row);
   }
-  const selected = [...rows.values()].slice(0, 8);
+  const selected = [...rows.values()]
+    .filter((row) => row.kind === "Function" || row.kind === "Method")
+    .slice(0, 8);
   const symbols: Evidence["symbols"] = [];
   for (const row of selected) {
-    if (row.kind === "File") continue;
     symbols.push({
       name: row.name,
       file: row.file_path,

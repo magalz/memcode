@@ -85,9 +85,21 @@ async function acquireLock() {
 }
 const ready = (async () => {
   await acquireLock();
-  return createRuntime(dataDir, appPath, host, (event, payload) =>
-    send({ kind: "event", event, payload }),
+  const runtime = await createRuntime(
+    dataDir,
+    appPath,
+    host,
+    (event, payload) => send({ kind: "event", event, payload }),
   );
+  const openProject =
+    option("--open-project") ?? process.env.MEMCODE_OPEN_PROJECT;
+  if (openProject)
+    await runtime.openProject(
+      resolve(openProject),
+      process.env.MEMCODE_OPEN_PROJECT_NAME,
+      process.env.MEMCODE_OPEN_PROJECT_DESCRIPTION,
+    );
+  return runtime;
 })();
 ready.catch((error) =>
   process.stderr.write(`MemCode runtime could not start: ${error.message}\n`),

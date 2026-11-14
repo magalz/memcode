@@ -25,7 +25,7 @@ export function normalizedPath(value: string): string {
     .replace(/\/$/, "");
 }
 const blocked =
-  /(^|\/)(\.git|\.memcode|node_modules|target|dist|dist-runtime)(\/|$)/;
+  /(^|\/)(\.git|\.memcode|\.memdb|\.memtrace|node_modules|target|dist|dist-runtime)(\/|$)/;
 export async function repoFiles(root: string): Promise<string[]> {
   return [
     ...new Set(

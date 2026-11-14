@@ -43,6 +43,12 @@ export function RoutingCard({
           {harnessNames[route.harness]} · {route.effort} effort
         </span>
       </div>
+      {route.inputs.cognitive === null && route.inputs.cyclomatic === null && (
+        <p className="routing-scope-note" role="status">
+          {task.evidence?.note ??
+            "Source complexity has not been measured. This is a provisional route."}
+        </p>
+      )}
       <div className="routing-measures">
         <div>
           <strong>{route.inputs.cognitive ?? "—"}</strong>
@@ -81,7 +87,27 @@ export function RoutingCard({
         {route.inputs.sourceRevision && (
           <code>Source {route.inputs.sourceRevision.slice(0, 10)}</code>
         )}
+        {!!task.evidence?.symbols.length && (
+          <ul className="routing-source-files">
+            {[
+              ...new Set(task.evidence.symbols.map((symbol) => symbol.file)),
+            ].map((file) => (
+              <li key={file}>
+                <code>{file}</code>
+              </li>
+            ))}
+          </ul>
+        )}
       </details>
+      <button
+        className="routing-remeasure"
+        onClick={plan}
+        disabled={busy || task.example}
+      >
+        {busy ? <Spinner size={12} /> : <GitBranch size={12} />}
+        Measure again
+        <ArrowRight size={12} />
+      </button>
     </div>
   );
 }

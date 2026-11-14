@@ -47,8 +47,9 @@ export function FleetDecisions({
           <h2>One epic branch. A coordinated fleet.</h2>
           <p>
             Story workers share the branch. Memtrace tracks intent, scope
-            reservations and conflicts. Your decisions determine how paused work
-            continues.
+            reservations and shared plans. Workers adhere to the first published
+            plan or propose an alternative. Unresolved semantic disagreements
+            need your decision.
           </p>
         </div>
         <button
@@ -80,7 +81,7 @@ export function FleetDecisions({
         <Empty
           icon={<ShieldCheck size={28} />}
           title="The fleet has a clear path."
-          description="Unresolved scope overlaps and Fleet escalations appear here. Shared changes are preserved when work pauses."
+          description="Unresolved semantic disagreements and Class C escalations appear here. Ordinary overlaps, edit reservations and source refreshes are coordinated by the workers."
         />
       )}
       {resolved.length > 0 && (

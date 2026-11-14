@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { initialState } from "../src/seed.ts";
 import { git, within, exists } from "../runtime/local.ts";
 import { WorkerManager } from "../runtime/workers.ts";
-import { FleetBlocked } from "../runtime/fleet.ts";
+import { FleetBlocked, FleetCoordinator } from "../runtime/fleet.ts";
 import type { MemtraceEngine } from "../runtime/memtrace.ts";
 import type { HarnessRuntime, WorkItem } from "../src/shared.ts";
 
@@ -59,9 +59,12 @@ class TestFleet {
       return { state: "granted" };
     }
     if (name === "fleet_publish_intent") {
+      const renewing = this.intents.has(args.agent_id);
       if (args.touched.length) this.intents.set(args.agent_id, args.touched);
       else this.intents.delete(args.agent_id);
-      return { active_conflicts: [] };
+      return {
+        active_conflicts: renewing ? [{ agent_id: args.agent_id }] : [],
+      };
     }
     if (name === "fleet_record_episode") return { conflict_class: "A" };
     if (name === "fleet_list_escalations") return { pending: [] };
@@ -84,6 +87,12 @@ async function fixture(sharedScope = false) {
     "-m",
     "Fixture",
   ]);
+  // Connecting a previously unconfigured project can create these stores
+  // before its first epic is activated. They must not block that switch.
+  for (const directory of [".memdb", ".memtrace"]) {
+    await mkdir(join(repo, directory));
+    await writeFile(join(repo, directory, "runtime.lock"), "Local engine data");
+  }
   const state = initialState();
   state.tasks = [];
   state.epics = [];
@@ -127,7 +136,7 @@ async function fixture(sharedScope = false) {
   const script = join(root, "fixture.mjs");
   await writeFile(
     script,
-    `import {writeFile} from 'node:fs/promises';import {join} from 'node:path';for await(const chunk of process.stdin){}await writeFile(process.env.MEMCODE_TASK_ID+'.txt','Shared branch change');await writeFile(join(process.env.MEMCODE_ARTIFACT_DIR,'report.html'),'<h1>'+process.env.MEMCODE_TASK_ID+'</h1>');await new Promise(r=>setTimeout(r,1400));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'Fixture done. No model called.'}}));`,
+    `import {writeFile,readFile} from 'node:fs/promises';import {join} from 'node:path';for await(const chunk of process.stdin){}const session=JSON.parse(await readFile(join('.memcode','workers',process.env.MEMCODE_TASK_ID,'context-session.json'),'utf8'));async function coordinate(input){const r=await fetch(session.endpoint,{method:'POST',headers:{Authorization:'Bearer '+session.token,'Content-Type':'application/json'},body:JSON.stringify({capability:'coordinate',...input})});if(!r.ok)throw Error(await r.text());return r.json()}let result=await coordinate({action:'inspect',plan:'Preserve the shared fixture contract and add the assigned worker output.'});for(let i=0;result.canEdit!==true&&i<10;i++)result=await coordinate({action:'adopt',waitMs:2000});if(result.canEdit!==true)throw Error('No edit reservation');await writeFile(process.env.MEMCODE_TASK_ID+'.txt','Shared branch change');await writeFile(join(process.env.MEMCODE_ARTIFACT_DIR,'report.html'),'<h1>'+process.env.MEMCODE_TASK_ID+'</h1>');await new Promise(r=>setTimeout(r,${sharedScope ? 3000 : 1400}));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'Fixture done. No model called.'}}));`,
   );
   const engine = new TestFleet();
   const catalog: HarnessRuntime[] = [
@@ -155,7 +164,12 @@ async function fixture(sharedScope = false) {
       within(tmpdir(), root) &&
         basename(root).startsWith("memcode-fleet-test-"),
     );
-    await rm(root, { recursive: true, force: true });
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    });
   };
   return { state, project, epic, tasks, manager, engine, repo, cleanup };
 }
@@ -169,9 +183,35 @@ async function until(check: () => boolean) {
 test("two story processes collaborate on one epic branch and one checkout", async () => {
   const f = await fixture();
   try {
+    f.tasks[0].description =
+      "A detailed source task. ".repeat(180) +
+      "PRESERVE_FINAL_ACCEPTANCE_CRITERION";
     await f.manager.start(f.tasks[0], f.project);
+    assert.match(
+      await readFile(
+        join(f.repo, ".memcode", "workers", f.tasks[0].id, "brief.md"),
+        "utf8",
+      ),
+      /PRESERVE_FINAL_ACCEPTANCE_CRITERION/,
+    );
+    assert.ok(
+      f.engine.calls
+        .filter((call) => call.name === "find_code")
+        .every((call) => call.args.query.length <= 1000),
+    );
+    await f.manager.fleet.heartbeat(f.project, f.tasks[0]);
+    assert.equal(
+      f.state.fleetConflicts.length,
+      0,
+      "Renewing one's own intent is not a peer conflict",
+    );
     await f.manager.start(f.tasks[1], f.project);
     assert.equal(f.tasks[0].run.workspace, f.repo);
+    await until(() => f.state.artifacts.length === 2);
+    assert.ok(
+      f.tasks.some((task) => task.run.state === "running"),
+      "Published artifacts appear before the worker exits",
+    );
     assert.equal(f.tasks[1].run.workspace, f.repo);
     assert.equal(f.tasks[0].run.branch, f.tasks[1].run.branch);
     assert.equal(
@@ -219,7 +259,7 @@ test("two story processes collaborate on one epic branch and one checkout", asyn
     await f.cleanup();
   }
 });
-test("an overlapping story pauses the epic and requires an explicit human decision", async () => {
+test("overlapping workers adhere to the first owner, wait and reread instead of asking a human", async () => {
   const f = await fixture(true);
   try {
     await f.manager.start(f.tasks[0], f.project);
@@ -227,39 +267,30 @@ test("an overlapping story pauses the epic and requires an explicit human decisi
     while (!(await exists(join(f.repo, "one.txt"))) && Date.now() < ready)
       await new Promise((resolve) => setTimeout(resolve, 25));
     assert.equal(await exists(join(f.repo, "one.txt")), true);
-    await assert.rejects(f.manager.start(f.tasks[1], f.project), FleetBlocked);
-    await until(() => f.tasks[0].run.state === "blocked");
-    assert.equal(f.state.fleetConflicts.length, 1);
-    const conflict = f.state.fleetConflicts[0];
-    assert.equal(conflict.status, "open");
-    assert.ok(
-      conflict.taskIds.includes("one") && conflict.taskIds.includes("two"),
-    );
-    assert.equal(await exists(join(f.repo, "two.txt")), false);
+    await f.manager.start(f.tasks[1], f.project);
+    assert.equal(f.state.fleetConflicts.length, 0);
     assert.equal(
       await readFile(join(f.repo, "one.txt"), "utf8"),
       "Shared branch change",
     );
-    await f.manager.fleet.resolve(
-      conflict.id,
-      "Preserve the first story; re-scope the second before continuing.",
+    await until(() => f.tasks.every((task) => task.run.state === "finished"));
+    assert.equal(await exists(join(f.repo, "two.txt")), true);
+    assert.equal(f.state.fleetConflicts.length, 0);
+    assert.equal(
+      f.state.fleetPlans?.find((plan) => plan.taskId === "two")?.adoptedFrom,
       "one",
     );
-    assert.equal(conflict.status, "resolved");
-    assert.equal(conflict.winnerTaskId, "one");
-    assert.throws(
-      () => f.manager.fleet.assertClear(f.tasks[1], f.project),
-      /deferred/,
-    );
-    assert.doesNotThrow(() =>
-      f.manager.fleet.assertClear(f.tasks[0], f.project),
-    );
-    assert.ok(
-      f.tasks.every(
-        (task) => !["preparing", "running"].includes(task.run.state),
-      ),
-      "A human decision never automatically restarts workers",
-    );
+    const audit = (
+      await readFile(
+        join(f.repo, ".memcode", "workers", "two", "fleet-activity.jsonl"),
+        "utf8",
+      )
+    )
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.ok(audit.some((event) => event.directive === "adhere"));
+    assert.ok(audit.some((event) => event.directive === "proceed"));
   } finally {
     await f.cleanup();
   }

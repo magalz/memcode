@@ -1,5 +1,5 @@
 import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
-import { basename, join, resolve, isAbsolute } from "node:path";
+import { basename, join, resolve, isAbsolute, extname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { AppState, Project, WorkItem } from "../src/shared";
@@ -7,7 +7,7 @@ import { isActive } from "../src/domain";
 import { LocalStore, exists, git, now, within } from "./local";
 import { MemtraceEngine } from "./memtrace";
 import { WorkerManager } from "./workers";
-import { PreviewManager } from "./preview";
+import { PreviewManager, artifactRoots } from "./preview";
 import { localURL } from "./urls";
 import { planRoute } from "./router";
 import { discoverHarnesses } from "./catalog";
@@ -19,6 +19,18 @@ import { taskPlanningShape, applyTaskPatch } from "./task-planning";
 import { registerIntelligence } from "./intelligence";
 import type { NativeHost, Emit } from "./host";
 import { contextAssistantDefaults } from "../src/context-settings";
+import { browserRequestSchema } from "../src/browser";
+import { AgentBrowserManager } from "./browser/manager";
+import { TerminalManager } from "./terminals";
+import { terminalRequestSchema } from "../src/terminal";
+import { readWorkerChanges, WorkerChangeJournal } from "./changes";
+import { resolveFile } from "./files";
+import { registerReview } from "./review";
+import {
+  formatReviewMessage,
+  reviewReferenceSchema,
+  type ReviewReference,
+} from "../src/review";
 
 const identifier = z.string().min(1).max(200),
   nonempty = z.string().trim().min(1),
@@ -70,8 +82,26 @@ export async function createRuntime(
     await store.save();
     emit("workspace:state", store.state);
   };
-  const workers = new WorkerManager(state, changed, engine, store.dir),
-    preview = new PreviewManager(host, state, store.dir, changed, emit);
+  const browsers = new AgentBrowserManager(state, store.dir, changed, 16, host);
+  const terminals = new TerminalManager(state, host);
+  const workers = new WorkerManager(
+      state,
+      changed,
+      engine,
+      store.dir,
+      undefined,
+      undefined,
+      browsers,
+      terminals,
+    ),
+    preview = new PreviewManager(
+      host,
+      state,
+      store.dir,
+      changed,
+      emit,
+      appPath,
+    );
   const selectedFolders = new Set<string>(),
     handlers = new Map<string, Handler>();
   const task = (id: string) => {
@@ -254,10 +284,31 @@ export async function createRuntime(
   register("project:analyze", identifier, analyze);
   register(
     "task:message",
-    z.object({ id: identifier, text: nonempty.max(20000) }),
-    async ({ id, text }) => {
+    z
+      .object({
+        id: identifier,
+        text: nonempty.max(20000),
+        references: z.array(reviewReferenceSchema).max(8).optional(),
+      })
+      .strict(),
+    async ({ id, text, references }) => {
       const item = task(id);
-      item.messages.push({ id: randomUUID(), role: "user", text, at: now() });
+      if (references?.some((ref: ReviewReference) => ref.taskId !== id))
+        throw Error("Comments must belong to this work item.");
+      const body = references?.length
+        ? formatReviewMessage(text, references)
+        : text;
+      if (body.length > 48000)
+        throw Error(
+          "This follow-up is too long. Use fewer or shorter selections.",
+        );
+      item.messages.push({
+        id: randomUUID(),
+        role: "user",
+        text: body,
+        at: now(),
+        ...(references?.length ? { references } : {}),
+      });
       item.updatedAt = now();
       await changed();
     },
@@ -379,35 +430,48 @@ export async function createRuntime(
   );
   register("artifact:read", identifier, async (id) => {
     const artifact = store.state.artifacts.find((a) => a.id === id);
-    if (!artifact || artifact.kind !== "text")
-      throw new Error("Text artifact not found.");
+    if (!artifact || artifact.kind === "html")
+      throw new Error("Inline artifact not found.");
     const path = await realpath(artifact.path);
     const item = task(artifact.taskId);
-    const roots = [
-      join(store.dir, "examples"),
-      ...(item.run.workspace
-        ? [
-            join(
-              item.run.workspace,
-              ".memcode",
-              "workers",
-              item.id,
-              "artifacts",
-            ),
-          ]
-        : []),
-      ...(item.run.worktree
-        ? [join(item.run.worktree, ".memcode", "artifacts")]
-        : []),
-    ];
+    const roots = artifactRoots(store.dir, item);
     if (!roots.some((root) => within(root, path)))
       throw new Error("Artifact path is outside the output folders.");
-    if ((await stat(path)).size > 1_000_000)
-      throw new Error("This text artifact is too large for inline preview.");
+    if (
+      (await stat(path)).size >
+      (artifact.kind === "image" ? 25_000_000 : 1_000_000)
+    )
+      throw new Error("This artifact is too large for inline preview.");
+    if (artifact.kind === "image") {
+      const mime: Record<string, string> = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".svg": "image/svg+xml",
+      };
+      const type = mime[extname(path).toLowerCase()];
+      if (!type) throw Error("Unsupported inline image format.");
+      return `data:${type};base64,${(await readFile(path)).toString("base64")}`;
+    }
     return readFile(path, "utf8");
   });
+  register(
+    "file:resolve",
+    z
+      .object({
+        taskId: identifier,
+        href: z.string().min(1).max(6000),
+        basePath: z.string().max(4000).optional(),
+      })
+      .strict(),
+    ({ taskId, href, basePath }) =>
+      resolveFile(store.state, store.dir, taskId, href, basePath),
+  );
 
   registerPlanning(register, state, project, changed);
+  registerReview(register, state, changed, () => preview.publishComments());
   registerPlanningControls(register, state, project, changed);
   registerIntelligence(register, state, project, changed, engine);
   register("project:select-folder", z.undefined(), async () => {
@@ -547,6 +611,11 @@ export async function createRuntime(
       taskId: identifier,
       url: z.string().max(2000).optional(),
       artifactId: identifier.optional(),
+      filePath: z.string().max(4000).optional(),
+      fileRevision: z.string().max(200).optional(),
+      commentId: identifier.optional(),
+      commentFocus: z.number().int().min(0).optional(),
+      line: z.number().int().min(1).max(10000000).optional(),
       bounds: z.object({
         x: z.number().int().min(0),
         y: z.number().int().min(0),
@@ -556,10 +625,55 @@ export async function createRuntime(
     }),
     (input) => preview.show(input),
   );
+  register(
+    "browser:request",
+    z.object({ taskId: identifier, request: browserRequestSchema }).strict(),
+    ({ taskId, request }) => browsers.execute(taskId, request),
+  );
   register("preview:hide", z.undefined(), () => preview.hide());
+  register("worker:changes", identifier, async (id) => {
+    const item = task(id);
+    let changes = await readWorkerChanges(item);
+    if (
+      !changes.checkpoints.length &&
+      item.run.baseline &&
+      !item.run.changeRunId &&
+      item.run.finishedAt
+    ) {
+      const scopes = item.scope ?? [];
+      const overlap = state().tasks.some(
+        (peer) =>
+          peer.id !== id &&
+          peer.projectId === item.projectId &&
+          peer.run.startedAt &&
+          peer.run.finishedAt &&
+          peer.run.startedAt <= item.run.finishedAt! &&
+          peer.run.finishedAt >= (item.run.startedAt ?? item.createdAt) &&
+          (peer.scope ?? []).some((a) =>
+            scopes.some(
+              (b) => a === b || a.startsWith(b + "/") || b.startsWith(a + "/"),
+            ),
+          ),
+      );
+      if (!overlap) {
+        await new WorkerChangeJournal().importScopedBaseline(
+          project(item.projectId),
+          item,
+        );
+        changes = await readWorkerChanges(item);
+        await changed();
+      }
+    }
+    return changes;
+  });
+  register(
+    "terminal:request",
+    z.object({ taskId: identifier, request: terminalRequestSchema }).strict(),
+    ({ taskId, request }) => terminals.execute(taskId, request),
+  );
   register(
     "preview:action",
-    z.enum(["back", "forward", "reload", "capture"]),
+    z.enum(["back", "forward", "reload", "capture", "clear-selection"]),
     (input) => preview.action(input),
   );
   register(
@@ -611,6 +725,20 @@ export async function createRuntime(
   let closed = false;
   return {
     store,
+    async openProject(path: string, name?: string, description = "") {
+      const parent = await realpath(path);
+      if (!(await stat(parent)).isDirectory())
+        throw Error("Choose a project folder.");
+      // A path supplied to the desktop launch command is explicit folder intent,
+      // equivalent to selecting that folder in the native picker.
+      selectedFolders.add(parent);
+      return handlers.get("project:create")!.handle({
+        mode: "existing",
+        parent,
+        name: name || basename(parent),
+        description,
+      }) as Promise<Project>;
+    },
     async request(method: string, input?: unknown) {
       const route = handlers.get(method);
       if (!route) throw new Error(`Unknown MemCode method: ${method}`);
@@ -624,6 +752,8 @@ export async function createRuntime(
       if (closed) return;
       closed = true;
       await workers.close();
+      await terminals.close();
+      await browsers.close();
       await preview.close();
       await engine.close();
       await store.save();

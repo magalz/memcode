@@ -1,0 +1,68 @@
+/* Scoped controls for interactive HTML artifacts: leave the artifact's design intact. */
+.viewer-selection {
+  position: fixed !important;
+  z-index: 2147483600 !important;
+  bottom: 16px;
+  right: 18px;
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 7px 6px 13px;
+  border: 1px solid #d1ded3;
+  background: #fbfdfbf5;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px #17311b12;
+  font:
+    11px "Segoe UI",
+    sans-serif !important;
+  color: #285b40;
+}
+.viewer-selection > span {
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #78907d;
+  margin-right: 5px;
+  font: inherit;
+}
+.viewer-selection button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 5px;
+  background: #edf4ee;
+  color: #285b40;
+  padding: 7px 10px;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.viewer-selection button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.viewer-selection button:not(:disabled):hover {
+  background: #deeee2;
+}
+.viewer-selection button.active {
+  background: #d7eff2;
+  color: #256e79;
+}
+.element-picker-outline {
+  position: fixed;
+  z-index: 2147483500;
+  pointer-events: none;
+  border: 2px solid #3fabc4;
+  background: #5dc6d31a;
+  border-radius: 2px;
+}
+.review-picking,
+.review-picking * {
+  cursor: crosshair !important;
+}
+.review-picking .viewer-selection,
+.review-picking .viewer-selection * {
+  cursor: pointer !important;
+}

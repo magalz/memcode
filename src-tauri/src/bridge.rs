@@ -26,6 +26,8 @@ struct Inner {
     ready: Notify,
     failure: Mutex<Option<String>>,
     closing: AtomicBool,
+    events: Mutex<HashMap<String, Value>>,
+    events_draining: AtomicBool,
 }
 
 #[derive(Clone)]
@@ -41,6 +43,8 @@ impl RuntimeBridge {
             ready: Notify::new(),
             failure: Mutex::new(None),
             closing: AtomicBool::new(false),
+            events: Mutex::new(HashMap::new()),
+            events_draining: AtomicBool::new(false),
         }))
     }
 
@@ -215,16 +219,25 @@ impl RuntimeBridge {
                 }
             }
             Some("event") => {
+                if message["event"].as_str() == Some("review:event") {
+                    let target = app.clone();
+                    let payload = message["payload"].clone();
+                    let _ = app.run_on_main_thread(move || {
+                        let _ = target.emit_to(
+                            tauri::EventTarget::Webview {
+                                label: "main".into(),
+                            },
+                            "review:event",
+                            payload,
+                        );
+                    });
+                    return;
+                }
                 if let Some(event @ ("workspace:state" | "preview:event")) =
                     message["event"].as_str()
                 {
-                    let _ = app.emit_to(
-                        tauri::EventTarget::Webview {
-                            label: "main".into(),
-                        },
-                        event,
-                        message["payload"].clone(),
-                    );
+                    self.queue_event(app, event.to_owned(), message["payload"].clone())
+                        .await;
                 }
             }
             Some("host_request") => {
@@ -246,6 +259,38 @@ impl RuntimeBridge {
             }
             _ => {}
         }
+    }
+    async fn queue_event(&self, app: AppHandle, event: String, payload: Value) {
+        self.0.events.lock().await.insert(event, payload);
+        if self.0.events_draining.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let bridge = self.clone();
+        tauri::async_runtime::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_millis(33)).await;
+                let events = std::mem::take(&mut *bridge.0.events.lock().await);
+                for (event, payload) in events {
+                    let target = app.clone();
+                    // Never make the stdio reader wait on a native UI dispatch.
+                    // Workspace snapshots supersede earlier snapshots while busy.
+                    let _ = app.run_on_main_thread(move || {
+                        let _ = target.emit_to(
+                            tauri::EventTarget::Webview {
+                                label: "main".into(),
+                            },
+                            &event,
+                            payload,
+                        );
+                    });
+                }
+                let pending = bridge.0.events.lock().await;
+                if pending.is_empty() {
+                    bridge.0.events_draining.store(false, Ordering::SeqCst);
+                    break;
+                }
+            }
+        });
     }
 
     pub async fn fail(&self, error: String) {

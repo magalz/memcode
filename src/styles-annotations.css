@@ -1,0 +1,192 @@
+.annotation-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 900;
+}
+.annotation-rect {
+  position: fixed;
+  background: #ecc14c36;
+  border-bottom: 2px solid #cc9f35a0;
+  pointer-events: none;
+  border-radius: 2px;
+  mix-blend-mode: multiply;
+}
+.annotation-mark.active .annotation-rect {
+  background: #75c5eb40;
+  border-bottom-color: #2a9dbc;
+}
+.annotation-pin {
+  position: fixed;
+  pointer-events: auto !important;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  border: 1px solid #c4a154 !important;
+  border-radius: 7px 7px 7px 2px;
+  background: #fff1c8 !important;
+  color: #755b20 !important;
+  box-shadow: 0 2px 5px #26331115;
+  font:
+    10px/20px "Inter Variable",
+    sans-serif !important;
+  padding: 0 !important;
+  text-align: center;
+  cursor: pointer;
+  display: block !important;
+}
+.annotation-mark.active .annotation-pin {
+  background: #e0f3fa !important;
+  border-color: #74b9cc !important;
+  color: #20637b !important;
+}
+.review-comments-panel {
+  flex: none;
+  max-height: 45%;
+  overflow: auto;
+  border-top: 1px solid #d8e5d5;
+  padding: 14px 22px;
+  background: #fcfefa;
+}
+.review-comments-panel > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.review-comments-panel > header strong {
+  font-weight: 500;
+}
+.review-comments-panel > header .icon-button {
+  margin-left: auto;
+}
+.review-comments-panel > footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+.review-comments-panel > footer small {
+  margin-right: auto;
+  font-size: 10px;
+  color: #81917a;
+}
+.saved-review-note {
+  border: 1px solid #e0e7d8;
+  background: #fff;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.saved-review-note.focused {
+  border-color: #72b7bd;
+  box-shadow: 0 0 0 2px #67c0cb10;
+}
+.saved-review-note > header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 10px;
+  color: #6b7f65;
+}
+.saved-review-note > header input {
+  accent-color: #379b76;
+}
+.saved-review-note > header button:first-of-type {
+  font-size: 10px;
+  color: #365d40;
+  text-align: left;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.saved-review-note > header small {
+  color: #9aa58d;
+  margin-left: auto;
+  font-size: 9px;
+}
+.saved-review-note > p {
+  margin: 8px 0 0;
+  color: #3d563c;
+  white-space: pre-wrap;
+}
+.saved-review-note blockquote {
+  margin: 8px 0 0;
+  padding: 5px 10px;
+  border-left: 2px solid #d5bd74;
+  background: #faf8ef;
+  color: #7f8066;
+  font: 10px/1.7 var(--sans);
+  max-height: 65px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.review-attachment-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 9px 22px;
+  background: #f7faf3;
+  border-top: 1px solid #e1e9db;
+  font-size: 10px;
+  color: #6d856b;
+}
+.review-attachment-bar > button {
+  margin-left: auto;
+  font-size: 10px;
+  color: #2f7856;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.followup-comment-chips {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding: 10px 10px 0;
+}
+.followup-comment-chips > span {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 7px;
+  border: 1px solid #e1e7d4;
+  border-radius: 4px;
+  background: #f5f8ed;
+  font-size: 10px;
+  color: #748568;
+}
+.message-review-ref {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid #e0e7d5;
+  border-radius: 5px;
+  background: #f8faf1;
+}
+.message-review-ref strong {
+  font-size: 10px;
+  font-weight: 500;
+  color: #426c51;
+}
+.message-review-ref small {
+  font-size: 9px;
+  color: #84957a;
+  margin-left: 8px;
+}
+.message-review-ref blockquote {
+  white-space: pre-wrap;
+  margin: 7px 0 0;
+  font-size: 11px;
+  color: #687d60;
+  border-left: 2px solid #d4c991;
+  padding-left: 10px;
+}

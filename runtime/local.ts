@@ -25,6 +25,7 @@ import type { AppState, Harness, RuntimeInfo } from "../src/shared";
 import { initialState } from "../src/seed";
 import { restartSafeState } from "../src/domain";
 import { initializePlanning, observePlanning } from "../src/planning/history";
+import { migrateReviewComments } from "./review";
 
 export const exec = promisify(execFile);
 export const now = () => new Date().toISOString();
@@ -63,6 +64,7 @@ export class LocalStore {
         settings: { ...initialState().settings, ...saved.settings },
       };
       const example = this.state.projects.find((project) => project.example);
+      migrateReviewComments(this.state);
       if (String(this.state.settings.defaultHarness) === "amp")
         this.state.settings.defaultHarness = "cursor";
       if (example) example.name = "Design preview";

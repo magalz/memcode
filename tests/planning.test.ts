@@ -4,6 +4,46 @@ import { initialState } from "../src/seed.ts";
 import { installDogfoodPlan } from "../src/dogfood.ts";
 import { validateDependencies } from "../src/domain.ts";
 
+test("Tauri dogfood migration repairs legacy source paths and invalidates their stale route without overwriting custom scope", () => {
+  const state = initialState(),
+    project = { ...state.projects[0], id: "dogfood", example: false };
+  state.projects.push(project);
+  installDogfoodPlan(state, project);
+  const freshness = state.tasks.find(
+    (task) => task.projectId === project.id && task.sourceKey === "freshness",
+  )!;
+  freshness.scope = ["electron/memtrace.ts", "electron/qualification.ts"];
+  freshness.evidence = {
+    state: "partial",
+    symbols: [],
+    incomplete: true,
+    measuredAt: "old",
+    note: "No anchors",
+  };
+  const custom = state.tasks.find(
+    (task) =>
+      task.projectId === project.id && task.sourceKey === "route-regressions",
+  )!;
+  custom.scope = ["electron/router.ts", "src/my-custom-file.ts"];
+  installDogfoodPlan(state, project);
+  assert.deepEqual(freshness.scope, [
+    "runtime/memtrace.ts",
+    "runtime/qualification.ts",
+  ]);
+  assert.equal(freshness.evidence, undefined);
+  assert.deepEqual(custom.scope, [
+    "electron/router.ts",
+    "src/my-custom-file.ts",
+  ]);
+  assert.ok(
+    state.tasks
+      .filter((task) => task.projectId === project.id && task !== custom)
+      .every(
+        (task) => !task.scope?.some((file) => file.startsWith("electron/")),
+      ),
+  );
+});
+
 test("the banked build plan is complete, idempotent and preserves edited stories", () => {
   const state = initialState(),
     project = { ...state.projects[0], id: "dogfood", example: false };

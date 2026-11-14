@@ -55,6 +55,12 @@ fn loopback(url: &Url) -> bool {
 }
 
 pub async fn host_call(app: AppHandle, method: &str, input: Value) -> Result<Value, String> {
+    if method.starts_with("terminal_") {
+        return crate::terminal::call(app, method, input).await;
+    }
+    if method.starts_with("browser_") {
+        return crate::browser::call(app, method, input).await;
+    }
     match method {
         "select_folder" => {
             let selected = tauri::async_runtime::spawn_blocking(|| {

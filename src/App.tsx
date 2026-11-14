@@ -27,7 +27,7 @@ import {
   Workflow,
   X,
 } from "lucide-react";
-import type { AppState, RuntimeInfo, WorkItem } from "./shared";
+import type { AppState, RuntimeInfo, WorkItem, Artifact } from "./shared";
 import { isActive, tasksForProject } from "./domain";
 import {
   Empty,
@@ -39,6 +39,7 @@ import {
 } from "./components/UI";
 import { Workspace } from "./components/Workspace";
 import { Conversations } from "./components/Conversations";
+import { artifactTypeLabel } from "./artifact-format";
 import { WorkDetail } from "./components/WorkDetail";
 import { Roadmap } from "./components/Roadmap";
 import { FleetDecisions } from "./components/FleetDecisions";
@@ -107,7 +108,7 @@ const pageCopy: Record<View, [string, string, string]> = {
   artifacts: [
     "THE WORK, MADE VISIBLE",
     "From work to something real.",
-    "Browser previews, reports and files, right where the work happened.",
+    "Interactive artifacts, images and reports, ready to open.",
   ],
   activity: [
     "WORKSPACE PULSE",
@@ -121,6 +122,9 @@ export function App() {
   const [runtime, setRuntime] = useState<RuntimeInfo | null>(null);
   const [view, setView] = useState<View>("board");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(
+    null,
+  );
   const [storyEpic, setStoryEpic] = useState<string | undefined>();
   const [storyParent, setStoryParent] = useState<string | undefined>();
   const [dialog, setDialog] = useState<
@@ -230,6 +234,7 @@ export function App() {
   const working = tasks.filter((task) => task.stage === "working");
   const artifacts = state.artifacts.filter((a) => a.projectId === project.id);
   const open = (task: WorkItem) => {
+    setSelectedArtifact(null);
     setSelectedId(task.id);
     setDialog(null);
   };
@@ -649,19 +654,17 @@ export function App() {
                     key={artifact.id}
                     onClick={() => {
                       const task = tasks.find((t) => t.id === artifact.taskId);
-                      if (task) open(task);
+                      if (task) {
+                        open(task);
+                        setSelectedArtifact(artifact);
+                      }
                     }}
                   >
                     <div className="artifact-tile-preview">
                       {artifact.kind === "html" ? (
                         <>
-                          <div className="mini-browser-dots">
-                            <i />
-                            <i />
-                            <i />
-                          </div>
-                          <Mark small />
-                          <span>Ideas, made real.</span>
+                          <FileCode2 size={30} />
+                          <span>Interactive artifact</span>
                           <div className="mini-preview-lines">
                             <i />
                             <i />
@@ -674,7 +677,7 @@ export function App() {
                     </div>
                     <div>
                       <span className="artifact-extension">
-                        {artifact.kind.toUpperCase()}
+                        {artifactTypeLabel(artifact.name)}
                       </span>
                       <h3>{artifact.name}</h3>
                       <p>
@@ -750,6 +753,11 @@ export function App() {
           task={selected}
           project={state.projects.find((p) => p.id === selected.projectId)!}
           artifacts={state.artifacts.filter((a) => a.taskId === selected.id)}
+          initialArtifact={
+            selectedArtifact?.taskId === selected.id
+              ? selectedArtifact
+              : undefined
+          }
           runtime={runtime}
           conflicts={state.fleetConflicts.filter(
             (item) =>

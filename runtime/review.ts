@@ -1,0 +1,172 @@
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import type { AppState } from "../src/shared";
+import {
+  formatReviewMessage,
+  reviewReferenceSchema,
+  type ReviewComment,
+} from "../src/review";
+type Register = (
+  method: string,
+  schema: z.ZodType,
+  handler: (input: any) => unknown,
+) => void;
+export function migrateReviewComments(state: AppState) {
+  state.reviewComments ??= [];
+  for (const task of state.tasks)
+    for (const message of task.messages) {
+      if (!message.references?.length || message.commentIds?.length) continue;
+      message.commentIds = message.references.map((reference, index) => {
+        const id = `legacy-${message.id}-${index}`;
+        if (!state.reviewComments!.some((comment) => comment.id === id))
+          state.reviewComments!.push({
+            id,
+            taskId: task.id,
+            reference,
+            text: message.text.split("\n\nReference 1:")[0],
+            createdAt: message.at,
+            updatedAt: message.at,
+            status: "shared",
+            messageId: message.id,
+          });
+        return id;
+      });
+    }
+}
+export function registerReview(
+  register: Register,
+  state: () => AppState,
+  changed: () => Promise<void>,
+  publish: () => void,
+) {
+  const id = z.string().min(1).max(250),
+    task = (taskId: string) => {
+      const task = state().tasks.find((t) => t.id === taskId);
+      if (!task) throw Error("Work item not found.");
+      return task;
+    };
+  register(
+    "review:save",
+    z
+      .object({
+        id: id.optional(),
+        taskId: id,
+        reference: reviewReferenceSchema,
+        text: z.string().trim().min(1).max(10000),
+      })
+      .strict(),
+    async (input) => {
+      task(input.taskId);
+      if (input.reference.taskId !== input.taskId)
+        throw Error("The selection belongs to another work item.");
+      const comments = (state().reviewComments ??= []),
+        existing = input.id
+          ? comments.find((c) => c.id === input.id && c.taskId === input.taskId)
+          : undefined;
+      if (input.id && !existing) throw Error("Comment not found.");
+      if (existing?.status === "shared")
+        throw Error(
+          "This comment is already in the conversation. Add a new comment to follow up.",
+        );
+      if (
+        comments.filter((c) => c.taskId === input.taskId).length >= 500 &&
+        !existing
+      )
+        throw Error("This card has reached its saved-comment limit.");
+      const now = new Date().toISOString(),
+        comment: ReviewComment = existing ?? {
+          id: randomUUID(),
+          taskId: input.taskId,
+          reference: input.reference,
+          text: input.text,
+          createdAt: now,
+          updatedAt: now,
+          status: "saved",
+        };
+      Object.assign(comment, {
+        reference: input.reference,
+        text: input.text,
+        updatedAt: now,
+      });
+      if (!existing) comments.push(comment);
+      state().reviewComments = comments;
+      await changed();
+      publish();
+      return comment;
+    },
+  );
+  register(
+    "review:delete",
+    z.object({ taskId: id, id }).strict(),
+    async (input) => {
+      task(input.taskId);
+      const comment = state().reviewComments?.find(
+        (c) => c.id === input.id && c.taskId === input.taskId,
+      );
+      if (!comment) throw Error("Comment not found.");
+      if (comment.status === "shared")
+        throw Error(
+          "A comment already added to the conversation remains part of its review history.",
+        );
+      state().reviewComments = state().reviewComments!.filter(
+        (c) => c.id !== comment.id,
+      );
+      await changed();
+      publish();
+    },
+  );
+  register(
+    "review:share",
+    z
+      .object({
+        taskId: id,
+        ids: z.array(id).min(1).max(30),
+        text: z.string().trim().min(1).max(20000),
+      })
+      .strict(),
+    async (input) => {
+      const item = task(input.taskId),
+        ids = [...new Set(input.ids as string[])],
+        comments = ids.map((id) =>
+          state().reviewComments?.find(
+            (c) => c.id === id && c.taskId === item.id,
+          ),
+        );
+      if (comments.some((c) => !c || c.status !== "saved"))
+        throw Error(
+          "Choose saved comments that have not yet been added to the conversation.",
+        );
+      const notes = comments as ReviewComment[],
+        references = notes.map((c) => c.reference),
+        body =
+          input.text +
+          "\n\n" +
+          notes
+            .map(
+              (c, i) =>
+                `Comment ${i + 1}: ${c.text}\n` +
+                formatReviewMessage("", [c.reference]),
+            )
+            .join("\n\n");
+      if (body.length > 100000)
+        throw Error("Select fewer comments for this follow-up.");
+      const messageId = randomUUID(),
+        at = new Date().toISOString();
+      item.messages.push({
+        id: messageId,
+        role: "user",
+        text: body,
+        at,
+        references,
+        commentIds: ids,
+        reviewText: input.text,
+      });
+      item.updatedAt = at;
+      for (const comment of notes)
+        Object.assign(comment, { status: "shared", messageId, updatedAt: at });
+      await changed();
+      publish();
+      return messageId;
+    },
+  );
+}
