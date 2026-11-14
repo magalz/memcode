@@ -56,10 +56,14 @@ export function IntelligenceDetails({
   detail,
   selectFlow,
   back,
+  hideHeading = false,
+  initialGroup,
 }: {
   detail: IntelligenceDetail;
   selectFlow?: (id: string) => void;
   back?: () => void;
+  hideHeading?: boolean;
+  initialGroup?: string;
 }) {
   const groups = [
     ...new Set(detail.items.map((item) => item.group ?? "Source evidence")),
@@ -72,7 +76,11 @@ export function IntelligenceDetails({
     setPage(0);
     setQuery("");
   }, [detail.section, detail.capturedAt]);
-  const group = groups.includes(selected) ? selected : groups[0],
+  const group = groups.includes(selected)
+      ? selected
+      : initialGroup && groups.includes(initialGroup)
+        ? initialGroup
+        : groups[0],
     items = detail.items.filter(
       (item) =>
         (item.group ?? "Source evidence") === group &&
@@ -96,10 +104,12 @@ export function IntelligenceDetails({
           All execution flows
         </button>
       )}
-      <div className="intelligence-detail-heading">
-        <h3>{detail.title}</h3>
-        <p>{detail.summary}</p>
-      </div>
+      {!hideHeading && (
+        <div className="intelligence-detail-heading">
+          <h3>{detail.title}</h3>
+          <p>{detail.summary}</p>
+        </div>
+      )}
       {warning && (
         <div className="visual-coverage-warning" role="status">
           <ShieldCheck size={14} />

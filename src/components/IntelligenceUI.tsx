@@ -1,4 +1,3 @@
-import { IntelligenceDetails as DetailResults } from "./IntelligenceDetails";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -20,6 +19,7 @@ import type {
 } from "../intelligence";
 import { Spinner } from "./UI";
 import { ResultPager } from "./ResultPager";
+import { ImpactPanel } from "./ImpactPanel";
 
 export interface IntelligenceProps {
   state: AppState;
@@ -273,6 +273,8 @@ export function FindingList({
 } & IntelligenceProps) {
   const [busy, setBusy] = useState<string | null>(null),
     [impact, setImpact] = useState<IntelligenceDetail | null>(null);
+  const [impactTarget, setImpactTarget] = useState<CodeFinding | null>(null),
+    [impactError, setImpactError] = useState<string | null>(null);
   const [page, setPage] = useState(0),
     size = 8,
     currentPage = Math.min(
@@ -288,6 +290,8 @@ export function FindingList({
   useEffect(() => {
     request.current++;
     setImpact(null);
+    setImpactTarget(null);
+    setImpactError(null);
     setBusy(null);
     return () => {
       request.current++;
@@ -341,6 +345,9 @@ export function FindingList({
   const inspect = async (finding: CodeFinding) => {
     const currentRequest = ++request.current;
     setBusy(finding.id);
+    setImpactTarget(finding);
+    setImpact(null);
+    setImpactError(null);
     try {
       const result = (await window.memcode.queryIntelligence(
         project.id,
@@ -352,10 +359,18 @@ export function FindingList({
       )) as IntelligenceDetail;
       if (currentRequest === request.current) setImpact(result);
     } catch (error) {
-      if (currentRequest === request.current) notify((error as Error).message);
+      if (currentRequest === request.current)
+        setImpactError((error as Error).message);
     } finally {
       if (currentRequest === request.current) setBusy(null);
     }
+  };
+  const closeImpact = () => {
+    request.current++;
+    setImpactTarget(null);
+    setImpact(null);
+    setImpactError(null);
+    setBusy(null);
   };
   return (
     <section className="intelligence-panel">
@@ -413,12 +428,14 @@ export function FindingList({
                 )}
                 <div className="finding-actions">
                   <button
-                    title={`Inspect impact of ${finding.name}`}
-                    disabled={busy === finding.id}
+                    title="See affected code before changing this function"
+                    aria-label={`Blast radius for ${finding.name}`}
+                    aria-haspopup="dialog"
+                    aria-expanded={impactTarget?.id === finding.id}
                     onClick={() => void inspect(finding)}
                   >
                     <GitBranch size={13} />
-                    <span>Impact</span>
+                    <span>Blast radius</span>
                   </button>
                   <button
                     title={`Create work for ${finding.name}`}
@@ -453,13 +470,14 @@ export function FindingList({
         total={findings.length}
         change={setPage}
       />
-      {impact && (
-        <div className="inline-intelligence-detail">
-          <button className="text-button" onClick={() => setImpact(null)}>
-            Close impact detail
-          </button>
-          <DetailResults detail={impact} />
-        </div>
+      {impactTarget && (
+        <ImpactPanel
+          finding={impactTarget}
+          detail={impact}
+          error={impactError}
+          retry={() => void inspect(impactTarget)}
+          close={closeImpact}
+        />
       )}
     </section>
   );

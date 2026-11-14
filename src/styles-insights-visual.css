@@ -3,6 +3,16 @@
   min-width: 0;
   overflow-anchor: none;
 }
+.style-profile .style-sample-total {
+  margin-right: 42px;
+}
+.code-insights-view
+  .intelligence-explorer:has(.style-profile)
+  > .intelligence-explorer-toolbar:not(:has(form)) {
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
 .insights-page .code-insights-view > .intelligence-toolbar {
   position: absolute;
   top: 2px;
@@ -294,7 +304,8 @@
   color: #8ca08d;
 }
 .detail-browser-controls input {
-  font: 10px inherit;
+  font: inherit;
+  font-size: 11px;
   background: transparent;
   border: 0;
   outline: none;
@@ -502,9 +513,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.5;
-  color: #789077;
+  color: #617765;
 }
 .style-bar-row strong {
   font: 11px var(--mono);
