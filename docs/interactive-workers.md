@@ -9,12 +9,48 @@ closing a one-shot prompt's stdin:
 | Claude Code | Bidirectional stream JSON control protocol | Original control request / active session              |
 | Cursor      | Agent Client Protocol (ACP)                | Original JSON-RPC permission, question or plan request |
 
-Questions and permissions appear at the top of the story card with a **Waiting
-for you** state. Offered approval decisions remain harness decisions; MemCode
-does not add an automatic force/skip-permissions mode. Answers go to the waiting
+Questions and permissions appear directly above the conversation input with a
+**Waiting for you** state. A compact summary keeps the conversation visible;
+the complete native action is available in expandable details. Offered decisions
+remain harness decisions. Answers go to the waiting
 session immediately. They do not become queued follow-ups. Stale, cancelled,
 wrong-story or wrong-run replies are refused. Secret answers are returned to the
 native session but redacted from persisted workspace history and renderer drafts.
+
+## Permission modes
+
+Each story saves its own permission mode. The selected mode is captured when a
+worker pass starts. Changing the selector while a worker is active configures its
+next pass; it does not silently grant a pending request or change a running session.
+
+| Mode                             | Codex                                          | Claude Code            | Cursor ACP                                 |
+| -------------------------------- | ---------------------------------------------- | ---------------------- | ------------------------------------------ |
+| Review (existing default)        | Workspace sandbox, on-request, user reviewer   | acceptEdits            | Native allowlist / approval requests       |
+| Smart auto                       | Workspace sandbox, native auto_review reviewer | Native auto classifier | Unavailable in the installed ACP transport |
+| Full access (explicit selection) | never + danger-full-access                     | bypassPermissions      | force + sandbox disabled                   |
+
+Native deny rules and administrator policy can still restrict what a harness may
+do. Questions about the task and MemCode Fleet decisions remain visible in every
+mode. Per-worker configuration overlays preserve global settings. Automatic model
+routing excludes transports that cannot provide the chosen mode; it never silently
+substitutes a more permissive mode.
+
+Cursor CLI advertises `--auto-review`, but the installed ACP session factory only
+uses its force flag and exposes model/behavior selectors. Its Smart Auto classifier
+is wired in the interactive CLI path, not the ACP path. Writing an approvalMode
+setting alone therefore does not supply automatic review. The unavailable choice
+is disabled for manually assigned Cursor workers instead of claiming it works.
+
+Native references: [Claude permission modes](https://code.claude.com/docs/en/permission-modes),
+[Claude SDK permissions](https://code.claude.com/docs/en/agent-sdk/permissions),
+[Cursor run modes](https://cursor.com/docs/agent/security/run-modes),
+[Cursor ACP](https://cursor.com/docs/cli/acp) and
+[Cursor CLI flags](https://cursor.com/docs/cli/reference/parameters).
+The Cursor ACP limitation is an installed-source finding, not a claim made by
+those product documents. A no-prompt Codex app-server probe confirmed effective
+`auto_review`/workspaceWrite and `never`/dangerFullAccess settings before any model
+input was sent. Protocol fixtures cover the selected flags, effective-policy
+rejection, question routing and persistent worker overlays.
 
 Codex's installed default-mode question capability is enabled for the MemCode
 process only. The installed version otherwise hides that tool outside planning

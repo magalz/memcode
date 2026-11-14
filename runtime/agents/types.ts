@@ -35,6 +35,7 @@ export interface AgentSessionOptions {
   contextConfig?: string;
   toolArgs: string[];
   localModel?: boolean;
+  permissionMode?: import("../../src/permissions").PermissionMode;
   onEvent(event: AgentEvent): void;
   requestInput(
     prompt: WorkerInputPrompt,

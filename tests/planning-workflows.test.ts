@@ -242,3 +242,19 @@ test("archived items are excluded by default and explicit saved filters are comp
     [state.tasks[1].id],
   );
 });
+
+test("changing a story's permission preference leaves its active session mode unchanged", () => {
+  const { state } = fixture(),
+    task = state.tasks[0];
+  task.run = {
+    state: "running",
+    permissionMode: "review",
+    sessionId: "native-session",
+  };
+  applyTaskPatch(state, task, { permissionMode: "auto" });
+  assert.equal(task.permissionMode, "auto");
+  assert.equal(task.run.permissionMode, "review");
+  assert.equal(task.run.sessionId, "native-session");
+  applyTaskPatch(state, task, { permissionMode: "full-access" });
+  assert.equal(task.run.permissionMode, "review");
+});

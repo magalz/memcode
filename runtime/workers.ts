@@ -423,9 +423,11 @@ export class WorkerManager {
           "Worker preparation was cancelled. Any checkout is preserved.",
         );
     };
+    const permissionMode = task.permissionMode ?? "review";
     task.run = {
       ...task.run,
       state: "preparing",
+      permissionMode,
       error: undefined,
       startedAt: now(),
       finishedAt: undefined,
@@ -510,7 +512,7 @@ export class WorkerManager {
       if (!approved.length)
         throw Error("Connect a worker in Workers before starting a worker.");
       task.route = planRoute(
-        task,
+        { ...task, permissionMode },
         task.evidence,
         approved,
         this.state().settings,
@@ -659,6 +661,7 @@ export class WorkerManager {
           task.harness,
           contextConfig,
           workspace,
+          permissionMode,
         );
         const anchor = task.evidence?.symbols[0];
         contextEvidence = contextSession.broker.execute(
@@ -822,6 +825,7 @@ export class WorkerManager {
         model: task.route.model,
         effort: task.route.effort,
         localModel: this.state().settings.localModel,
+        permissionMode,
         prompt,
         briefPath,
         contextConfig,

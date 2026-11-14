@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { AgentSession, AgentSessionOptions } from "./types";
+import { withoutPermissionArgs } from "./permissions";
 import type {
   WorkerInputOption,
   WorkerInputPrompt,
@@ -12,6 +13,9 @@ type Id = string | number;
 
 /** One native Codex turn, with the app-server transport kept open for human replies. */
 export function startCodexSession(options: AgentSessionOptions): AgentSession {
+  const mode = options.permissionMode ?? "review";
+  const policy = mode === "full-access" ? "never" : "on-request";
+  const reviewer = mode === "auto" ? "auto_review" : "user";
   const child = spawn(
     options.command.command,
     [
@@ -22,7 +26,7 @@ export function startCodexSession(options: AgentSessionOptions): AgentSession {
       `model_reasoning_effort=${JSON.stringify(options.effort)}`,
       "-c",
       "features.default_mode_request_user_input=true",
-      ...options.toolArgs,
+      ...withoutPermissionArgs("codex", options.toolArgs),
     ],
     {
       cwd: options.cwd,
@@ -513,10 +517,22 @@ export function startCodexSession(options: AgentSessionOptions): AgentSession {
         cwd: options.cwd,
         ...(options.model ? { model: options.model } : {}),
         ...(options.localModel ? { modelProvider: "ollama" } : {}),
-        sandbox: "workspace-write",
-        approvalPolicy: "on-request",
+        sandbox:
+          mode === "full-access" ? "danger-full-access" : "workspace-write",
+        approvalPolicy: policy,
+        approvalsReviewer: reviewer,
         allowProviderModelFallback: false,
       });
+      if (
+        mode !== "review" &&
+        (thread.approvalPolicy !== policy ||
+          thread.approvalsReviewer !== reviewer ||
+          thread.sandbox?.type !==
+            (mode === "full-access" ? "dangerFullAccess" : "workspaceWrite"))
+      )
+        throw Error(
+          `Codex did not activate the selected ${mode} permission mode. The worker was not prompted; choose a supported mode or check administrator policy.`,
+        );
       threadId = thread.thread?.id;
       if (!threadId) throw new Error("Codex did not return a thread ID.");
       emit({ type: "session", sessionId: threadId });
@@ -526,7 +542,8 @@ export function startCodexSession(options: AgentSessionOptions): AgentSession {
         input: [{ type: "text", text: options.prompt }],
         ...(options.model ? { model: options.model } : {}),
         effort: options.effort,
-        approvalPolicy: "on-request",
+        approvalPolicy: policy,
+        approvalsReviewer: reviewer,
         cwd: options.cwd,
       });
       turnId = turn.turn?.id || turnId;

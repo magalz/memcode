@@ -8,6 +8,7 @@ import {
   cursorModelValue,
 } from "../runtime/agents/cursor.ts";
 import type { AgentEvent } from "../runtime/agents/types.ts";
+import type { PermissionMode } from "../src/permissions";
 import type {
   WorkerInputPrompt,
   WorkerInputResponse,
@@ -101,6 +102,7 @@ async function fixture(kind = "normal") {
       prompt: WorkerInputPrompt,
       signal?: AbortSignal,
     ) => Promise<WorkerInputResponse>,
+    permissionMode?: PermissionMode,
   ) =>
     startCursorSession({
       command: { command: process.execPath, prefix: [program] },
@@ -123,12 +125,14 @@ async function fixture(kind = "normal") {
         "--force",
         "--yolo",
         "--auto-review",
+        "--sandbox=enabled",
         "--print",
         "--output-format",
         "stream-json",
       ],
       onEvent: (event) => events.push(event),
       requestInput,
+      permissionMode,
     });
   return {
     root,
@@ -251,6 +255,38 @@ test(
     assert.ok(!JSON.stringify(f.events).includes("fixture-only-secret"));
   },
 );
+
+test("Cursor rejects unsupported ACP Smart auto before starting a process", async () => {
+  const f = await fixture();
+  assert.throws(
+    () => f.start(async () => ({ cancelled: true }), "auto"),
+    /ACP transport does not support Smart auto/,
+  );
+});
+
+test("Cursor Full access is explicit, preserves native questions and cannot inherit conflicting modes", async () => {
+  const f = await fixture(),
+    prompts: WorkerInputPrompt[] = [];
+  const session = f.start(async (prompt) => {
+    prompts.push(prompt);
+    if (prompt.kind === "approval") return { optionId: "once-exact" };
+    if (prompt.kind === "question")
+      return { answers: { palette: "forest", features: ["a", "b"] } };
+    return { optionId: "accept" };
+  }, "full-access");
+  assert.equal((await session.completion).exitCode, 0);
+  const argv = (await f.trace())[0].argv as string[];
+  assert.equal(argv.filter((arg) => arg === "--force").length, 1);
+  assert.equal(argv[argv.indexOf("--sandbox") + 1], "disabled");
+  assert.ok(!argv.includes("--auto-review"));
+  assert.ok(!argv.includes("--yolo"));
+  assert.ok(!argv.includes("--sandbox=enabled"));
+  assert.equal(
+    prompts.filter((prompt) => prompt.kind === "question").length,
+    1,
+  );
+  assert.equal(prompts.filter((prompt) => prompt.kind === "plan").length, 1);
+});
 
 test(
   "stopping Cursor cancels the exact pending native request and ignores late UI answers",

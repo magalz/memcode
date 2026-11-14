@@ -149,6 +149,7 @@ export interface WorkItem extends TaskPlanningFields {
   harness: Harness;
   assignment?: "auto" | "manual";
   modelOverride?: string | null;
+  permissionMode?: import("./permissions").PermissionMode;
   route?: RouteDecision;
   epicId?: string | null;
   dependsOn?: string[];
@@ -162,6 +163,7 @@ export interface WorkItem extends TaskPlanningFields {
   run: {
     state: RunState;
     activity?: import("./worker-input").WorkerActivity;
+    permissionMode?: import("./permissions").PermissionMode;
     startedAt?: string;
     finishedAt?: string;
     worktree?: string;
@@ -282,6 +284,7 @@ export interface CreateTask extends TaskPlanningFields {
   priority: Priority;
   harness: Harness;
   assignment?: "auto" | "manual";
+  permissionMode?: import("./permissions").PermissionMode;
   epicId?: string | null;
   kind?: WorkItem["kind"];
 }
@@ -444,6 +447,9 @@ export interface MemCodeAPI {
     listener: (event: { url: string; title: string; error?: string }) => void,
   ): () => void;
   readArtifact(id: string): Promise<string>;
+  readArtifactThumbnail(
+    id: string,
+  ): Promise<import("./artifact-thumbnail").ArtifactThumbnail>;
   openWorkerWorkspace(id: string): Promise<void>;
   transcribe(wav: ArrayBuffer): Promise<string>;
   windowAction(action: "minimize" | "maximize" | "close"): Promise<void>;
@@ -459,6 +465,7 @@ export type TaskPatch = Partial<
     | "checklist"
     | "assignment"
     | "modelOverride"
+    | "permissionMode"
     | "epicId"
     | "dependsOn"
     | "scope"

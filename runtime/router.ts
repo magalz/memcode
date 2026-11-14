@@ -1,3 +1,4 @@
+import { supportsPermissionMode } from "../src/permissions";
 import type {
   Evidence,
   Harness,
@@ -168,6 +169,15 @@ export function planRoute(
   const wanted = manual
     ? requested
     : preferredHarness(tier, surface(task, evidence));
+  const permissionMode = task.permissionMode ?? "review";
+  if (permissionMode === "auto")
+    reasons.push(
+      "Smart auto requires a harness with native automatic approval review; unsupported transports are excluded.",
+    );
+  if (manual && !supportsPermissionMode(requested, permissionMode))
+    throw new Error(
+      "Cursor’s interactive ACP connection does not support Smart auto. Choose Review or Full access, or select Codex or Claude Code.",
+    );
   const ranked = [
     wanted,
     ...(["codex", "claude", "cursor"] as Harness[]).filter(
@@ -176,6 +186,7 @@ export function planRoute(
   ];
   for (const id of ranked) {
     if (manual && id !== requested) continue;
+    if (!supportsPermissionMode(id, permissionMode)) continue;
     const runtime = runtimes.find((r) => r.id === id && r.available);
     if (!runtime) continue;
     if (pinnedModel) {
@@ -228,8 +239,13 @@ export function planRoute(
     };
   }
   throw new Error(
-    manual
-      ? `No detected model in the assigned harness satisfies the ${tier} envelope. Choose Automatic, a different harness, or an explicit model.`
-      : "No eligible installed harness has a discovered model for this task. Refresh the worker catalog or configure a model override.",
+    permissionMode === "auto" &&
+      !runtimes.some(
+        (r) => r.available && supportsPermissionMode(r.id, permissionMode),
+      )
+      ? "No connected harness supports Smart auto. Connect Codex or Claude Code, or choose Review or Full access."
+      : manual
+        ? `No detected model in the assigned harness satisfies the ${tier} envelope. Choose Automatic, a different harness, or an explicit model.`
+        : "No eligible installed harness has a discovered model for this task. Refresh the worker catalog or configure a model override.",
   );
 }

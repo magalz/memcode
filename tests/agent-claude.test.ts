@@ -34,7 +34,8 @@ for await(const line of createInterface({input:process.stdin})){
  }
  if(frame.type==='user'){
   assert.equal(frame.message.role,'user');assert.equal(frame.message.content,'A prompt with $(literal) and "quotes".');
-  send({type:'system',subtype:'init',session_id:'same-claude-session'});
+  send({type:'system',subtype:'init',session_id:'same-claude-session',permissionMode:scenario==='mode-downgrade'?'default':process.argv[process.argv.indexOf('--permission-mode')+1]});
+  if(scenario==='mode-downgrade')continue;
   process.stderr.write('A live diagnostic before completion.\n');
   if(scenario==='early')process.exit(0);
   if(scenario==='hang'){finish();continue;}
@@ -88,6 +89,7 @@ async function waitFor(check: () => boolean, label: string) {
 async function setup(
   scenario: string,
   requestInput: AgentSessionOptions["requestInput"],
+  permissionMode?: AgentSessionOptions["permissionMode"],
 ) {
   const directory = await mkdtemp(join(tmpdir(), "memcode-claude-protocol-"));
   const script = join(directory, "fixture.mjs");
@@ -102,7 +104,15 @@ async function setup(
     prompt: 'A prompt with $(literal) and "quotes".',
     briefPath: ".memcode/brief.md",
     contextConfig: join(directory, "context-mcp.json"),
-    toolArgs: ["--max-turns", "3"],
+    toolArgs: [
+      "--max-turns",
+      "3",
+      "--permission-mode",
+      "bypassPermissions",
+      "--dangerously-skip-permissions",
+      "--permission-prompts=none",
+    ],
+    permissionMode,
     onEvent: (event) => events.push(event),
     requestInput,
   });
@@ -221,6 +231,56 @@ test("Claude approvals, questions and plan review return exact control responses
     assert.equal(argv[argv.indexOf("--effort") + 1], "high");
     assert.ok(!argv.some((arg) => /dangerously|bypass|yolo/.test(arg)));
     assert.ok(!argv.includes('A prompt with $(literal) and "quotes".'));
+  } finally {
+    await run.cleanup();
+  }
+});
+
+for (const mode of ["review", "auto", "full-access"] as const)
+  test(`Claude native ${mode} never inherits an overriding bypass and preserves its interactive channel`, async () => {
+    const prompts: WorkerInputPrompt[] = [];
+    const run = await setup(
+      "hang",
+      async (prompt) => {
+        prompts.push(prompt);
+        return { cancelled: true };
+      },
+      mode,
+    );
+    try {
+      assert.equal((await run.session.completion).exitCode, 0);
+      const argv = JSON.parse(
+        await readFile(join(run.directory, "argv.json"), "utf8"),
+      ) as string[];
+      assert.equal(
+        argv[argv.indexOf("--permission-mode") + 1],
+        mode === "auto"
+          ? "auto"
+          : mode === "full-access"
+            ? "bypassPermissions"
+            : "acceptEdits",
+      );
+      assert.equal(argv.filter((arg) => arg === "--permission-mode").length, 1);
+      assert.ok(!argv.includes("--dangerously-skip-permissions"));
+      assert.ok(!argv.includes("--permission-prompts=none"));
+      assert.equal(argv[argv.indexOf("--permission-prompt-tool") + 1], "stdio");
+    } finally {
+      await run.cleanup();
+    }
+  });
+
+test("Claude fails visibly when the native session falls back from Auto to Manual", async () => {
+  const run = await setup(
+    "mode-downgrade",
+    async () => ({ cancelled: true }),
+    "auto",
+  );
+  try {
+    const result = await run.session.completion;
+    assert.match(
+      result.error ?? "",
+      /did not activate the selected auto.*reported default/,
+    );
   } finally {
     await run.cleanup();
   }

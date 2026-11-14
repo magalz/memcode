@@ -6,6 +6,7 @@ import { workerReadiness } from "../worker-availability";
 import { isActive } from "../domain";
 import { Select } from "./Select";
 import { RoutingCard } from "./Routing";
+import { WorkerPermissions } from "./WorkerPermissions";
 
 type Update = (patch: Parameters<Window["memcode"]["updateTask"]>[1]) => void;
 
@@ -91,6 +92,7 @@ export function WorkerAssignment({
           This computer
         </span>
       </div>
+      <WorkerPermissions task={task} update={update} />
       {!task.example && !readiness.canStart && (
         <div className="assignment-connect" role="status">
           <span>

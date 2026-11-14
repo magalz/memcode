@@ -40,6 +40,7 @@ import {
 } from "./components/UI";
 import { Workspace } from "./components/Workspace";
 import { Conversations } from "./components/Conversations";
+import { ArtifactThumbnail } from "./components/ArtifactThumbnail";
 import { artifactTypeLabel } from "./artifact-format";
 import { WorkDetail } from "./components/WorkDetail";
 import { Roadmap } from "./components/Roadmap";
@@ -802,21 +803,7 @@ export function App() {
                       }
                     }}
                   >
-                    <div className="artifact-tile-preview">
-                      {artifact.kind === "html" ? (
-                        <>
-                          <FileCode2 size={30} />
-                          <span>Interactive artifact</span>
-                          <div className="mini-preview-lines">
-                            <i />
-                            <i />
-                            <i />
-                          </div>
-                        </>
-                      ) : (
-                        <FileCode2 size={36} />
-                      )}
-                    </div>
+                    <ArtifactThumbnail artifact={artifact} />
                     <div>
                       <span className="artifact-extension">
                         {artifactTypeLabel(artifact.name)}

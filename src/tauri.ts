@@ -146,6 +146,7 @@ export async function installNativeBridge(): Promise<void> {
     hidePreview: () => call("preview:hide"),
     previewAction: (action) => call("preview:action", action),
     readArtifact: (id) => call("artifact:read", id),
+    readArtifactThumbnail: (id) => call("artifact:thumbnail", id),
     openWorkerWorkspace: (id) => call("worker:open-folder", id),
     transcribe: (wav) => call("speech:transcribe", wavBase64(wav)),
     windowAction: (action) => call("window:action", action),

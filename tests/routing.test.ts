@@ -127,3 +127,44 @@ test("local inference requires an explicit installed model name", () => {
     /Ollama model name/,
   );
 });
+
+test("Smart auto routes only to a connected harness with native automatic review", () => {
+  const state = initialState(),
+    task = {
+      ...state.tasks[0],
+      assignment: "auto" as const,
+      permissionMode: "auto" as const,
+      scope: ["src/components/View.tsx"],
+    };
+  const route = planRoute(task, measured, catalog, state.settings);
+  assert.equal(route.harness, "codex");
+  assert.throws(
+    () =>
+      planRoute(
+        { ...task, assignment: "manual", harness: "cursor" },
+        measured,
+        catalog,
+        state.settings,
+      ),
+    /ACP connection does not support/,
+  );
+  assert.throws(
+    () =>
+      planRoute(
+        task,
+        measured,
+        catalog.filter((r) => r.id === "cursor"),
+        state.settings,
+      ),
+    /supports Smart auto/,
+  );
+  assert.equal(
+    planRoute(
+      { ...task, permissionMode: "full-access" },
+      measured,
+      catalog,
+      state.settings,
+    ).harness,
+    "cursor",
+  );
+});

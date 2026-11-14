@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CircleHelp, Clock3, ShieldCheck } from "lucide-react";
+import { CircleHelp, Clock3, ShieldCheck, X } from "lucide-react";
 import type { WorkItem } from "../shared";
 import type { WorkerInputRequest, WorkerInputResponse } from "../worker-input";
 import { loadCardDraft, saveCardDraft } from "../card-drafts";
@@ -7,6 +7,18 @@ import "../styles-worker-input.css";
 
 export function WorkerInputPanel({ request }: { request: WorkerInputRequest }) {
   const key = "memcode-worker-input:" + request.id;
+  const harness =
+    request.harness === "claude"
+      ? "Claude Code"
+      : request.harness === "codex"
+        ? "Codex"
+        : "Cursor";
+  const exactDetails = [request.details, request.title]
+    .filter((value, index, values) => value && values.indexOf(value) === index)
+    .join("\n\n");
+  const primaryOption = request.options?.find(
+    (option) => option.kind === "allow-once",
+  )?.id;
   const [answers, setAnswers] = useState<Record<string, string | string[]>>(
       () => (loadCardDraft(key) as Record<string, string | string[]>) ?? {},
     ),
@@ -61,133 +73,153 @@ export function WorkerInputPanel({ request }: { request: WorkerInputRequest }) {
       data-worker-input-id={request.id}
     >
       <header>
-        <span>
+        <span className="worker-input-icon" aria-hidden="true">
           {request.kind === "approval" ? (
-            <ShieldCheck size={17} />
+            <ShieldCheck size={15} />
           ) : (
-            <CircleHelp size={17} />
+            <CircleHelp size={15} />
           )}
         </span>
-        <div>
-          <small>
-            WAITING FOR YOU ·{" "}
-            {request.harness === "claude"
-              ? "CLAUDE CODE"
-              : request.harness.toUpperCase()}
-          </small>
-          <h3>{request.title}</h3>
+        <div className="worker-input-heading">
+          <h3>
+            {request.kind === "approval"
+              ? "Permission requested"
+              : request.kind === "plan"
+                ? "Review the plan"
+                : "Your input is needed"}
+          </h3>
+          <span>
+            {harness} <i aria-hidden="true">·</i> Waiting for you
+          </span>
         </div>
+        <button
+          className="worker-input-dismiss"
+          aria-label="Dismiss request"
+          title="Dismiss request"
+          disabled={busy}
+          onClick={() => void send({ cancelled: true })}
+        >
+          <X size={14} />
+        </button>
       </header>
-      {request.description && <p>{request.description}</p>}
-      {request.details && (
-        <details>
-          <summary>
-            {request.toolName
-              ? `Requested action · ${request.toolName}`
-              : "View request details"}
-          </summary>
-          <pre>{request.details}</pre>
-        </details>
-      )}
-      {(request.questions ?? []).map((q) => (
-        <fieldset key={q.id} disabled={busy}>
-          <legend>{q.question}</legend>
-          <div className="worker-question-options">
-            {q.options.map((option) => {
-              const value = answers[q.id],
-                selected = Array.isArray(value)
-                  ? value.includes(option.id)
-                  : value === option.id;
-              return (
-                <label key={option.id} className={selected ? "selected" : ""}>
-                  <input
-                    type={q.multiple ? "checkbox" : "radio"}
-                    name={request.id + q.id}
-                    checked={selected && !custom[q.id]}
-                    onChange={() => {
-                      setCustom((value) => ({ ...value, [q.id]: "" }));
-                      setAnswers((value) => ({
-                        ...value,
-                        [q.id]: q.multiple
-                          ? selected
-                            ? (Array.isArray(value[q.id])
-                                ? (value[q.id] as string[])
-                                : []
-                              ).filter((id) => id !== option.id)
-                            : [
-                                ...(Array.isArray(value[q.id])
-                                  ? (value[q.id] as string[])
-                                  : []),
-                                option.id,
-                              ]
-                          : option.id,
-                      }));
-                    }}
-                  />
-                  <span>
-                    <strong>{option.label}</strong>
-                    {option.description && <small>{option.description}</small>}
-                  </span>
-                </label>
-              );
-            })}
+      <div className="worker-input-body">
+        {request.kind === "approval" ? (
+          <div className="worker-input-action-preview">
+            <code>{request.title}</code>
           </div>
-          {(q.allowText || !q.options.length) && (
-            <label className="worker-custom-answer">
-              <span>
-                {q.secret
-                  ? "Private answer"
-                  : q.options.length
-                    ? "Or write your answer"
-                    : "Your answer"}
-              </span>
-              {q.secret ? (
-                <input
-                  aria-label={q.question}
-                  type="password"
-                  autoComplete="off"
-                  value={custom[q.id] ?? ""}
-                  maxLength={20000}
-                  onChange={(e) =>
-                    setCustom({ ...custom, [q.id]: e.target.value })
-                  }
-                />
-              ) : (
-                <textarea
-                  aria-label={q.question}
-                  value={custom[q.id] ?? ""}
-                  maxLength={20000}
-                  onChange={(e) =>
-                    setCustom({ ...custom, [q.id]: e.target.value })
-                  }
-                />
-              )}
-            </label>
-          )}
-        </fieldset>
-      ))}
-      {error && (
-        <p className="worker-input-error" role="alert">
-          {error}
-        </p>
-      )}
+        ) : (
+          <p className="worker-input-context">{request.title}</p>
+        )}
+        {request.description && (
+          <p className="worker-input-description">{request.description}</p>
+        )}
+        {(request.kind === "approval" || request.details) && (
+          <details className="worker-input-details">
+            <summary>
+              {request.toolName
+                ? `Requested action · ${request.toolName}`
+                : "View request details"}
+            </summary>
+            <pre>{exactDetails}</pre>
+          </details>
+        )}
+        {(request.questions ?? []).map((q) => (
+          <fieldset key={q.id} disabled={busy}>
+            <legend>{q.question}</legend>
+            <div className="worker-question-options">
+              {q.options.map((option) => {
+                const value = answers[q.id],
+                  selected = Array.isArray(value)
+                    ? value.includes(option.id)
+                    : value === option.id;
+                return (
+                  <label key={option.id} className={selected ? "selected" : ""}>
+                    <input
+                      type={q.multiple ? "checkbox" : "radio"}
+                      name={request.id + q.id}
+                      checked={selected && !custom[q.id]}
+                      onChange={() => {
+                        setCustom((value) => ({ ...value, [q.id]: "" }));
+                        setAnswers((value) => ({
+                          ...value,
+                          [q.id]: q.multiple
+                            ? selected
+                              ? (Array.isArray(value[q.id])
+                                  ? (value[q.id] as string[])
+                                  : []
+                                ).filter((id) => id !== option.id)
+                              : [
+                                  ...(Array.isArray(value[q.id])
+                                    ? (value[q.id] as string[])
+                                    : []),
+                                  option.id,
+                                ]
+                            : option.id,
+                        }));
+                      }}
+                    />
+                    <span>
+                      <strong>{option.label}</strong>
+                      {option.description && (
+                        <small>{option.description}</small>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {(q.allowText || !q.options.length) && (
+              <label className="worker-custom-answer">
+                <span>
+                  {q.secret
+                    ? "Private answer"
+                    : q.options.length
+                      ? "Or write your answer"
+                      : "Your answer"}
+                </span>
+                {q.secret ? (
+                  <input
+                    aria-label={q.question}
+                    type="password"
+                    autoComplete="off"
+                    value={custom[q.id] ?? ""}
+                    maxLength={20000}
+                    onChange={(e) =>
+                      setCustom({ ...custom, [q.id]: e.target.value })
+                    }
+                  />
+                ) : (
+                  <textarea
+                    aria-label={q.question}
+                    value={custom[q.id] ?? ""}
+                    maxLength={20000}
+                    onChange={(e) =>
+                      setCustom({ ...custom, [q.id]: e.target.value })
+                    }
+                  />
+                )}
+              </label>
+            )}
+          </fieldset>
+        ))}
+        {error && (
+          <p className="worker-input-error" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
       <footer>
-        <span>The reply goes directly to this waiting worker.</span>
+        <span>{busy ? "Sending…" : "Reply to continue this worker."}</span>
         <div>
-          <button
-            className="button secondary"
-            disabled={busy}
-            onClick={() => void send({ cancelled: true })}
-          >
-            Dismiss request
-          </button>
           {request.options?.length ? (
             request.options.map((option) => (
               <button
                 key={option.id}
                 className={
-                  "button " + (option.kind === "deny" ? "secondary" : "primary")
+                  "button " +
+                  (option.id === primaryOption ? "primary" : "secondary")
                 }
+                title={option.description}
                 disabled={busy || !ready}
                 onClick={() =>
                   void send({ optionId: option.id, answers: values() })
@@ -239,10 +271,12 @@ export function WorkerActivityView({ task }: { task: WorkItem }) {
     >
       <Clock3 size={13} />
       <span>
-        {activity?.label ??
-          (task.run.state === "preparing"
-            ? "Preparing worker context"
-            : "Waiting for a harness update")}
+        {activity?.phase === "waiting_for_user"
+          ? "Waiting for your reply below"
+          : (activity?.label ??
+            (task.run.state === "preparing"
+              ? "Preparing worker context"
+              : "Waiting for a harness update"))}
       </span>
       {elapsed >= 30 && (
         <small>

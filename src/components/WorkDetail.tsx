@@ -528,13 +528,14 @@ export function WorkDetail({
             >
               <item.icon size={13} />
               {item.label}
-              {item.count ? <small>{item.count}</small> : null}
+              {item.id === "conversation" && pendingInputs.length > 0 ? (
+                <small className="conversation-needs-reply">Needs reply</small>
+              ) : item.count ? (
+                <small>{item.count}</small>
+              ) : null}
             </button>
           ))}
         </div>
-        {pendingInputs.map((request) => (
-          <WorkerInputPanel key={request.id} request={request} />
-        ))}
         <div className="detail-body">
           <div className="detail-content">
             {tab === "queue" && (
@@ -635,7 +636,19 @@ export function WorkDetail({
                     </div>
                   )}
                 </div>
-                <div className="conversation-composer">
+                <div
+                  className={
+                    "conversation-composer" +
+                    (pendingInputs.length ? " has-worker-input" : "")
+                  }
+                >
+                  {pendingInputs.length > 0 && (
+                    <div className="worker-input-stack">
+                      {pendingInputs.map((request) => (
+                        <WorkerInputPanel key={request.id} request={request} />
+                      ))}
+                    </div>
+                  )}
                   <div
                     className={
                       "composer-box " +
@@ -1042,6 +1055,16 @@ export function WorkDetail({
                   void act(() => window.memcode.updateTask(task.id, patch))
                 }
               />
+              {pendingInputs.length > 0 && tab !== "conversation" && (
+                <button
+                  className="worker-reply-link"
+                  onClick={() => setTab("conversation")}
+                >
+                  <MessageSquare size={13} />
+                  Waiting for your reply
+                  <ArrowRight size={13} />
+                </button>
+              )}
               {active ? (
                 <button
                   className="button stop-worker"

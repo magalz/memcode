@@ -39,7 +39,8 @@ MemCode then connects to the installed Memtrace engine to analyze it.
 - A persisted Now / Next / Later roadmap, epics, stories, source scope and cycle-checked prerequisites.
 - Project briefs, editable runbooks, conversations, worker status and change review.
 - Visible follow-up queues with edit/cancel until pickup, plus separate story discussions.
-- Native questions, approval choices and plan review in the card for Codex, Claude Code and Cursor, with replies sent to the same waiting session.
+- Native questions, approval choices and plan review beside the conversation input for Codex, Claude Code and Cursor, with replies sent to the same waiting session.
+- Per-story Review / Smart auto / Full access permission preferences, mapped to native harness modes. Cursor ACP currently supports Review and Full access; unsupported automatic review is explicit.
 - Delete stories, epics and cycles with a clear confirmation. Epic/cycle deletion preserves their stories; active workers must stop first.
 - Progressive project → approved worker → epic → story onboarding and a searchable, illustrated Docs tab.
 - Native folder selection and project creation. State stays in the local workspace
@@ -57,6 +58,7 @@ MemCode then connects to the installed Memtrace engine to analyze it.
 - Per-card persistent terminals shared with workers, with selectable output and explicit session controls.
 - Worker checkpoint diffs with syntax colors, additions/deletions, pinned gutters and horizontal scrolling.
 - Separate saved artifacts: HTML, Markdown, Word, Excel, PowerPoint, PDF, images, video, audio and source text.
+- Lazy artifact gallery thumbnails: images, PDF first pages, video frames and readable document, worksheet and source excerpts, with bounded format fallbacks.
 - Precise saved annotations for text, source lines, spreadsheet cells, HTML elements/areas and media timestamps; send selected comments as an explicit follow-up.
 - Separate output folders under `.memcode/workers/<story-id>/artifacts/` and readable project-file links.
 - Local dictation with explicit Whisper Tiny setup on Windows x64, or an existing local whisper.cpp server; transcripts enter the draft for review.

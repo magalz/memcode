@@ -9,6 +9,7 @@ import type {
   WorkerInputResponse,
 } from "../../src/worker-input";
 import type { AgentSession, AgentSessionOptions } from "./types";
+import { withoutPermissionArgs } from "./permissions";
 
 type Frame = Record<string, any>;
 const bounded = (value: unknown, limit = 16000): string =>
@@ -34,6 +35,12 @@ const contentText = (content: unknown): string =>
 export function startClaudeSession(options: AgentSessionOptions): AgentSession {
   if (options.localModel)
     throw Error("The local-model option currently supports Codex with Ollama.");
+  const nativeMode =
+    options.permissionMode === "full-access"
+      ? "bypassPermissions"
+      : options.permissionMode === "auto"
+        ? "auto"
+        : "acceptEdits";
   const profile = options.contextConfig
     ? claudeProfileArgs(options.contextConfig)
     : [];
@@ -54,12 +61,12 @@ export function startClaudeSession(options: AgentSessionOptions): AgentSession {
       "--permission-prompt-tool",
       "stdio",
       "--permission-mode",
-      "acceptEdits",
+      nativeMode,
       "--effort",
       options.effort,
       ...(options.model ? ["--model", options.model] : []),
       ...profile,
-      ...options.toolArgs,
+      ...withoutPermissionArgs("claude", options.toolArgs),
     ],
     {
       cwd: options.cwd,
@@ -358,6 +365,19 @@ export function startClaudeSession(options: AgentSessionOptions): AgentSession {
       return;
     }
     if (frame.type === "system") {
+      if (
+        options.permissionMode &&
+        options.permissionMode !== "review" &&
+        (frame.subtype === "init" ||
+          (frame.subtype === "status" &&
+            ["default", "manual"].includes(frame.permissionMode))) &&
+        frame.permissionMode !== nativeMode
+      ) {
+        fail(
+          `Claude did not activate the selected ${options.permissionMode} permission mode (reported ${frame.permissionMode ?? "unknown"}). Choose a supported mode or check the model and administrator policy.`,
+        );
+        return;
+      }
       if (frame.subtype === "session_state_changed") state = frame.state;
       if (
         frame.subtype === "task_started" &&

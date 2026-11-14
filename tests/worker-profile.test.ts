@@ -13,6 +13,7 @@ test("worker overlays connect both MemCode gateways without changing the user's 
   await mkdir(worker);
   await writeFile(join(original, "skills", "example.md"), "Existing skill");
   const settings = JSON.stringify({
+    approvalMode: "unrestricted",
     authInfo: { fixture: true },
     permissions: {
       allow: ["Shell(ls)"],
@@ -64,6 +65,11 @@ test("worker overlays connect both MemCode gateways without changing the user's 
     assert.ok(overlaid.permissions.allow.includes("Shell(ls)"));
     assert.ok(overlaid.permissions.allow.includes("Mcp(memcode-browser:act)"));
     assert.equal(overlaid.customSetting, "preserved");
+    assert.equal(
+      overlaid.approvalMode,
+      "allowlist",
+      "Review never inherits Run Everything",
+    );
     assert.deepEqual(overlaid.authInfo, { fixture: true });
     assert.equal(
       await readFile(join(profile, "skills", "example.md"), "utf8"),
@@ -87,6 +93,20 @@ test("worker overlays connect both MemCode gateways without changing the user's 
       settings,
     );
     assert.equal(await readFile(join(original, "mcp.json"), "utf8"), globalMcp);
+    await workerToolProfile("cursor", config, undefined, "full-access");
+    const fullAccess = JSON.parse(
+      await readFile(join(profile, "cli-config.json"), "utf8"),
+    );
+    assert.equal(fullAccess.approvalMode, "unrestricted");
+    assert.deepEqual(fullAccess.permissions.deny, overlaid.permissions.deny);
+    assert.equal(
+      await readFile(join(original, "cli-config.json"), "utf8"),
+      settings,
+    );
+    await assert.rejects(
+      workerToolProfile("cursor", config, undefined, "auto"),
+      /ACP transport does not support Smart auto/,
+    );
     const codex = await workerToolProfile("codex", config);
     assert.ok(
       codex.args.some((arg) => arg.startsWith("mcp_servers.memcode_context=")),
@@ -96,6 +116,17 @@ test("worker overlays connect both MemCode gateways without changing the user's 
     );
     assert.ok(
       !codex.args.some((arg) => /dangerously|yolo|skip.*permission/.test(arg)),
+    );
+    const codexFull = await workerToolProfile(
+      "codex",
+      config,
+      undefined,
+      "full-access",
+    );
+    assert.ok(
+      codexFull.args
+        .filter((arg) => arg.startsWith("mcp_servers.memcode_"))
+        .every((arg) => !arg.includes('approval_mode="approve"')),
     );
   } finally {
     if (previous === undefined) delete process.env.CURSOR_CONFIG_DIR;

@@ -8,7 +8,9 @@ import { LocalStore, exists, git, now, within } from "./local";
 import { MemtraceEngine } from "./memtrace";
 import { ensureProjectRepository } from "./project-repository";
 import { workerResponseSchema } from "./worker-input";
+import { permissionModes } from "../src/permissions";
 import { registerDeletion } from "./deletion";
+import { readArtifactThumbnail } from "./artifact-thumbnail";
 import { WorkerManager } from "./workers";
 import { PreviewManager, artifactRoots } from "./preview";
 import { localURL } from "./urls";
@@ -55,6 +57,7 @@ const taskPatch = z
     harness: harness.optional(),
     assignment: z.enum(["auto", "manual"]).optional(),
     modelOverride: z.string().max(200).nullable().optional(),
+    permissionMode: z.enum(permissionModes).optional(),
     epicId: identifier.nullable().optional(),
     dependsOn: z.array(identifier).max(100).optional(),
     scope: z.array(z.string().max(1000)).max(20).optional(),
@@ -477,6 +480,14 @@ export async function createRuntime(
       return store.runtime();
     },
   );
+  register("artifact:thumbnail", identifier, async (id) => {
+    const artifact = store.state.artifacts.find(
+      (artifact) => artifact.id === id,
+    );
+    if (!artifact) throw Error("Artifact not found.");
+    const item = task(artifact.taskId);
+    return readArtifactThumbnail(artifact, artifactRoots(store.dir, item));
+  });
   register("artifact:read", identifier, async (id) => {
     const artifact = store.state.artifacts.find((a) => a.id === id);
     if (!artifact || artifact.kind === "html")
@@ -555,6 +566,7 @@ export async function createRuntime(
       priority,
       harness,
       assignment: z.enum(["auto", "manual"]).optional(),
+      permissionMode: z.enum(permissionModes).optional(),
       epicId: identifier.nullable().optional(),
       kind: kind.optional(),
       ...taskPlanningShape,

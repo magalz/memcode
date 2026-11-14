@@ -16,14 +16,14 @@ import { createInterface } from 'node:readline';
 const rl=createInterface({input:process.stdin});
 const send=p=>process.stdout.write(JSON.stringify(p)+'\\n');
 const notify=(method,params)=>send({method,params});
-let index=0,initialized=false; const replies=[];
+let index=0,initialized=false,threadSettings,turnSettings; const replies=[];
 const requests=JSON.parse(process.env.REQUESTS||'[]');
 function next(){
  if(index<requests.length){const r=requests[index++]; send({id:r.id,method:r.method,params:{threadId:'thread-native',turnId:'turn-native',...r.params}});}
  else if(process.env.WAIT!=='yes'){
   notify('item/agentMessage/delta',{threadId:'thread-native',itemId:'final',delta:'Done'});
   notify('item/completed',{threadId:'thread-native',item:{type:'agentMessage',id:'final',text:'Done'}});
-  notify('item/completed',{threadId:'thread-native',item:{type:'agentMessage',id:'evidence',text:JSON.stringify({replies,args:process.argv.slice(2)})}});
+  notify('item/completed',{threadId:'thread-native',item:{type:'agentMessage',id:'evidence',text:JSON.stringify({replies,args:process.argv.slice(2),threadSettings,turnSettings})}});
   notify('turn/completed',{threadId:'thread-native',turn:{id:'turn-native',status:process.env.FAIL==='yes'?'failed':'completed',error:process.env.FAIL==='yes'?{message:'Native failure'}:null}});
  }
 }
@@ -34,9 +34,12 @@ rl.on('line',line=>{const p=JSON.parse(line);
   send({id:p.id,result:{userAgent:'fixture'}});
  }else if(p.method==='initialized')initialized=true;
  else if(p.method==='thread/start'){
-  if(!initialized||p.params.approvalPolicy!=='on-request'||p.params.sandbox!=='workspace-write'||p.params.allowProviderModelFallback!==false||p.params.model!=='chosen-model')process.exit(12);
-  send({id:p.id,result:{thread:{id:'thread-native'}}});
+  threadSettings=p.params;
+  const full=process.env.MODE==='full-access';
+  if(!initialized||p.params.approvalPolicy!==(full?'never':'on-request')||p.params.sandbox!==(full?'danger-full-access':'workspace-write')||p.params.approvalsReviewer!==(process.env.MODE==='auto'?'auto_review':'user')||p.params.allowProviderModelFallback!==false||p.params.model!=='chosen-model')process.exit(12);
+  send({id:p.id,result:{thread:{id:'thread-native'},approvalPolicy:p.params.approvalPolicy,approvalsReviewer:process.env.DOWNGRADE==='yes'?'user':p.params.approvalsReviewer,sandbox:{type:full?'dangerFullAccess':'workspaceWrite'}}});
  }else if(p.method==='turn/start'){
+  turnSettings=p.params;
   if(p.params.effort!=='high'||p.params.input[0].text!=='The exact prompt')process.exit(13);
   send({id:p.id,result:{turn:{id:'turn-native',status:'inProgress'}}});
   notify('item/started',{threadId:'thread-native',item:{id:'tool-1',type:'commandExecution',command:'npm test'}});
@@ -70,7 +73,13 @@ async function runFixture(
     toolArgs: [
       "-c",
       "mcp_servers.memcode_context={enabled=true,required=true}",
+      "-c",
+      "approval_policy=never",
+      "--config=approvals_reviewer=guardian_subagent",
+      "-c",
+      "sandbox_mode=danger-full-access",
     ],
+    permissionMode: env.MODE as AgentSessionOptions["permissionMode"],
     onEvent: (event) => events.push(event),
     requestInput: async (prompt, signal) => {
       prompts.push(prompt);
@@ -146,6 +155,54 @@ test("Codex native turn preserves model, policy, effort, MCP config and finishes
       f.prompts.length,
       0,
       "native plan notification must not invent an approval",
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
+
+for (const mode of ["review", "auto", "full-access"] as const)
+  test(`Codex uses explicit ${mode} settings and keeps inherited arguments from overriding them`, async () => {
+    const f = await runFixture({ MODE: mode });
+    try {
+      assert.equal((await f.session.completion).exitCode, 0);
+      const result = evidence(f.events);
+      assert.equal(
+        result.threadSettings.approvalPolicy,
+        mode === "full-access" ? "never" : "on-request",
+      );
+      assert.equal(
+        result.threadSettings.sandbox,
+        mode === "full-access" ? "danger-full-access" : "workspace-write",
+      );
+      assert.equal(
+        result.threadSettings.approvalsReviewer,
+        mode === "auto" ? "auto_review" : "user",
+      );
+      assert.equal(
+        result.turnSettings.approvalsReviewer,
+        result.threadSettings.approvalsReviewer,
+      );
+      assert.ok(
+        !result.args.some((arg: string) =>
+          /^(approval_policy|sandbox_mode)=|^--config=approvals_reviewer=/.test(
+            arg,
+          ),
+        ),
+      );
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+test("Codex refuses a silent downgrade of the selected automatic reviewer before prompting the model", async () => {
+  const f = await runFixture({ MODE: "auto", DOWNGRADE: "yes" });
+  try {
+    const result = await f.session.completion;
+    assert.match(result.error ?? "", /did not activate the selected auto/);
+    assert.equal(
+      f.events.some((event) => event.type === "prompted"),
+      false,
     );
   } finally {
     await f.cleanup();

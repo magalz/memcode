@@ -11,6 +11,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Harness } from "../src/shared";
+import type { PermissionMode } from "../src/permissions";
 import { allowCursorGateway, cursorDenyAliases } from "./cursor-permissions";
 
 export interface WorkerToolProfile {
@@ -31,7 +32,12 @@ export async function workerToolProfile(
   harness: Harness,
   configPath: string,
   workspace?: string,
+  permissionMode: PermissionMode = "review",
 ): Promise<WorkerToolProfile> {
+  if (harness === "cursor" && permissionMode === "auto")
+    throw Error(
+      "This installed Cursor ACP transport does not support Smart auto. Choose Review or Full access.",
+    );
   const { mcpServers } = JSON.parse(await readFile(configPath, "utf8"));
   if (harness === "claude") return { args: [] };
   if (harness === "codex") {
@@ -57,16 +63,28 @@ export async function workerToolProfile(
             ...(name === "memcode-context"
               ? {
                   tools: {
-                    coordinate: { approval_mode: "approve" },
-                    terminal: { approval_mode: "approve" },
+                    coordinate: {
+                      approval_mode:
+                        permissionMode === "full-access" ? "auto" : "approve",
+                    },
+                    terminal: {
+                      approval_mode:
+                        permissionMode === "full-access" ? "auto" : "approve",
+                    },
                   },
                 }
               : {}),
             ...(name === "memcode-browser"
               ? {
                   tools: {
-                    open: { approval_mode: "approve" },
-                    act: { approval_mode: "approve" },
+                    open: {
+                      approval_mode:
+                        permissionMode === "full-access" ? "auto" : "approve",
+                    },
+                    act: {
+                      approval_mode:
+                        permissionMode === "full-access" ? "auto" : "approve",
+                    },
                   },
                 }
               : {}),
@@ -121,6 +139,9 @@ export async function workerToolProfile(
     allow: [...allow],
     deny: cursorDenyAliases(settings.permissions?.deny ?? []),
   };
+  // This is the owned worker overlay, never the user's or project's CLI config.
+  settings.approvalMode =
+    permissionMode === "full-access" ? "unrestricted" : "allowlist";
   await writeFile(join(profile, "cli-config.json"), JSON.stringify(settings), {
     mode: 0o600,
   });

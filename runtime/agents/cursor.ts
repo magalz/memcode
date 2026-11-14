@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { join } from "node:path";
 import type { AgentSession, AgentSessionOptions } from "./types";
+import { withoutPermissionArgs } from "./permissions";
 import type {
   WorkerInputOption,
   WorkerInputPrompt,
@@ -122,11 +123,17 @@ async function sessionServers(path?: string): Promise<Json[]> {
 
 /** Native ACP keeps stdin open for bound, bidirectional approval replies. */
 export function startCursorSession(options: AgentSessionOptions): AgentSession {
-  // Existing profile/plugin arguments are retained. Execution bypasses and print
-  // formats are deliberately not compatible with an interactive approval client.
+  // Current ACP ignores --auto-review even though interactive Cursor supports it.
+  // Never silently run an allowlist/bypass session labelled as Smart auto.
+  if (options.permissionMode === "auto")
+    throw Error(
+      "This installed Cursor ACP transport does not support Smart auto. Choose Review or Full access, or use Codex/Claude for native automatic review.",
+    );
+  // Existing profile/plugin arguments are retained; the selected mode owns permissions.
   const toolArgs: string[] = [];
-  for (let i = 0; i < options.toolArgs.length; i++) {
-    const arg = options.toolArgs[i];
+  const inheritedArgs = withoutPermissionArgs("cursor", options.toolArgs);
+  for (let i = 0; i < inheritedArgs.length; i++) {
+    const arg = inheritedArgs[i];
     if (
       [
         "--force",
@@ -151,6 +158,9 @@ export function startCursorSession(options: AgentSessionOptions): AgentSession {
     [
       ...options.command.prefix,
       ...toolArgs,
+      ...(options.permissionMode === "full-access"
+        ? ["--force", "--sandbox", "disabled"]
+        : []),
       "--workspace",
       options.cwd,
       ...(options.model ? ["--model", options.model] : []),
