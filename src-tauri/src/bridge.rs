@@ -146,7 +146,13 @@ impl RuntimeBridge {
                     }
                 }
             }
-            bridge.fail("The local runtime stopped. Reopen MemCode to reconnect; saved work has been preserved.".into()).await;
+            let error = "The local runtime stopped. Reopen MemCode to reconnect; saved work has been preserved.".to_string();
+            bridge.fail(error.clone()).await;
+            let _ = app.emit_to(
+                tauri::EventTarget::Webview { label: "main".into() },
+                "runtime:stopped",
+                json!({"message": error}),
+            );
         });
         tauri::async_runtime::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
@@ -233,7 +239,7 @@ impl RuntimeBridge {
                     });
                     return;
                 }
-                if let Some(event @ ("workspace:state" | "preview:event")) =
+                if let Some(event @ ("workspace:state" | "preview:event" | "workspace:save-status")) =
                     message["event"].as_str()
                 {
                     self.queue_event(app, event.to_owned(), message["payload"].clone())

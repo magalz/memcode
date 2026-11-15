@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { AppState, Project, WorkItem } from "../src/shared";
 import { isActive } from "../src/domain";
 import { LocalStore, exists, git, now, within } from "./local";
+import { observePersistence } from "./persistence";
 import { MemtraceEngine } from "./memtrace";
 import { ensureProjectRepository } from "./project-repository";
 import { workerResponseSchema } from "./worker-input";
@@ -97,10 +98,26 @@ export async function createRuntime(
   const engine = new MemtraceEngine(() => store.state.settings.memtracePath),
     state = () => store.state;
   let dispatchQueued = () => {};
-  const changed = async () => {
-    await store.save();
-    emit("workspace:state", store.state);
-    dispatchQueued();
+  let persistenceFailed = false;
+  const changed = () => {
+    const pending = (async () => {
+      await store.save();
+      emit("workspace:state", store.state);
+      dispatchQueued();
+      if (persistenceFailed) {
+        persistenceFailed = false;
+        emit("workspace:save-status", { state: "saved" });
+      }
+    })();
+    return observePersistence(pending, (error) => {
+      persistenceFailed = true;
+      console.error("Workspace save failed; the runtime is still running:", error);
+      emit("workspace:save-status", {
+        state: "error",
+        message:
+          "Changes could not be saved. The last saved workspace is preserved; free disk space or release the file lock, then retry the action.",
+      });
+    });
   };
   const browsers = new AgentBrowserManager(state, store.dir, changed, 16, host);
   const terminals = new TerminalManager(state, host);

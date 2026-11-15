@@ -24,6 +24,8 @@ import {
 } from "../permissions";
 import { HarnessMark, Spinner } from "./UI";
 import { Select } from "./Select";
+import { useRuntimeHealth } from "../useRuntimeHealth";
+import { approvedRuntime } from "../worker-availability";
 import "../styles-connections.css";
 import "../styles-worker-defaults.css";
 
@@ -49,6 +51,7 @@ export function WorkerConnections({
   onConnected?: (harness: Harness) => void;
   compact?: boolean;
 }) {
+  const health = useRuntimeHealth();
   const [statuses, setStatuses] = useState<WorkerConnectionStatus[]>([]),
     [selected, setSelected] = useState<WorkerConnectionStatus>(),
     [approved, setApproved] = useState(false),
@@ -178,14 +181,14 @@ export function WorkerConnections({
         <button
           className="button secondary worker-connections-refresh"
           onClick={() => void refresh()}
-          disabled={loading || busy}
+          disabled={loading || busy || !health.available}
           aria-label="Refresh worker connections"
         >
           <RefreshCw size={12} className={loading ? "spin" : undefined} />
           {loading ? "Checking…" : "Refresh"}
         </button>
       </header>
-      {error && (
+      {error && health.available && (
         <p className="connection-error" role="alert">
           {error}
         </p>
@@ -193,7 +196,8 @@ export function WorkerConnections({
       <div className="worker-connection-grid">
         {runtime.harnesses.map((installed) => {
           const status = statuses.find((s) => s.harness === installed.id),
-            connected = status?.connected === true,
+            connected = health.available && status?.connected === true,
+            approvalSaved = approvedRuntime(installed, state.workerConnections),
             defaultMode =
               state.settings.workerPermissionDefaults?.[installed.id] ??
               "review",
@@ -219,6 +223,12 @@ export function WorkerConnections({
                       <Check size={10} />
                       Connected
                     </>
+                  ) : !health.available ? (
+                    approvalSaved ? (
+                      "Approval saved"
+                    ) : (
+                      "Status unavailable"
+                    )
                   ) : installed.available ? (
                     "Installed"
                   ) : (
@@ -228,10 +238,12 @@ export function WorkerConnections({
               </div>
               <h3>{installed.name}</h3>
               <p>
-                {status?.note ??
-                  (loading
-                    ? "Checking your installed setup…"
-                    : "Connect your installed worker to use it here.")}
+                {!health.available
+                  ? "Runtime disconnected. Your saved connection approval is unchanged."
+                  : (status?.note ??
+                    (loading
+                      ? "Checking your installed setup…"
+                      : "Connect your installed worker to use it here."))}
               </p>
               {connected && status?.accountLabel && (
                 <small className="connection-account-label">
@@ -245,7 +257,7 @@ export function WorkerConnections({
                     <Select
                       aria-label={`${installed.name} default permissions`}
                       value={defaultMode}
-                      disabled={!!savingDefault || busy}
+                      disabled={!!savingDefault || busy || !health.available}
                       onValueChange={(mode) =>
                         void saveDefault(installed.id, mode as PermissionMode)
                       }
@@ -284,7 +296,11 @@ export function WorkerConnections({
                 </div>
               )}
               <footer>
-                {connected ? (
+                {!health.available ? (
+                  <span className="connection-runtime-unavailable">
+                    Reopen MemCode to reconnect
+                  </span>
+                ) : connected ? (
                   <>
                     <span>
                       {active

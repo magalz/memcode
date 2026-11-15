@@ -1,0 +1,31 @@
+.runtime-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 0 0 auto;
+  margin: 14px 28px 0;
+  padding: 12px 16px;
+  border: 1px solid #e5d7b8;
+  border-radius: 8px;
+  background: #fcf8ee;
+  color: #806b42;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.runtime-notice svg {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+.runtime-notice strong {
+  display: block;
+  color: #5b5039;
+  font-weight: 600;
+}
+.local-pill.runtime-offline > span {
+  background: #b6a786;
+  box-shadow: none;
+}
+.worker-connection-card .connection-runtime-unavailable {
+  color: #8b7c5a;
+  font-size: 11px;
+}

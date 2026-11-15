@@ -6,7 +6,6 @@ import {
   access,
   mkdir,
   readFile,
-  rename,
   writeFile,
   stat,
 } from "node:fs/promises";
@@ -26,6 +25,7 @@ import { initialState } from "../src/seed";
 import { restartSafeState } from "../src/domain";
 import { initializePlanning, observePlanning } from "../src/planning/history";
 import { migrateReviewComments } from "./review";
+import { replaceWorkspace } from "./persistence";
 
 export const exec = promisify(execFile);
 export const now = () => new Date().toISOString();
@@ -93,7 +93,7 @@ export class LocalStore {
         const path = join(this.dir, "workspace.json");
         const temp = join(this.dir, "workspace.json.next");
         await writeFile(temp, serialized, "utf8");
-        await rename(temp, path);
+        await replaceWorkspace(temp, path);
       });
     this.writes = pending;
     return pending;

@@ -59,6 +59,8 @@ import { WorkerConnections } from "./components/WorkerConnections";
 import { AccountConnections } from "./components/AccountConnections";
 import type { MemtraceAccount } from "./connections";
 import { approvedRuntime } from "./worker-availability";
+import { useRuntimeHealth } from "./useRuntimeHealth";
+import "./styles-runtime-health.css";
 const Docs = lazy(() =>
   import("./components/Docs").then((module) => ({ default: module.Docs })),
 );
@@ -140,6 +142,7 @@ const pageCopy: Record<View, [string, string, string]> = {
 };
 
 export function App() {
+  const runtimeHealth = useRuntimeHealth();
   const [state, setState] = useState<AppState | null>(null);
   const [runtime, setRuntime] = useState<RuntimeInfo | null>(null);
   const [view, setView] = useState<View>("board");
@@ -271,7 +274,9 @@ export function App() {
   const tasks = tasksForProject(state, project.id);
   const epics = state.epics.filter((epic) => epic.projectId === project.id);
   const selected = state.tasks.find((task) => task.id === selectedId);
-  const active = tasks.filter((task) => isActive(task));
+  const active = runtimeHealth.available
+    ? tasks.filter((task) => isActive(task))
+    : [];
   const working = tasks.filter((task) => task.stage === "working");
   const artifacts = state.artifacts.filter((a) => a.projectId === project.id);
   const open = (task: WorkItem) => {
@@ -571,9 +576,14 @@ export function App() {
             </span>
           </div>
           <div>
-            <span className="local-pill">
+            <span
+              className={
+                "local-pill " +
+                (!runtimeHealth.available ? "runtime-offline" : "")
+              }
+            >
               <span />
-              Local execution
+              {runtimeHealth.available ? "Local execution" : "Runtime stopped"}
             </span>
             <button
               className="icon-button"
@@ -585,6 +595,21 @@ export function App() {
             <AccountConnections compact notify={notify} onStatus={setAccount} />
           </div>
         </header>
+        {(!runtimeHealth.available || runtimeHealth.saveError) && (
+          <div className="runtime-notice" role="alert">
+            <Radio size={15} />
+            <div>
+              <strong>
+                {runtimeHealth.available
+                  ? "Workspace changes are not saved"
+                  : "Runtime disconnected"}
+              </strong>
+              {runtimeHealth.available
+                ? runtimeHealth.saveError
+                : "Live worker status is unavailable. Reopen MemCode to reconnect; the last saved workspace is preserved."}
+            </div>
+          </div>
+        )}
         <div className="workspace-scroll">
           <div className="page-heading">
             <div>
@@ -736,7 +761,9 @@ export function App() {
                 <span>
                   {project.example
                     ? "Example project · no live agents"
-                    : `${active.length} active sessions`}
+                    : !runtimeHealth.available
+                      ? "Live status unavailable"
+                      : `${active.length} active sessions`}
                 </span>
               </div>
               {working.length ? (
@@ -757,13 +784,19 @@ export function App() {
                       </span>
                       <span className="session-status">
                         <span
-                          className={isActive(task) ? "live-dot" : "quiet-dot"}
+                          className={
+                            runtimeHealth.available && isActive(task)
+                              ? "live-dot"
+                              : "quiet-dot"
+                          }
                         />
                         {task.example
                           ? "Preview"
-                          : isActive(task)
-                            ? "Running"
-                            : "Not running"}
+                          : !runtimeHealth.available && isActive(task)
+                            ? "Connection lost"
+                            : isActive(task)
+                              ? "Running"
+                              : "Not running"}
                       </span>
                       <ArrowUpRight size={15} />
                     </button>

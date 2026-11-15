@@ -2,6 +2,7 @@ import { ArrowRight } from "lucide-react";
 import type { Project, RuntimeInfo, WorkItem } from "../shared";
 import { isActive } from "../domain";
 import { HarnessMark, Spinner } from "./UI";
+import { useRuntimeHealth } from "../useRuntimeHealth";
 
 export function WorkspaceHero({
   project,
@@ -16,6 +17,7 @@ export function WorkspaceHero({
   act: (fn: () => Promise<unknown>) => Promise<void>;
   addProject: () => void;
 }) {
+  const health = useRuntimeHealth();
   const current = tasks.filter((task) => !task.archivedAt),
     done = current.filter((task) => task.stage === "done").length;
   const completion = current.length
@@ -112,7 +114,9 @@ export function WorkspaceHero({
           <span>
             {project.example
               ? "One workspace. Different strengths."
-              : `${runtime.harnesses.filter((harness) => harness.available).length} installed harnesses · ${current.filter(isActive).length} active workers`}
+              : !health.available
+                ? "Runtime disconnected · live worker status unavailable"
+                : `${runtime.harnesses.filter((harness) => harness.available).length} installed harnesses · ${current.filter(isActive).length} active workers`}
           </span>
         </div>
       </div>

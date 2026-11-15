@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AppState, MemCodeAPI } from "./shared";
 import { errorMessage } from "./errors";
+import { runtimeHealth } from "./runtime-health";
 
 const call = async <T = void>(
   method: string,
@@ -12,7 +13,9 @@ const call = async <T = void>(
     return await invoke<T>("rpc", { method, input });
   } catch (error) {
     // Native Tauri rejects with strings; renderer actions expect Error.message.
-    throw new Error(errorMessage(error), { cause: error });
+    const message = errorMessage(error);
+    runtimeHealth.observeError(message);
+    throw new Error(message, { cause: error });
   }
 };
 function wavBase64(wav: ArrayBuffer): string {
@@ -29,6 +32,13 @@ export async function installNativeBridge(): Promise<void> {
   const previews = new Set<Parameters<MemCodeAPI["onPreview"]>[0]>();
   const terminals = new Set<Parameters<MemCodeAPI["onTerminal"]>[0]>();
   const reviews = new Set<Parameters<MemCodeAPI["onReview"]>[0]>();
+  await listen<{ message: string }>("runtime:stopped", (event) =>
+    runtimeHealth.stopped(event.payload.message),
+  );
+  await listen<{ state: "error" | "saved"; message?: string }>(
+    "workspace:save-status",
+    (event) => runtimeHealth.saveStatus(event.payload),
+  );
   await listen<import("./review").ReviewEvent>("review:event", (event) =>
     reviews.forEach((listener) => listener(event.payload)),
   );

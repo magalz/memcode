@@ -15,6 +15,7 @@ import { StoryComments } from "./StoryComments";
 import { WorkerInputPanel, WorkerActivityView } from "./WorkerInputPanel";
 import { DeleteAction } from "./DeleteAction";
 import { workerReadiness } from "../worker-availability";
+import { useRuntimeHealth } from "../useRuntimeHealth";
 import "../styles-review.css";
 import "../styles-annotations.css";
 import "../styles-card-comments.css";
@@ -134,6 +135,7 @@ export function WorkDetail({
   act,
   obscured = false,
 }: Props) {
+  const health = useRuntimeHealth();
   const pendingInputs = (state.workerInputs ?? []).filter(
     (input) => input.taskId === task.id && input.status === "pending",
   );
@@ -244,6 +246,12 @@ export function WorkDetail({
     }
   };
   const send = async () => {
+    if (!health.available) {
+      notify(
+        "Reopen MemCode to reconnect before sending. Your draft is kept here.",
+      );
+      return;
+    }
     if (!draft.trim()) return;
     if (
       !task.example &&
@@ -617,13 +625,13 @@ export function WorkDetail({
                       }}
                     />
                   ))}
-                  {task.run.state === "preparing" && (
+                  {health.available && task.run.state === "preparing" && (
                     <div className="worker-thinking">
                       <Spinner />
                       <span>Connecting source context and the epic Fleet…</span>
                     </div>
                   )}
-                  {task.run.state === "running" && (
+                  {health.available && task.run.state === "running" && (
                     <WorkerActivityView task={task} />
                   )}
                   {task.run.error && (
@@ -632,6 +640,18 @@ export function WorkDetail({
                       <div>
                         <strong>The worker needs attention.</strong>
                         <p>{task.run.error}</p>
+                      </div>
+                    </div>
+                  )}
+                  {!health.available && active && (
+                    <div className="run-error" role="status">
+                      <Terminal size={14} />
+                      <div>
+                        <strong>Worker connection lost.</strong>
+                        <p>
+                          Live status is unavailable. Reopen MemCode before
+                          continuing this story.
+                        </p>
                       </div>
                     </div>
                   )}
@@ -720,6 +740,7 @@ export function WorkDetail({
                           aria-label="Dictate a note"
                           onClick={() => void dictation.toggle()}
                           disabled={
+                            !health.available ||
                             dictation.phase === "preparing" ||
                             dictation.phase === "transcribing"
                           }
@@ -736,16 +757,19 @@ export function WorkDetail({
                         <button
                           className="send-button"
                           title={
-                            !task.example && !active && !connection.canStart
-                              ? "Connect in Workers before sending this story"
-                              : active
-                                ? "Queue follow-up · Ctrl+Enter"
-                                : "Send follow-up · Ctrl+Enter"
+                            !health.available
+                              ? "Reopen MemCode to reconnect before sending"
+                              : !task.example && !active && !connection.canStart
+                                ? "Connect in Workers before sending this story"
+                                : active
+                                  ? "Queue follow-up · Ctrl+Enter"
+                                  : "Send follow-up · Ctrl+Enter"
                           }
                           aria-label={
                             active ? "Queue follow-up" : "Send follow-up"
                           }
                           disabled={
+                            !health.available ||
                             !draft.trim() ||
                             (!task.example && !active && !connection.canStart)
                           }
@@ -1009,7 +1033,13 @@ export function WorkDetail({
               <div className="inspector-label">
                 WORKER ASSIGNMENT
                 <span>
-                  {task.example ? "PREVIEW" : active ? "ACTIVE" : "LOCAL"}
+                  {task.example
+                    ? "PREVIEW"
+                    : !health.available
+                      ? "DISCONNECTED"
+                      : active
+                        ? "ACTIVE"
+                        : "LOCAL"}
                 </span>
               </div>
               <div className="assigned-worker">
@@ -1023,26 +1053,32 @@ export function WorkDetail({
                   <span>
                     {task.example
                       ? "Example conversation"
-                      : active
-                        ? pendingInputs.length
-                          ? "Waiting for your answer"
-                          : task.run.activity?.phase === "waiting_for_worker"
-                            ? "Waiting for a Fleet handoff"
-                            : task.run.activity?.phase === "finishing"
-                              ? "Finishing the worker turn"
-                              : "Working on the shared epic branch"
-                        : task.assignment === "auto"
-                          ? connection.connectedCount > 0
-                            ? "Routes among your approved workers"
-                            : "Connect a worker in Workers"
-                          : connection.selectedConnected
-                            ? "Connection approved"
-                            : available
-                              ? "Installed · approval needed"
-                              : "Runtime not detected"}
+                      : !health.available
+                        ? "Runtime disconnected · live status unavailable"
+                        : active
+                          ? pendingInputs.length
+                            ? "Waiting for your answer"
+                            : task.run.activity?.phase === "waiting_for_worker"
+                              ? "Waiting for a Fleet handoff"
+                              : task.run.activity?.phase === "finishing"
+                                ? "Finishing the worker turn"
+                                : "Working on the shared epic branch"
+                          : task.assignment === "auto"
+                            ? connection.connectedCount > 0
+                              ? "Routes among your approved workers"
+                              : "Connect a worker in Workers"
+                            : connection.selectedConnected
+                              ? "Connection approved"
+                              : available
+                                ? "Installed · approval needed"
+                                : "Runtime not detected"}
                   </span>
                 </div>
-                <span className={active ? "live-dot" : "quiet-dot"} />
+                <span
+                  className={
+                    health.available && active ? "live-dot" : "quiet-dot"
+                  }
+                />
               </div>
               <WorkerAssignment
                 task={task}
@@ -1050,7 +1086,7 @@ export function WorkDetail({
                 settings={state.settings}
                 connections={state.workerConnections}
                 onConnections={openConnections}
-                busy={busy}
+                busy={busy || !health.available}
                 plan={plan}
                 update={(patch) =>
                   void act(() => window.memcode.updateTask(task.id, patch))
@@ -1072,7 +1108,7 @@ export function WorkDetail({
                   onClick={() =>
                     void act(() => window.memcode.stopWorker(task.id))
                   }
-                  disabled={task.run.state === "stopping"}
+                  disabled={!health.available || task.run.state === "stopping"}
                 >
                   {task.run.state === "stopping" ? (
                     <Spinner />
@@ -1086,7 +1122,10 @@ export function WorkDetail({
                   className="button start-worker"
                   onClick={() => void run()}
                   disabled={
-                    busy || conflicts.length > 0 || !connection.canStart
+                    !health.available ||
+                    busy ||
+                    conflicts.length > 0 ||
+                    !connection.canStart
                   }
                   title={
                     !connection.canStart
