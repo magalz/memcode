@@ -3,7 +3,13 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import {
+  createHash,
+  generateKeyPairSync,
+  randomBytes,
+  randomUUID,
+  sign,
+} from "node:crypto";
 import { startTeamRelay } from "../runtime/team/relay";
 import { TeamSyncClient } from "../runtime/team/client";
 import {
@@ -13,7 +19,9 @@ import {
 import type {
   TeamIdentityChallenge,
   TeamIdentityProofVerifier,
+  MemtraceIdentityPublicKey,
 } from "../runtime/team-identity";
+import { createMemtraceIdentityVerifier } from "../runtime/team-identity";
 import type { TeamSpaceSession } from "../runtime/team/spaces";
 import type { AppState, Project } from "../src/shared";
 import { initialState } from "../src/seed";
@@ -72,12 +80,14 @@ function workspace(id: string): AppState {
   state.team = [];
   return state;
 }
-async function fixture() {
+async function fixture(
+  identityVerifier: TeamIdentityProofVerifier = verifyIdentity,
+) {
   const root = await mkdtemp(join(tmpdir(), "memcode-team-spaces-"));
   let relay = await startTeamRelay({
     dataDir: join(root, "relay"),
     port: 0,
-    verifyIdentity,
+    verifyIdentity: identityVerifier,
   });
   const request = async (path: string, body?: unknown, capability?: string) => {
     const response = await fetch(relay.url + path, {
@@ -122,7 +132,7 @@ async function fixture() {
       relay = await startTeamRelay({
         dataDir: join(root, "relay"),
         port,
-        verifyIdentity,
+        verifyIdentity: identityVerifier,
       });
     },
     async close() {
@@ -1164,6 +1174,360 @@ test("a lost membership-accept response recovers after restart only for its veri
     assert.equal(wrong.status, 403);
   } finally {
     await client.close();
+    await f.close();
+  }
+});
+
+test("real signed Team identities publish exact report/artifact bytes, race claims to one winner and lose shared access on revocation", async () => {
+  // Use the production Ed25519 verifier with an ephemeral trusted issuer key.
+  // Only key discovery is injected; relay signature/audience/nonce checking is real.
+  const pair = generateKeyPairSync("ed25519");
+  const key = {
+    ...pair.publicKey.export({ format: "jwk" }),
+    kid: "team-results-fixture",
+    alg: "EdDSA",
+    use: "sig",
+  } as MemtraceIdentityPublicKey;
+  const signedProofs: string[] = [];
+  const identityProof =
+    (subject: "alice" | "bob") => async (challenge: TeamIdentityChallenge) => {
+      const now = Math.floor(Date.now() / 1000);
+      const header = Buffer.from(
+        JSON.stringify({ alg: "EdDSA", typ: "JWT", kid: key.kid }),
+      ).toString("base64url");
+      const claims = Buffer.from(
+        JSON.stringify({
+          iss: "https://memtrace.io",
+          aud: challenge.audience,
+          nonce: challenge.nonce,
+          purpose: "memcode-team",
+          sub: `verified-${subject}`,
+          name: subject.toUpperCase(),
+          email: `${subject}@example.test`,
+          email_verified: true,
+          iat: now,
+          exp: now + 240,
+          jti: randomBytes(32).toString("base64url"),
+        }),
+      ).toString("base64url");
+      const proof = `${header}.${claims}.${sign(null, Buffer.from(`${header}.${claims}`), pair.privateKey).toString("base64url")}`;
+      signedProofs.push(proof);
+      return proof;
+    };
+  const f = await fixture(
+    createMemtraceIdentityVerifier({ loadKeys: async () => ({ keys: [key] }) }),
+  );
+  const ownerState = workspace("owner-project"),
+    memberState = workspace("personal-project");
+  const ownerDir = join(f.root, "owner"),
+    memberDir = join(f.root, "member");
+  const owner = new TeamSyncClient(
+    () => ownerState,
+    ownerDir,
+    async () => {},
+    { background: false, identityProof: identityProof("alice") },
+  );
+  const member = new TeamSyncClient(
+    () => memberState,
+    memberDir,
+    async () => {},
+    { background: false, identityProof: identityProof("bob") },
+  );
+  try {
+    await owner.initialize();
+    await member.initialize();
+    await writeFile(
+      join(ownerDir, "team", "service.private.json"),
+      JSON.stringify({
+        endpoint: f.relay.url,
+        bootstrapSecret: f.relay.adminCapability,
+      }),
+    );
+    const team = await owner.createTeamWorkspace({
+      name: "Signed results and claims",
+    });
+    const shared = await owner.shareProject({
+      teamId: team.id,
+      projectId: "owner-project",
+    });
+    const invitation = await owner.inviteTeamMember({
+      teamId: team.id,
+      email: "bob@example.test",
+      projectWorkspaceId: shared.workspace.workspaceId,
+    });
+    const joined = await member.acceptTeamInvitation({
+      invite: invitation.url,
+    });
+    const projectId = joined.project!.projectId;
+    const ownerTask = ownerState.tasks[0],
+      memberTask = memberState.tasks.find(
+        (task) => task.projectId === projectId,
+      )!;
+    assert.notEqual(
+      memberTask.id,
+      ownerTask.id,
+      "The member's seeded personal IDs require canonical-to-local translation",
+    );
+    assert.equal(joined.team.identity, "memtrace");
+    assert.deepEqual(joined.team.members.map((value) => value.name).sort(), [
+      "ALICE",
+      "BOB",
+    ]);
+
+    const reportBytes = Buffer.from(
+      "# Flight readiness\n\n| Check | Status |\n| --- | --- |\n| Navigation | Ready ✓ |\n\nA real report published explicitly.\n",
+      "utf8",
+    );
+    const reportPath = join(
+      ownerDir,
+      "captures",
+      ownerTask.id,
+      "flight-report.md",
+    );
+    await mkdir(join(ownerDir, "captures", ownerTask.id), { recursive: true });
+    await writeFile(reportPath, reportBytes);
+    const privatePath = join(
+      ownerDir,
+      "captures",
+      ownerTask.id,
+      "private-debug.log",
+    );
+    await writeFile(privatePath, "DO NOT AUTO-PUBLISH THIS EVIDENCE");
+    ownerState.artifacts.push(
+      {
+        id: "flight-report",
+        projectId: "owner-project",
+        taskId: ownerTask.id,
+        name: "flight-report.md",
+        path: reportPath,
+        kind: "text",
+        purpose: "report",
+        source: "Codex",
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: "private-log",
+        projectId: "owner-project",
+        taskId: ownerTask.id,
+        name: "private-debug.log",
+        path: privatePath,
+        kind: "text",
+        purpose: "evidence",
+        source: "Codex",
+        createdAt: new Date().toISOString(),
+      },
+    );
+    await owner.synchronize("owner-project");
+    await member.synchronize(projectId);
+    assert.equal(
+      member.status(projectId)!.workspace.results.length,
+      0,
+      "Saved files are not shared before explicit publishing",
+    );
+    const publishedReport = await owner.publish({
+      projectId: "owner-project",
+      taskId: ownerTask.id,
+      artifactId: "flight-report",
+    });
+    assert.equal(
+      publishedReport.hash,
+      createHash("sha256").update(reportBytes).digest("hex"),
+    );
+    assert.equal(publishedReport.kind, "report");
+    assert.equal(publishedReport.mime, "text/markdown");
+    await member.synchronize(projectId);
+    const receivedReport = await member.download(projectId, publishedReport.id);
+    assert.deepEqual(await readFile(receivedReport.path), reportBytes);
+    assert.equal(receivedReport.taskId, memberTask.id);
+    assert.equal(receivedReport.purpose, "report");
+    assert.equal(receivedReport.source, "ALICE");
+    assert.equal(
+      member.status(projectId)!.workspace.results[0].storyId,
+      memberTask.id,
+    );
+    assert.doesNotMatch(
+      JSON.stringify(member.status(projectId)),
+      /private-debug|DO NOT AUTO-PUBLISH|PRIVATE TOOL OUTPUT/,
+    );
+
+    const artifactBytes = Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"><rect width="80" height="40" fill="#123b2c"/><text x="8" y="25" fill="white">Orbit</text></svg>',
+    );
+    const artifactPath = join(
+      memberDir,
+      "captures",
+      memberTask.id,
+      "orbit.svg",
+    );
+    await mkdir(join(memberDir, "captures", memberTask.id), {
+      recursive: true,
+    });
+    await writeFile(artifactPath, artifactBytes);
+    memberState.artifacts.push({
+      id: "orbit-artifact",
+      projectId,
+      taskId: memberTask.id,
+      name: "orbit.svg",
+      path: artifactPath,
+      kind: "image",
+      purpose: "deliverable",
+      source: "Cursor",
+      createdAt: new Date().toISOString(),
+    });
+    const publishedArtifact = await member.publish({
+      projectId,
+      taskId: memberTask.id,
+      artifactId: "orbit-artifact",
+    });
+    assert.equal(publishedArtifact.kind, "artifact");
+    assert.equal(publishedArtifact.mime, "image/svg+xml");
+    assert.equal(
+      publishedArtifact.hash,
+      createHash("sha256").update(artifactBytes).digest("hex"),
+    );
+    await owner.synchronize("owner-project");
+    const receivedArtifact = await owner.download(
+      "owner-project",
+      publishedArtifact.id,
+    );
+    assert.deepEqual(await readFile(receivedArtifact.path), artifactBytes);
+    assert.equal(receivedArtifact.taskId, ownerTask.id);
+    assert.equal(receivedArtifact.source, "BOB");
+    assert.equal(owner.status("owner-project")!.workspace.results.length, 2);
+    await f.restart();
+    await owner.synchronize("owner-project");
+    await member.synchronize(projectId);
+    assert.deepEqual(
+      await readFile(
+        (await member.download(projectId, publishedReport.id)).path,
+      ),
+      reportBytes,
+    );
+
+    const contenders = [
+      { client: owner, projectId: "owner-project", taskId: ownerTask.id },
+      { client: member, projectId, taskId: memberTask.id },
+    ];
+    const race = await Promise.allSettled(
+      contenders.map((value) =>
+        value.client.acquire(value.taskId, value.projectId),
+      ),
+    );
+    assert.equal(
+      race.filter((value) => value.status === "fulfilled").length,
+      1,
+      "One verified Team capability wins the same-story claim race",
+    );
+    const winner = race.findIndex((value) => value.status === "fulfilled"),
+      loser = 1 - winner;
+    const rejection = race[loser];
+    assert.equal(rejection.status, "rejected");
+    if (rejection.status === "rejected")
+      assert.match(String(rejection.reason), /already owns this story/);
+    await owner.synchronize("owner-project");
+    await member.synchronize(projectId);
+    const firstClaim = owner.status("owner-project")!.workspace.claims[0];
+    assert.equal(owner.status("owner-project")!.workspace.claims.length, 1);
+    assert.equal(
+      firstClaim.memberId,
+      contenders[winner].client.status(contenders[winner].projectId)!.memberId,
+    );
+    assert.equal(
+      member.status(projectId)!.workspace.claims[0].storyId,
+      memberTask.id,
+    );
+    await assert.rejects(
+      contenders[loser].client.acquire(
+        contenders[loser].taskId,
+        contenders[loser].projectId,
+      ),
+      /already owns/,
+    );
+    await contenders[winner].client.release(
+      contenders[winner].taskId,
+      contenders[winner].projectId,
+    );
+    await contenders[loser].client.acquire(
+      contenders[loser].taskId,
+      contenders[loser].projectId,
+    );
+    const successor = contenders[loser].client.status(
+      contenders[loser].projectId,
+    )!.workspace.claims[0];
+    assert.ok(
+      successor.epoch > firstClaim.epoch,
+      "An acknowledged release permits a newly fenced claim",
+    );
+    await contenders[loser].client.release(
+      contenders[loser].taskId,
+      contenders[loser].projectId,
+    );
+
+    const profile = JSON.parse(
+      await readFile(join(memberDir, "team", "connections.json"), "utf8"),
+    );
+    const memberCapability = profile.teams[0].credential.capability;
+    const publicState = JSON.stringify({
+      directory: await member.teamsList(),
+      room: member.status(projectId),
+    });
+    assert.ok(!publicState.includes(memberCapability));
+    for (const proof of signedProofs)
+      assert.ok(
+        !publicState.includes(proof),
+        "Signed identity assertions never enter public Team state",
+      );
+    await owner.revokeTeamMember({
+      teamId: team.id,
+      memberId: joined.project!.memberId,
+    });
+    await assert.rejects(
+      member.download(projectId, publishedReport.id),
+      /revoked/,
+    );
+    await assert.rejects(
+      member.publish({
+        projectId,
+        taskId: memberTask.id,
+        artifactId: "orbit-artifact",
+      }),
+      /revoked/,
+    );
+    await assert.rejects(member.acquire(memberTask.id, projectId), /revoked/);
+    const blockedRead = await fetch(
+      `${f.relay.url}/v1/blobs/${publishedReport.hash}?workspaceId=${shared.workspace.workspaceId}`,
+      { headers: { authorization: `Bearer ${memberCapability}` } },
+    );
+    assert.equal(blockedRead.status, 403);
+    const blockedWrite = await fetch(
+      `${f.relay.url}/v1/blobs?workspaceId=${shared.workspace.workspaceId}`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${memberCapability}`,
+          "content-type": "text/markdown",
+        },
+        body: reportBytes,
+      },
+    );
+    assert.equal(blockedWrite.status, 403);
+    assert.deepEqual(
+      await readFile(receivedReport.path),
+      reportBytes,
+      "Revocation does not delete the member's local saved copies",
+    );
+    assert.deepEqual(
+      await readFile(
+        (await owner.download("owner-project", publishedArtifact.id)).path,
+      ),
+      artifactBytes,
+      "Previously published results remain accessible to active Team members",
+    );
+    await owner.synchronize("owner-project");
+    assert.equal(owner.status("owner-project")!.workspace.results.length, 2);
+  } finally {
+    await owner.close();
+    await member.close();
     await f.close();
   }
 });
