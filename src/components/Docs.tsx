@@ -10,26 +10,8 @@ import {
 } from "lucide-react";
 import { guideArticles, type GuideDestination } from "../guide-content";
 import { GuideFlow } from "./GuideFlow";
+import { GuidePreview } from "./GuidePreview";
 import "../styles-docs.css";
-function GuideImage({ name, caption }: { name: string; caption: string }) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [name]);
-  return (
-    <figure className="docs-figure">
-      {failed ? (
-        <GuideFlow />
-      ) : (
-        <img
-          loading="lazy"
-          src={`/guide/${name}.png`}
-          alt={caption}
-          onError={() => setFailed(true)}
-        />
-      )}
-      <figcaption>{caption}</figcaption>
-    </figure>
-  );
-}
 export function Docs({
   onStartGuide,
   onGo,
@@ -122,6 +104,13 @@ export function Docs({
             </div>
           </>
         )}
+        {article.id !== "start" && (
+          <GuidePreview
+            topic={article.id}
+            title={article.title}
+            caption={article.caption}
+          />
+        )}
         <ol className="docs-steps">
           {article.steps.map((step, index) => (
             <li key={index}>
@@ -135,9 +124,6 @@ export function Docs({
             <Check size={14} />
             <p>{article.note}</p>
           </aside>
-        )}
-        {article.id !== "start" && (
-          <GuideImage name={article.image} caption={article.caption} />
         )}
         <footer className="docs-article-footer">
           {article.destination && (

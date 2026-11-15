@@ -4,7 +4,8 @@ import { StoryMetadata, WorkerAssignment } from "./WorkerAssignment";
 import { PlanningProperties } from "./PlanningProperties";
 import { WorkerBrowser } from "./WorkerBrowser";
 import { ArtifactPreview } from "./ArtifactPreview";
-import { artifactTypeLabel } from "../artifact-format";
+import { ArtifactCollection } from "./ArtifactCollection";
+import { groupedArtifacts } from "../artifact-purpose";
 import { isWebLink, type FileReference } from "../file-reference";
 import { reviewLocation } from "../review-labels";
 import type { ReviewReference, ReviewComment } from "../review";
@@ -15,7 +16,11 @@ import { StoryComments } from "./StoryComments";
 import { WorkerInputPanel, WorkerActivityView } from "./WorkerInputPanel";
 import { DeleteAction } from "./DeleteAction";
 import { workerReadiness } from "../worker-availability";
+import { teamStartBlocked } from "../team-presentation";
 import { useRuntimeHealth } from "../useRuntimeHealth";
+import { ConversationMessages } from "./ConversationMessage";
+import { followsConversationTail } from "../conversation-performance";
+import { useConversationDraft } from "../useConversationDraft";
 import "../styles-review.css";
 import "../styles-annotations.css";
 import "../styles-card-comments.css";
@@ -39,7 +44,6 @@ import {
   Files,
   GitBranch,
   Globe2,
-  Image,
   ListChecks,
   Maximize2,
   MessageSquare,
@@ -85,7 +89,6 @@ const WorkerTerminal = lazy(() =>
     default: module.WorkerTerminal,
   })),
 );
-const MessageMarkdown = lazy(() => import("./MessageMarkdown"));
 type Tab =
   | "conversation"
   | "queue"
@@ -136,23 +139,23 @@ export function WorkDetail({
   obscured = false,
 }: Props) {
   const health = useRuntimeHealth();
+  const team = state.team?.find((item) => item.projectId === task.projectId);
+  const teamBlock = teamStartBlocked(team, task.id);
   const pendingInputs = (state.workerInputs ?? []).filter(
     (input) => input.taskId === task.id && input.status === "pending",
   );
   const [tab, setTab] = useState<Tab>("conversation");
-  const [draft, setDraft] = useState("");
-  const connectionDraft = useRef<
-    | {
-        taskId: string;
-        value: { draft?: string; comments?: string[] };
-      }
-    | undefined
-  >(undefined);
+  const {
+    draft,
+    setDraft,
+    attachedComments,
+    setAttachedComments,
+    clearSubmitted,
+  } = useConversationDraft(task.id);
   const [commentFocus, setCommentFocus] = useState(0);
   const [commentsOpen, setCommentsOpen] = useState(false),
     [focusedCommentId, setFocusedCommentId] = useState<string>(),
-    [editingComment, setEditingComment] = useState<ReviewComment>(),
-    [attachedComments, setAttachedComments] = useState<string[]>([]);
+    [editingComment, setEditingComment] = useState<ReviewComment>();
   const comments = (state.reviewComments ?? []).filter(
     (comment) => comment.taskId === task.id,
   );
@@ -165,49 +168,46 @@ export function WorkDetail({
     [references, setReferences] = useState<ReviewReference[]>([]);
   const [check, setCheck] = useState("");
   const [busy, setBusy] = useState(false);
+  const [planning, setPlanning] = useState(false);
+  const measuredStory = useRef<string>("");
   const plan = () =>
     void act(async () => {
-      setBusy(true);
+      setPlanning(true);
       try {
         if (project.analysis !== "ready")
           await window.memcode.analyzeProject(project.id);
         await window.memcode.qualifyTask(task.id);
       } finally {
-        setBusy(false);
+        setPlanning(false);
       }
     });
+  useEffect(() => {
+    if (!health.available || task.example || task.route || isActive(task))
+      return;
+    if (measuredStory.current === task.id) return;
+    measuredStory.current = task.id;
+    plan();
+  }, [health.available, task.id, task.example, task.route, task.run.state]);
   const [selectedArtifact, setArtifact] = useState<Artifact | null>(null);
   const artifact =
     artifacts.find((item) => item.id === selectedArtifact?.id) ??
     selectedArtifact;
   const messagesRef = useRef<HTMLDivElement>(null);
+  const followConversation = useRef(true);
+  const conversationTask = useRef<string | undefined>(undefined);
   const dictation = useDictation(
     (text) => setDraft((value) => [value, text].filter(Boolean).join("\n")),
     notify,
   );
   useEffect(() => {
     setTab("conversation");
-    let kept: { draft?: string; comments?: string[] } = {};
-    try {
-      const key = "memcode:connection-draft:" + task.id;
-      const stored =
-        connectionDraft.current?.taskId === task.id
-          ? connectionDraft.current.value
-          : JSON.parse(sessionStorage.getItem(key) ?? "{}");
-      if (stored && typeof stored === "object") kept = stored;
-      connectionDraft.current = { taskId: task.id, value: kept };
-      sessionStorage.removeItem(key);
-    } catch {}
-    setDraft(typeof kept.draft === "string" ? kept.draft : "");
     setCommentsOpen(false);
     setFocusedCommentId(undefined);
     setEditingComment(undefined);
-    setAttachedComments(
-      Array.isArray(kept.comments)
-        ? kept.comments.filter((id) =>
-            comments.some((note) => note.id === id && note.status === "saved"),
-          )
-        : [],
+    setAttachedComments((ids) =>
+      ids.filter((id) =>
+        comments.some((note) => note.id === id && note.status === "saved"),
+      ),
     );
     setBrowserLink(undefined);
     setArtifact(null);
@@ -222,9 +222,21 @@ export function WorkDetail({
   }, [initialArtifact?.id, task.id]);
   useEffect(() => {
     const el = messagesRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [task.messages.length, task.id, tab]);
+    if (!el) return;
+    const opening = conversationTask.current !== task.id;
+    conversationTask.current = task.id;
+    if (opening || followConversation.current) {
+      followConversation.current = true;
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [task.messages.length, task.messages.at(-1)?.text, task.id, tab]);
   const run = async () => {
+    if (teamBlock) {
+      notify(teamBlock);
+      return;
+    }
+    const submitted = { draft, comments: [...attachedComments] };
+    followConversation.current = true;
     setBusy(true);
     try {
       if (draft.trim()) {
@@ -235,8 +247,7 @@ export function WorkDetail({
             draft.trim(),
           );
         else await window.memcode.addMessage(task.id, draft.trim());
-        setDraft("");
-        setAttachedComments([]);
+        clearSubmitted(submitted);
       }
       await window.memcode.startWorker(task.id);
     } catch (error) {
@@ -246,6 +257,10 @@ export function WorkDetail({
     }
   };
   const send = async () => {
+    if (!isActive(task) && teamBlock) {
+      notify(teamBlock);
+      return;
+    }
     if (!health.available) {
       notify(
         "Reopen MemCode to reconnect before sending. Your draft is kept here.",
@@ -253,6 +268,8 @@ export function WorkDetail({
       return;
     }
     if (!draft.trim()) return;
+    const submitted = { draft, comments: [...attachedComments] };
+    followConversation.current = true;
     if (
       !task.example &&
       !isActive(task) &&
@@ -268,8 +285,7 @@ export function WorkDetail({
         draft.trim(),
         attachedComments.length ? attachedComments : undefined,
       );
-      setDraft("");
-      setAttachedComments([]);
+      clearSubmitted(submitted);
       if (isActive(task))
         notify(
           "Follow-up queued. The worker will pick it up automatically when ready.",
@@ -363,10 +379,6 @@ export function WorkDetail({
     runtime.harnesses,
     state.workerConnections,
   );
-  const assignedDisplay =
-    task.assignment === "auto" && !connection.routeConnected
-      ? { ...task, route: undefined }
-      : task;
   const openConnections = () => {
     try {
       sessionStorage.setItem(
@@ -399,7 +411,7 @@ export function WorkDetail({
       id: "artifacts",
       label: "Artifacts",
       icon: Files,
-      count: artifacts.length,
+      count: groupedArtifacts(artifacts).primary.length,
     },
     { id: "browser", label: "Browser", icon: Globe2 },
     { id: "terminal", label: "Terminal", icon: Terminal },
@@ -606,25 +618,31 @@ export function WorkDetail({
                     <ArrowRight size={13} />
                   </button>
                 )}
-                <div className="conversation-scroll" ref={messagesRef}>
+                <div
+                  className="conversation-scroll"
+                  ref={messagesRef}
+                  onScroll={(event) => {
+                    followConversation.current = followsConversationTail(
+                      event.currentTarget,
+                    );
+                  }}
+                >
                   <div className="session-start">
                     <span>THE WORK STARTS WITH A CLEAR BRIEF</span>
                     <i />
                   </div>
-                  {task.messages.map((message) => (
-                    <MessageBlock
-                      key={message.id}
-                      message={message}
-                      harness={task.harness}
-                      onOpenLink={(href) => void openLink(href)}
-                      comments={comments}
-                      onOpenReference={(reference, id) => {
-                        const note = comments.find((c) => c.id === id);
-                        if (note) void focusComment(note);
-                        else if (reference.path) void openLink(reference.path);
-                      }}
-                    />
-                  ))}
+                  <ConversationMessages
+                    key={task.id}
+                    messages={task.messages}
+                    harness={task.harness}
+                    onOpenLink={(href) => void openLink(href)}
+                    comments={comments}
+                    onOpenReference={(reference, id) => {
+                      const note = comments.find((c) => c.id === id);
+                      if (note) void focusComment(note);
+                      else if (reference.path) void openLink(reference.path);
+                    }}
+                  />
                   {health.available && task.run.state === "preparing" && (
                     <div className="worker-thinking">
                       <Spinner />
@@ -720,12 +738,13 @@ export function WorkDetail({
                     />
                     <div className="composer-controls">
                       <div>
-                        <WorkerMark task={assignedDisplay} small />
+                        <WorkerMark task={task} small />
                         <span>
-                          {task.assignment === "auto" &&
-                          !connection.routeConnected
-                            ? "Automatic assignment"
-                            : harnessNames[task.harness]}
+                          {task.route
+                            ? `${harnessNames[task.route.harness]} · ${task.route.model}`
+                            : task.assignment === "auto"
+                              ? "Choosing a harness"
+                              : harnessNames[task.harness]}
                         </span>
                         {dictation.phase !== "idle" && (
                           <span className="recording-label">
@@ -759,11 +778,15 @@ export function WorkDetail({
                           title={
                             !health.available
                               ? "Reopen MemCode to reconnect before sending"
-                              : !task.example && !active && !connection.canStart
-                                ? "Connect in Workers before sending this story"
-                                : active
-                                  ? "Queue follow-up · Ctrl+Enter"
-                                  : "Send follow-up · Ctrl+Enter"
+                              : !active && teamBlock
+                                ? teamBlock
+                                : !task.example &&
+                                    !active &&
+                                    !connection.canStart
+                                  ? "Connect in Workers before sending this story"
+                                  : active
+                                    ? "Queue follow-up · Ctrl+Enter"
+                                    : "Send follow-up · Ctrl+Enter"
                           }
                           aria-label={
                             active ? "Queue follow-up" : "Send follow-up"
@@ -771,6 +794,7 @@ export function WorkDetail({
                           disabled={
                             !health.available ||
                             !draft.trim() ||
+                            (!active && !!teamBlock) ||
                             (!task.example && !active && !connection.canStart)
                           }
                           onClick={() => void send()}
@@ -904,32 +928,15 @@ export function WorkDetail({
                     <span />
                     BUILT ALONG THE WAY
                   </div>
-                  <h3>Something you can open.</h3>
-                  <p>Output stays connected to the worker that produced it.</p>
-                  {artifacts.map((item) => (
-                    <button
-                      key={item.id}
-                      className="artifact-row"
-                      onClick={() => void openArtifact(item)}
-                    >
-                      <span className={"artifact-kind " + item.kind}>
-                        {item.kind === "html" ? (
-                          <Globe2 size={19} />
-                        ) : item.kind === "image" ? (
-                          <Image size={19} />
-                        ) : (
-                          <FileCode2 size={19} />
-                        )}
-                      </span>
-                      <span>
-                        <strong>{item.name}</strong>
-                        <small>
-                          {item.source} · {artifactTypeLabel(item.name)}
-                        </small>
-                      </span>
-                      <ArrowUpRight size={15} />
-                    </button>
-                  ))}
+                  <h3>Artifacts and reports.</h3>
+                  <p>
+                    Reports and deliverables, with supporting evidence below.
+                  </p>
+                  <ArtifactCollection
+                    key={task.id}
+                    artifacts={artifacts}
+                    onOpen={(item) => void openArtifact(item)}
+                  />
                 </div>
               ) : (
                 <Empty
@@ -1043,12 +1050,14 @@ export function WorkDetail({
                 </span>
               </div>
               <div className="assigned-worker">
-                <WorkerMark task={assignedDisplay} />
+                <WorkerMark task={task} />
                 <div>
                   <strong>
-                    {task.assignment === "auto" && !connection.routeConnected
-                      ? "Automatic"
-                      : harnessNames[task.harness]}
+                    {task.route
+                      ? harnessNames[task.route.harness]
+                      : task.assignment === "auto"
+                        ? "Automatic"
+                        : harnessNames[task.harness]}
                   </strong>
                   <span>
                     {task.example
@@ -1063,15 +1072,19 @@ export function WorkDetail({
                               : task.run.activity?.phase === "finishing"
                                 ? "Finishing the worker turn"
                                 : "Working on the shared epic branch"
-                          : task.assignment === "auto"
-                            ? connection.connectedCount > 0
-                              ? "Routes among your approved workers"
-                              : "Connect a worker in Workers"
-                            : connection.selectedConnected
-                              ? "Connection approved"
-                              : available
-                                ? "Installed · approval needed"
-                                : "Runtime not detected"}
+                          : task.route
+                            ? connection.routeConnected
+                              ? `${task.route.model} · assigned, not started`
+                              : `${task.route.model} · connect before starting`
+                            : task.assignment === "auto"
+                              ? planning
+                                ? "Measuring who picks this up"
+                                : "Waiting for a measured assignment"
+                              : connection.selectedConnected
+                                ? "Connection approved"
+                                : available
+                                  ? "Installed · approval needed"
+                                  : "Runtime not detected"}
                   </span>
                 </div>
                 <span
@@ -1085,8 +1098,10 @@ export function WorkDetail({
                 runtime={runtime}
                 settings={state.settings}
                 connections={state.workerConnections}
+                team={team}
                 onConnections={openConnections}
-                busy={busy || !health.available}
+                busy={planning}
+                disabled={!health.available}
                 plan={plan}
                 update={(patch) =>
                   void act(() => window.memcode.updateTask(task.id, patch))
@@ -1125,12 +1140,16 @@ export function WorkDetail({
                     !health.available ||
                     busy ||
                     conflicts.length > 0 ||
+                    !!teamBlock ||
                     !connection.canStart
                   }
                   title={
-                    !connection.canStart
-                      ? "Connect an approved worker in Workers first"
-                      : undefined
+                    teamBlock ??
+                    (!connection.canStart
+                      ? task.route
+                        ? `Connect ${harnessNames[task.route.harness]} in Workers before starting`
+                        : "Connect an approved worker in Workers first"
+                      : undefined)
                   }
                 >
                   {busy ? <Spinner /> : <Play size={12} />}{" "}
@@ -1318,108 +1337,5 @@ function LayersIcon() {
     <span className="detail-folder">
       <Files size={13} />
     </span>
-  );
-}
-
-function MessageBlock({
-  message,
-  harness,
-  onOpenLink,
-  comments,
-  onOpenReference,
-}: {
-  message: Message;
-  harness: WorkItem["harness"];
-  onOpenLink: (href: string) => void;
-  comments: ReviewComment[];
-  onOpenReference: (reference: ReviewReference, id?: string) => void;
-}) {
-  if (message.role === "tool")
-    return (
-      <details className="tool-message">
-        <summary>
-          <span className="tool-icon">
-            <Terminal size={12} />
-          </span>
-          <span>{message.text.split("\n")[0].slice(0, 100)}</span>
-          <ChevronRight size={12} />
-        </summary>
-        <pre>
-          {message.text.split("\n").slice(1).join("\n") || message.text}
-        </pre>
-      </details>
-    );
-  if (message.role === "system")
-    return (
-      <div className="system-message">
-        <span />
-        <p>{message.text}</p>
-      </div>
-    );
-  return (
-    <article className={"message-block " + message.role}>
-      <header>
-        {message.role === "user" ? (
-          <span className="message-avatar">A</span>
-        ) : (
-          <HarnessMark id={harness} small />
-        )}
-        <strong>
-          {message.role === "user" ? "You" : harnessNames[harness]}
-        </strong>
-        <Time at={message.at} />
-        {message.followupState && message.followupState !== "included" && (
-          <span className="message-queue-state" role="status">
-            {message.followupState === "queued"
-              ? message.pickedUpAt
-                ? "Picked up"
-                : "Queued"
-              : message.followupState === "paused"
-                ? "Queue paused"
-                : "Queue cancelled"}
-          </span>
-        )}
-        {message.role === "assistant" && (
-          <span className="message-role">WORKER</span>
-        )}
-      </header>
-      <div className="message-body">
-        {message.references?.length ? (
-          <>
-            <p>
-              {message.reviewText ?? message.text.split("\n\nReference 1:")[0]}
-            </p>
-            {message.references.map((reference, index) => {
-              const note = comments.find(
-                (c) => c.id === message.commentIds?.[index],
-              );
-              return (
-                <button
-                  key={index}
-                  className="message-review-ref"
-                  onClick={() => onOpenReference(reference, note?.id)}
-                >
-                  <strong>{reference.name}</strong>
-                  <small>{reviewLocation(reference)}</small>
-                  {note &&
-                    note.text !==
-                      (message.reviewText ??
-                        message.text.split("\n\nReference 1:")[0]) && (
-                      <p>{note.text}</p>
-                    )}
-                  <blockquote>{reference.quote}</blockquote>
-                </button>
-              );
-            })}
-          </>
-        ) : message.role === "assistant" ? (
-          <Suspense fallback={message.text}>
-            <MessageMarkdown text={message.text} onOpenLink={onOpenLink} />
-          </Suspense>
-        ) : (
-          message.text
-        )}
-      </div>
-    </article>
   );
 }

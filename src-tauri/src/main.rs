@@ -6,6 +6,8 @@ mod browser;
 mod browser_capture;
 mod native;
 mod terminal;
+mod workspace;
+mod state_patch;
 
 use bridge::RuntimeBridge;
 use serde_json::Value;
@@ -30,6 +32,33 @@ async fn rpc(
     runtime.request(&method, input.unwrap_or(Value::Null)).await
 }
 
+#[tauri::command]
+fn workspace_connect(
+    webview: Webview,
+    runtime: tauri::State<'_, RuntimeBridge>,
+    channel: tauri::ipc::Channel<Value>,
+    token: String,
+) -> Result<(), String> {
+    if webview.label() != "main" || token.is_empty() || token.len() > 128 {
+        return Err("Only the MemCode application may connect workspace updates.".into());
+    }
+    runtime.connect_workspace(channel, token);
+    Ok(())
+}
+
+#[tauri::command]
+fn workspace_ack(
+    webview: Webview,
+    runtime: tauri::State<'_, RuntimeBridge>,
+    sequence: u64,
+    token: String,
+) -> Result<bool, String> {
+    if webview.label() != "main" || token.is_empty() || token.len() > 128 {
+        return Err("Only the MemCode application may acknowledge workspace updates.".into());
+    }
+    Ok(runtime.acknowledge_workspace(sequence, &token))
+}
+
 fn main() {
     let browser = browser::BrowserState::new();
     let runtime = RuntimeBridge::new();
@@ -38,7 +67,11 @@ fn main() {
         .manage(native::PreviewState::default())
         .manage(browser)
         .manage(terminal::TerminalState::default())
-        .invoke_handler(tauri::generate_handler![rpc])
+        .invoke_handler(tauri::generate_handler![
+            rpc,
+            workspace_connect,
+            workspace_ack
+        ])
         .setup(|app| {
             let handle = app.handle().clone();
             let config = app

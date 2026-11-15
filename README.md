@@ -15,6 +15,11 @@ npm install
 npm run dev
 ```
 
+On macOS, install Xcode Command Line Tools and Rust 1.88+ first. Use the
+[macOS developer quickstart](docs/macos-development.md) for the current source
+preview, Memtrace sign-in and platform limits. This checkout has no signed Mac
+installer; the shared live agent browser currently requires Windows WebView2.
+
 To develop MemCode using MemCode, close the compiled app after its active workers
 finish, then run `npm run dev` from this repository in an external terminal. It builds the local runtime
 and opens the Tauri development app against the same workspace data. UI changes
@@ -48,6 +53,8 @@ MemCode then connects to the installed Memtrace engine to analyze it.
 - A persisted Now / Next / Later roadmap, epics, stories, source scope and cycle-checked prerequisites.
 - Project briefs, editable runbooks, conversations, worker status and change review.
 - Visible follow-up queues with edit/cancel until pickup, plus separate story discussions.
+- Opt-in [Team Sync preview](docs/team-sync-preview.md): shared planning, authored comments,
+  activity, story claims and deliberately published files, with local workers and Git source exchange.
 - Native questions, approval choices and plan review beside the conversation input for Codex, Claude Code and Cursor, with replies sent to the same waiting session.
 - Worker-wide Review / Smart auto / Full access defaults, inherited across projects with optional story overrides. Cursor ACP currently supports Review and Full access; unsupported automatic review is explicit.
 - Delete stories, epics and cycles with a clear confirmation. Epic/cycle deletion preserves their stories; active workers must stop first.
@@ -72,7 +79,9 @@ MemCode then connects to the installed Memtrace engine to analyze it.
 - Separate output folders under `.memcode/workers/<story-id>/artifacts/` and readable project-file links.
 - Local dictation with explicit Whisper Tiny setup on Windows x64, or an existing local whisper.cpp server; transcripts enter the draft for review.
 
-Execution, project state, coordination and artifacts stay on this computer. A harness
+Execution, credentials, local repository bindings and approvals stay on this computer.
+Personal projects remain local. Opt-in Team Sync shares planning, comments, activity
+and explicitly published files through a private relay. A harness
 may use its configured cloud model. Codex can alternatively use an installed Ollama
 model; select local-model mode and its model name in Settings. MemCode does not
 provide a hosted control plane or require a MemCode account.
@@ -156,8 +165,10 @@ in **Decisions** for a human. Decisions are recorded without resetting files.
 Fleet coordination depends on clients honoring the protocol; it is not hard filesystem
 write fencing. The developer owns reconciliation and acceptance of shared changes.
 
-The app is a single local owner with serialized atomic JSON persistence. Distributed
-durability, calibrated model routing, authoritative write fencing, independent acceptance
+The app is a single local owner with serialized atomic JSON persistence. The Team Sync
+preview adds a durable command journal and explicit story ownership to shared metadata;
+it does not replicate uncommitted source or Fleet across computers. Production team
+identity, calibrated model routing, authoritative write fencing, independent acceptance
 checks and broader adapter validation are future iterations, tracked in the dogfood
 backlog. See [the product brief](docs/PRODUCT.md) and [design rules](docs/DESIGN.md).
 
@@ -196,5 +207,6 @@ native WebView and a private test inspector. It checks preview isolation and RPC
 Additional native browser and review checks are in `scripts/native-browser-smoke.mjs`
 and `scripts/review-smoke.mjs`; real-model evidence is separate from those fixtures.
 
-This is a separate local Git repository. No remote repository has been published;
-an open-source license and release policy remain to be selected.
+Source is maintained in the private [syncable-dev/memcode repository](https://github.com/syncable-dev/memcode).
+Repository access is required to clone or download it. An open-source license and
+release policy remain to be selected; this preview is not a public release.

@@ -1,4 +1,18 @@
 const dayMs = 86400000;
+const formatters = new Map<string, Intl.DateTimeFormat>();
+function formatter(locale: string, options: Intl.DateTimeFormatOptions) {
+  const entries = Object.entries(options).sort(([a], [b]) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  );
+  const key = JSON.stringify([locale, entries]);
+  const saved = formatters.get(key);
+  if (saved) return saved;
+  const created = new Intl.DateTimeFormat(locale, options);
+  // Custom labels and project time zones must not grow a permanent cache.
+  if (formatters.size >= 32) formatters.delete(formatters.keys().next().value!);
+  formatters.set(key, created);
+  return created;
+}
 export function validDay(value: string): boolean {
   return (
     /^\d{4}-\d{2}-\d{2}$/.test(value) &&
@@ -20,7 +34,7 @@ export function dayAt(
   at = new Date().toISOString(),
   timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone,
 ): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
+  const parts = formatter("en-CA", {
     timeZone,
     year: "numeric",
     month: "2-digit",
@@ -34,10 +48,21 @@ export function dateLabel(
   day: string,
   options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" },
 ): string {
-  return new Intl.DateTimeFormat("en-GB", {
+  return formatter("en-GB", {
     ...options,
     timeZone: "UTC",
   }).format(new Date(day + "T12:00:00Z"));
+}
+export function timeLabel(at: string): string {
+  const date = new Date(at);
+  if (!Number.isFinite(date.getTime())) return date.toString();
+  // Resolve the current locale/zone so OS changes still apply on the next render.
+  const { locale, timeZone } = Intl.DateTimeFormat().resolvedOptions();
+  return formatter(locale, {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 export function isWorkday(day: string) {
   return ![0, 6].includes(new Date(day + "T00:00:00Z").getUTCDay());

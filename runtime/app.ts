@@ -12,11 +12,12 @@ import { workerResponseSchema } from "./worker-input";
 import { permissionModes } from "../src/permissions";
 import { registerDeletion } from "./deletion";
 import { readArtifactThumbnail } from "./artifact-thumbnail";
+import { reconcileArtifacts } from "./artifact-catalog";
 import { WorkerManager } from "./workers";
 import { PreviewManager, artifactRoots } from "./preview";
 import { localURL } from "./urls";
-import { planRoute } from "./router";
 import { discoverHarnesses } from "./catalog";
+import { planDefinedStory } from "./story-route";
 import { registerPlanning, attachDogfoodProject } from "./planning";
 import { registerPlanningControls } from "./planning-controls";
 import { ensureTaskEpic } from "./epic-workspace";
@@ -34,7 +35,8 @@ import { resolveFile } from "./files";
 import { registerReview } from "./review";
 import { registerOnboarding } from "./onboarding";
 import { registerCardComments } from "./card-comments";
-import { registerConnections, connectedRuntimes } from "./worker-connections";
+import { registerConnections } from "./worker-connections";
+import { TeamSyncClient } from "./team/client";
 import { SpeechManager, registerSpeech } from "./speech";
 import { speechSettingsSchema } from "../src/speech";
 import {
@@ -90,7 +92,9 @@ export async function createRuntime(
   appPath: string,
   host: NativeHost,
   emit: Emit,
+  options?: { discoverHarnesses?: typeof discoverHarnesses },
 ) {
+  const discover = options?.discoverHarnesses ?? discoverHarnesses;
   const store = new LocalStore(dataDir);
   await store.load();
   if (await exists(join(appPath, ".git")))
@@ -98,9 +102,11 @@ export async function createRuntime(
   const engine = new MemtraceEngine(() => store.state.settings.memtracePath),
     state = () => store.state;
   let dispatchQueued = () => {};
+  let team: TeamSyncClient | undefined;
   let persistenceFailed = false;
   const changed = () => {
     const pending = (async () => {
+      await team?.capture();
       await store.save();
       emit("workspace:state", store.state);
       dispatchQueued();
@@ -111,13 +117,30 @@ export async function createRuntime(
     })();
     return observePersistence(pending, (error) => {
       persistenceFailed = true;
-      console.error("Workspace save failed; the runtime is still running:", error);
+      console.error(
+        "Workspace save failed; the runtime is still running:",
+        error,
+      );
       emit("workspace:save-status", {
         state: "error",
         message:
           "Changes could not be saved. The last saved workspace is preserved; free disk space or release the file lock, then retry the action.",
       });
     });
+  };
+  let reconcilingArtifacts: Promise<void> | undefined;
+  let artifactsCheckedAt = 0;
+  const reconcileCatalog = () => {
+    if (reconcilingArtifacts) return reconcilingArtifacts;
+    if (Date.now() - artifactsCheckedAt < 5000) return Promise.resolve();
+    reconcilingArtifacts = (async () => {
+      const removed = await reconcileArtifacts(store.state, store.dir);
+      artifactsCheckedAt = Date.now();
+      if (removed.length) await changed();
+    })().finally(() => {
+      reconcilingArtifacts = undefined;
+    });
+    return reconcilingArtifacts;
   };
   const browsers = new AgentBrowserManager(state, store.dir, changed, 16, host);
   const terminals = new TerminalManager(state, host);
@@ -130,6 +153,11 @@ export async function createRuntime(
       undefined,
       browsers,
       terminals,
+      undefined,
+      {
+        acquire: (taskId, projectId) => team?.acquire(taskId, projectId) ?? Promise.resolve(),
+        release: (taskId, projectId) => team?.release(taskId, projectId) ?? Promise.resolve(),
+      },
     ),
     preview = new PreviewManager(
       host,
@@ -159,6 +187,31 @@ export async function createRuntime(
   ) => {
     handlers.set(name, { schema, handle });
   };
+  team = new TeamSyncClient(state, store.dir, changed);
+  const teamProject = z.object({ projectId: identifier }).strict();
+  register("team:status", teamProject, async ({ projectId }) => {
+    project(projectId);
+    if (team!.status(projectId)) await team!.synchronize(projectId).catch(() => {});
+    return team!.status(projectId);
+  });
+  register("team:create", z.object({ projectId: identifier, endpoint: z.string().max(2000).optional(), displayName: nonempty.max(100), bootstrapSecret: z.string().max(1000).optional(), shareOnLAN: z.boolean().optional(), advertisedHost: z.string().max(250).optional() }).strict(), (input) => team!.create(input));
+  register("team:join", z.object({ projectId: identifier, invite: nonempty.max(10000), displayName: nonempty.max(100) }).strict(), (input) => team!.join(input));
+  register("team:invite", teamProject, ({ projectId }) => team!.invite(projectId));
+  register("team:leave", teamProject, ({ projectId }) => team!.leave(projectId));
+  register("team:read", teamProject, ({ projectId }) => team!.read(projectId));
+  register("team:publish", z.object({ projectId: identifier, taskId: identifier, artifactId: identifier }).strict(), (input) => team!.publish(input));
+  register("team:download", z.object({ projectId: identifier, resultId: identifier }).strict(), ({ projectId, resultId }) => team!.download(projectId, resultId));
+  register("team:claim", z.object({ projectId: identifier, taskId: identifier }).strict(), async ({ projectId, taskId }) => {
+    if (task(taskId).projectId !== projectId) throw Error("Choose a story in this project.");
+    await team!.acquire(taskId, projectId);
+    return team!.status(projectId);
+  });
+  register("team:release", z.object({ projectId: identifier, taskId: identifier }).strict(), async ({ projectId, taskId }) => {
+    if (task(taskId).projectId !== projectId) throw Error("Choose a story in this project.");
+    if (isActive(task(taskId))) throw Error("Stop this worker before releasing its team claim.");
+    await team!.release(taskId, projectId);
+    return team!.status(projectId);
+  });
   const connections = registerConnections(
     register,
     state,
@@ -206,11 +259,52 @@ export async function createRuntime(
     analyses.set(id, pending);
     return pending;
   };
+  const assigning = new Map<string, Promise<void>>();
+  const activeRouteError =
+    "This worker is active. Its current route stays bound to the running attempt.";
+  // Measure a defined story and record who will pick it up. Never starts work.
+  const measureStory = async (id: string) => {
+    const item = task(id);
+    if (item.example)
+      throw new Error(
+        "Example context is not measured. Connect a project to gather real evidence.",
+      );
+    if (isActive(item)) throw new Error(activeRouteError);
+    const parent = project(item.projectId);
+    if (parent.analysis !== "ready") await analyze(parent.id);
+    const current = task(id);
+    if (isActive(current)) throw new Error(activeRouteError);
+    const installed = await discover();
+    current.evidence = await engine.qualify(
+      project(current.projectId),
+      current,
+    );
+    const latest = task(id);
+    if (isActive(latest)) throw new Error(activeRouteError);
+    latest.route = planDefinedStory(
+      latest,
+      latest.evidence,
+      installed,
+      store.state.settings,
+    );
+    latest.harness = latest.route.harness;
+    latest.updatedAt = now();
+    await changed();
+  };
+  const assignStory = (id: string) => {
+    const existing = assigning.get(id);
+    if (existing) return existing;
+    const pending = measureStory(id).finally(() => {
+      if (assigning.get(id) === pending) assigning.delete(id);
+    });
+    assigning.set(id, pending);
+    return pending;
+  };
   // The platform-independent routes retained from the original desktop runtime.
-  register("workspace:load", z.undefined(), async () => ({
-    state: store.state,
-    runtime: await store.runtime(),
-  }));
+  register("workspace:load", z.undefined(), async () => {
+    await reconcileCatalog();
+    return { state: store.state, runtime: await store.runtime() };
+  });
   register("project:select", identifier, async (id) => {
     project(id);
     store.state.activeProjectId = id;
@@ -291,6 +385,7 @@ export async function createRuntime(
       };
       store.state.projects.push(item);
       store.state.activeProjectId = item.id;
+      let definedStory: string | undefined;
       if (input.mode === "new") {
         const brief: WorkItem = {
           id: randomUUID(),
@@ -336,9 +431,11 @@ export async function createRuntime(
         };
         ensureTaskEpic(store.state, brief);
         store.state.tasks.push(brief);
+        definedStory = brief.id;
       }
       await changed();
       void analyze(item.id).catch(() => {});
+      if (definedStory) void assignStory(definedStory).catch(() => {});
       return item;
     },
   );
@@ -374,26 +471,7 @@ export async function createRuntime(
       await changed();
     },
   );
-  register("task:qualify", identifier, async (id) => {
-    const item = task(id);
-    if (isActive(item))
-      throw new Error(
-        "This worker is active. Its current route stays bound to the running attempt.",
-      );
-    if (item.example)
-      throw new Error(
-        "Example context is not measured. Connect a project to gather real evidence.",
-      );
-    const catalog = connectedRuntimes(store.state, await discoverHarnesses());
-    if (!catalog.length)
-      throw new Error(
-        "Connect and approve a worker in Workers before planning its model route.",
-      );
-    item.evidence = await engine.qualify(project(item.projectId), item);
-    item.route = planRoute(item, item.evidence, catalog, store.state.settings);
-    item.harness = item.route.harness;
-    await changed();
-  });
+  register("task:qualify", identifier, (id) => assignStory(id));
   register("worker:start", identifier, async (id) => {
     const item = task(id);
     if (project(item.projectId).analysis !== "ready")
@@ -578,7 +656,10 @@ export async function createRuntime(
     register,
     state,
     changed,
-    () => connections.account.current.principal,
+    (taskId) => {
+      const projectId = taskId ? state().tasks.find((task) => task.id === taskId)?.projectId : state().activeProjectId;
+      return (projectId ? team?.identity(projectId) : undefined) ?? connections.account.current.principal;
+    },
   );
   registerSpeech(register, speech);
   registerReview(
@@ -676,6 +757,7 @@ export async function createRuntime(
       ensureTaskEpic(state(), item);
       state().tasks.push(item);
       await changed();
+      if (!item.example) void assignStory(item.id).catch(() => {});
       return item;
     },
   );
@@ -799,7 +881,15 @@ export async function createRuntime(
     (action) => host.call("window_action", { action }),
   );
   await createExampleArtifacts(store);
+  await reconcileCatalog();
+  await team.initialize();
   await changed();
+  const artifactMaintenance = setInterval(() => {
+    void reconcileCatalog().catch((error) =>
+      console.error("Artifact catalog check failed:", error),
+    );
+  }, 30000);
+  artifactMaintenance.unref();
   let closed = false;
   return {
     store,
@@ -824,12 +914,24 @@ export async function createRuntime(
         input === null && route.schema.safeParse(undefined).success
           ? undefined
           : input;
-      return route.handle(route.schema.parse(value));
+      const parsed = route.schema.parse(value);
+      if (["story:delete", "epic:delete", "cycle:delete"].includes(method)) {
+        await team?.assertDeletionAllowed(method, (parsed as { id: string }).id);
+        const deletion = await team?.beginDeletion(method, (parsed as { id: string }).id);
+        try { return await route.handle(parsed); }
+        finally { await team?.finishDeletion(deletion); }
+      }
+      return route.handle(parsed);
     },
     async close() {
       if (closed) return;
       closed = true;
+      clearInterval(artifactMaintenance);
+      await reconcilingArtifacts?.catch((error) =>
+        console.error("Artifact catalog check failed:", error),
+      );
       await workers.close();
+      await team?.close();
       await speech.close();
       await connections.close();
       await terminals.close();

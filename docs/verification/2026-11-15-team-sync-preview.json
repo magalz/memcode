@@ -1,0 +1,63 @@
+{
+  "date": "2026-11-15",
+  "scope": "Private metadata collaboration preview; local workers and Git source exchange",
+  "implementation": {
+    "transport": "Authenticated typed HTTP commands and long polling",
+    "persistence": "Fsynced relay journal before ACK; private durable client outbox and separate received/read cursors",
+    "identity": "Invitation-capability preview, not verified Memtrace organization membership",
+    "publishedFiles": "Explicit selection; 5 MiB per file, authenticated content-addressed bytes"
+  },
+  "checks": {
+    "fullSourceSuite": { "passed": 297, "failed": 0 },
+    "finalChangedRuntimeAndQueueSuite": { "passed": 26, "failed": 0 },
+    "typecheck": "passed",
+    "productionBuild": "passed",
+    "nativeDesktopSmoke": "passed, including isolated guest RPC denial and graceful shutdown",
+    "isolatedTeamUiFlows": "passed, including LAN opt-in, join, invitation, result publish/open, read cursor, own claim release, offline, old runtime and responsive Docs",
+    "nativeTeamAcceptance": {
+      "platform": "Windows native WebView2; two independent profiles on one physical machine",
+      "separateGitCheckouts": true,
+      "boardAndEstimateSynchronized": true,
+      "commentAuthenticatedAuthorPreserved": true,
+      "simultaneousClaimRequestsExactlyOneWinner": true,
+      "explicitOwnerClaimRelease": true,
+      "publishedMarkdownBytesAndSha256Match": true,
+      "actualNativeMarkdownHeadingAndTableRendered": true,
+      "localPathsAndCredentialsExcludedFromSharedSnapshot": true
+    },
+    "faultScenarios": [
+      "offline outbox survives profile restart",
+      "lost command ACK deduplicates after relay restart",
+      "lost claim ACK retries the same persisted attempt",
+      "disconnected owner does not silently grant another device ownership",
+      "semantic rejection does not block a later valid comment",
+      "rejected deletion restores private messages, runbook, reviews and planning history after restart",
+      "private authoritative ACK survives a stale workspace.json crash window",
+      "missing private credentials retain the shared-project marker and block unclaimed worker starts",
+      "Share versus Start transition cannot leave a worker outside claims",
+      "direct and automatically queued starts use the claim guard for Claude Code, Codex and Cursor",
+      "parent stories and comments bootstrap before their children",
+      "concurrent new story identifiers are canonicalized atomically"
+    ],
+    "sourcePrivacyReview": "Ignored private profiles, credentials, generated outputs and scratch files excluded; no high-confidence credential patterns detected in source or existing Git history"
+  },
+  "verificationNote": "One initial full-suite run hit the existing 15-second queued follow-up polling deadline. The file passed independently and the complete final suite passed; the final changed runtime and queue suite also passed. No timeout was extended to mask it.",
+  "limitations": [
+    "No test on two physical computers yet",
+    "No macOS build or runtime acceptance yet",
+    "Native shared agent browser and visible-preview capture remain Windows-specific",
+    "No remote public relay deployed or tunnel enabled",
+    "No verified team-account identity, revocation, cross-device forced handoff or cross-user Fleet",
+    "No full conversation, browser/terminal session, linked website asset bundle or uncommitted source replication",
+    "Team worker tests use fixture adapters and real runtime guards, not new paid model coding runs",
+    "Relay host must remain reachable; setup/create/join responses do not yet have command-style retry idempotence"
+  ],
+  "reproduce": [
+    "npm ci",
+    "npm run typecheck",
+    "npm test",
+    "npm run build",
+    "node scripts/team-ui-smoke.mjs",
+    "node scripts/tauri-smoke.mjs (Windows native inspector fixture)"
+  ]
+}

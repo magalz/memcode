@@ -68,7 +68,10 @@ export function ArtifactPreview({
     if (!native) return;
     let stopped = false,
       popover = false;
+    let frame: number | undefined;
+    let lastBounds = "";
     const show = () => {
+      frame = undefined;
       if (stopped) return;
       const rect = ref.current?.getBoundingClientRect();
       if (
@@ -79,9 +82,25 @@ export function ArtifactPreview({
         rect.width < 10 ||
         rect.height < 10
       ) {
-        void window.memcode.hidePreview();
+        if (lastBounds === "hidden") return;
+        lastBounds = "hidden";
+        void window.memcode.hidePreview().catch((error) => {
+          if (!stopped) {
+            lastBounds = "";
+            setError(errorMessage(error));
+          }
+        });
         return;
       }
+      const bounds = {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+      const key = `${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}`;
+      if (key === lastBounds) return;
+      lastBounds = key;
       void window.memcode
         .showPreview({
           taskId,
@@ -94,35 +113,44 @@ export function ArtifactPreview({
                 fileRevision: file.revision,
               }
             : { artifactId: artifact.id }),
-          bounds: {
-            x: Math.round(rect.x),
-            y: Math.round(rect.y),
-            width: Math.round(rect.width),
-            height: Math.round(rect.height),
-          },
+          bounds,
         })
         .catch((error) => {
-          if (!stopped) setError(errorMessage(error));
+          if (!stopped) {
+            lastBounds = "";
+            setError(errorMessage(error));
+          }
         });
+    };
+    const schedule = () => {
+      if (frame === undefined) frame = requestAnimationFrame(show);
+    };
+    const visibility = () => {
+      // Animation frames can pause as soon as the document becomes hidden.
+      if (document.visibilityState === "hidden") {
+        if (frame !== undefined) cancelAnimationFrame(frame);
+        show();
+      } else schedule();
     };
     const menu = (event: Event) => {
       popover = (event as CustomEvent<boolean>).detail;
-      show();
+      schedule();
     };
-    const observer = new ResizeObserver(show);
+    const observer = new ResizeObserver(schedule);
     if (ref.current) observer.observe(ref.current);
-    window.addEventListener("resize", show);
-    window.addEventListener("scroll", show, true);
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, true);
     window.addEventListener("memcode:popover", menu);
-    document.addEventListener("visibilitychange", show);
-    show();
+    document.addEventListener("visibilitychange", visibility);
+    schedule();
     return () => {
       stopped = true;
+      if (frame !== undefined) cancelAnimationFrame(frame);
       observer.disconnect();
-      window.removeEventListener("resize", show);
-      window.removeEventListener("scroll", show, true);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule, true);
       window.removeEventListener("memcode:popover", menu);
-      document.removeEventListener("visibilitychange", show);
+      document.removeEventListener("visibilitychange", visibility);
       void window.memcode.hidePreview().catch(() => {});
     };
   }, [

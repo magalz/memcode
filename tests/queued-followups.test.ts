@@ -249,6 +249,13 @@ test("all three adapters automatically coalesce busy follow-ups after Fleet clea
       const prompt = (await f.runs(task))[1].prompt;
       assert.ok(prompt.includes(one.text));
       assert.ok(prompt.includes(two.text));
+      const current = prompt.lastIndexOf("CURRENT REQUESTS");
+      assert.ok(current > prompt.indexOf("Fixture pass 1 finished"));
+      assert.ok(
+        prompt.indexOf(one.text, current) < prompt.indexOf(two.text, current),
+      );
+      assert.ok(prompt.endsWith(two.text));
+      assert.equal(prompt.split(one.text).length - 1, 1);
       assert.equal(one.followupState, "included");
       assert.equal(two.followupState, "included");
       assert.ok(one.promptedAt);

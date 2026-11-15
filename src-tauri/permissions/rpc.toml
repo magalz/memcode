@@ -2,3 +2,8 @@
 identifier = "allow-rpc"
 description = "Allow the MemCode application webview to call its validated local runtime."
 commands.allow = ["rpc"]
+
+[[permission]]
+identifier = "allow-workspace-updates"
+description = "Allow the MemCode application to receive and acknowledge its workspace channel."
+commands.allow = ["workspace_connect", "workspace_ack"]

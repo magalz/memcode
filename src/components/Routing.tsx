@@ -22,10 +22,13 @@ export function RoutingCard({
           <Sparkles size={14} />A model chosen for the work.
         </span>
         <p>
-          Measure the source scope, then choose a harness, model and effort.
+          {task.example
+            ? "Example stories stay unmeasured. Connect a project to name a real harness and model."
+            : "Memtrace measures this story and names a harness, model and effort. Measuring does not start the worker."}
         </p>
         <button onClick={plan} disabled={busy || disabled || task.example}>
-          {busy ? <Spinner size={12} /> : <GitBranch size={12} />}Plan worker
+          {busy ? <Spinner size={12} /> : <GitBranch size={12} />}
+          {busy ? "Measuring" : "Measure scope"}
           <ArrowRight size={12} />
         </button>
       </div>

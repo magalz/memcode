@@ -10,7 +10,6 @@ import {
 import type { Artifact } from "../shared";
 import type { ArtifactThumbnail as Thumbnail } from "../artifact-thumbnail";
 import { artifactFormat, artifactTypeLabel } from "../artifact-format";
-import "../styles-artifact-thumbnail.css";
 
 const cache = new Map<string, Promise<Thumbnail>>();
 const queue: (() => void)[] = [];
@@ -143,11 +142,25 @@ export function ArtifactThumbnail({ artifact }: { artifact: Artifact }) {
   useEffect(() => {
     setThumbnail(null);
     let current = true;
+    let delayed: ReturnType<typeof setTimeout> | undefined;
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
         observer.disconnect();
+        // A stalled native read must not leave the gallery looking unfinished.
+        // Keep its queue slot until it settles: a visual deadline is not an
+        // excuse to launch more than two uncancelled native reads.
+        delayed = setTimeout(() => {
+          if (current)
+            setThumbnail({
+              kind: "fallback",
+              format: artifactFormat(artifact.name),
+              label: artifactTypeLabel(artifact.name),
+              detail: "Preview delayed · open to view the file",
+            });
+        }, 8000);
         void load(artifact).then((value) => {
+          clearTimeout(delayed);
           if (current) setThumbnail(value);
         });
       },
@@ -156,6 +169,7 @@ export function ArtifactThumbnail({ artifact }: { artifact: Artifact }) {
     if (ref.current) observer.observe(ref.current);
     return () => {
       current = false;
+      clearTimeout(delayed);
       observer.disconnect();
     };
   }, [artifact.id, artifact.revision, artifact.createdAt, artifact.path]);

@@ -24,7 +24,11 @@ export default defineConfig({
       interval: 300,
       ignored: [
         "**/src-tauri/**",
+        "**/dist/**",
         "**/dist-runtime/**",
+        "**/dist-artifact-viewer/**",
+        "**/dist-artifact-annotations/**",
+        "**/.memcode/**",
         "**/.memdb/**",
         "**/.memtrace/**",
       ],

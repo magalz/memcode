@@ -71,13 +71,6 @@ button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
-button,
-a,
-input,
-textarea,
-select {
-  -webkit-app-region: no-drag;
-}
 button:focus-visible,
 [role="button"]:focus-visible,
 a:focus-visible {
@@ -186,7 +179,6 @@ kbd {
   align-items: center;
   justify-content: space-between;
   height: 36px;
-  -webkit-app-region: drag;
   background: #edf2ee;
   border-bottom: 1px solid rgba(7, 17, 14, 0.055);
   user-select: none;

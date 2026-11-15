@@ -1,0 +1,98 @@
+.artifact-collection {
+  min-width: 0;
+}
+.artifact-primary-list > .artifact-row:first-child {
+  margin-top: 0;
+}
+.artifact-evidence {
+  margin-top: 28px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+.artifact-evidence > summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  list-style: none;
+  cursor: pointer;
+  padding: 18px 0 5px;
+  font-size: 12px;
+  font-weight: 480;
+}
+.artifact-evidence > summary::-webkit-details-marker {
+  display: none;
+}
+.artifact-evidence > summary > svg {
+  flex: 0 0 auto;
+  transition: transform 0.15s;
+}
+.artifact-evidence[open] > summary > svg {
+  transform: rotate(90deg);
+}
+.artifact-evidence > summary:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 4px;
+  border-radius: 3px;
+}
+.artifact-evidence-count {
+  font: 9px var(--mono);
+  background: #eef3ed;
+  padding: 3px 5px;
+  border-radius: 3px;
+}
+.artifact-evidence > summary > small {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 400;
+  color: #8b978f;
+}
+.artifact-evidence-files {
+  margin-top: 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.artifact-evidence-row {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 12px 14px;
+  background: #fbfcfa;
+}
+.artifact-evidence-row + .artifact-evidence-row {
+  border-top: 1px solid var(--line);
+}
+.artifact-evidence-row .artifact-kind {
+  width: 31px;
+  height: 33px;
+  background: #f0f3ee;
+  border-color: #e6ebe2;
+  border-radius: 6px;
+}
+.artifact-evidence-row strong {
+  font-size: 12px;
+  font-weight: 450;
+}
+.artifact-evidence-row small {
+  margin-top: 4px;
+}
+.artifact-row > span:nth-child(2) {
+  min-width: 0;
+}
+.artifact-row strong {
+  overflow-wrap: anywhere;
+}
+.artifact-primary-empty {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+@media (max-width: 800px) {
+  .artifact-evidence > summary {
+    flex-wrap: wrap;
+  }
+  .artifact-evidence > summary > small {
+    margin-left: 23px;
+    flex-basis: 100%;
+  }
+}

@@ -4,6 +4,8 @@ export interface StoryAuthor {
   source: "memtrace" | "local";
 }
 export interface StoryComment {
+  /** Portable selection for a review explicitly shared with the team. */
+  reference?: import("./team").TeamReference;
   id: string;
   taskId: string;
   text: string;

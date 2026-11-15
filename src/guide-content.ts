@@ -10,6 +10,7 @@ export type GuideDestination =
   | "conversations"
   | "artifacts"
   | "activity"
+  | "team"
   | "settings"
   | "account";
 export interface GuideArticle {
@@ -67,7 +68,7 @@ export const guideArticles: GuideArticle[] = [
       "An installed CLI becomes a connected worker only after your approval.",
     image: "workers",
     caption:
-      "Installed, authenticated and approved are separate connection states.",
+      "Connect an installed harness with your approval, then set its default permissions in Workers.",
     steps: [
       "Install and sign in to Codex, Claude Code or Cursor using its own official CLI setup.",
       "Open Workers and choose Connect. Read the local execution and configured-model access explanation.",
@@ -121,7 +122,7 @@ export const guideArticles: GuideArticle[] = [
       "Give the worker a result to achieve, enough context to act, and a way to check its work.",
     image: "story",
     caption:
-      "Follow-ups and their selected references are visible in the conversation.",
+      "The conversation keeps the brief, responses and follow-up composer together. Questions and approvals appear beside the composer.",
     steps: [
       "Start with the outcome. Include relevant file links or examples, and explain the behavior that should remain.",
       "Ask for a focused implementation and appropriate checks. The worker can retrieve code context through MemCode’s Memtrace-backed tools.",
@@ -183,6 +184,27 @@ export const guideArticles: GuideArticle[] = [
     related: ["comments", "queue", "files"],
   },
   {
+    id: "team",
+    group: "Your workspace",
+    title: "Work with your team",
+    summary:
+      "Share the plan, comments and finished work. Each teammate keeps their workers and code execution local.",
+    image: "team",
+    caption:
+      "One shared board, separate local workers. A confirmed story claim prevents a second official worker start for that story.",
+    steps: [
+      "Both teammates open their own local clone of the repository. Use Open existing project; the new-project wizard creates a starter story.",
+      "The host opens Team → Share this project and enters a display name. For another computer, explicitly enable local-network sharing or use a reachable private relay in Advanced connection.",
+      "Choose Invite teammate and send the invitation privately. The teammate opens Team → Join a workspace in their empty MemCode project. Existing personal cards are preserved and are not merged into the shared board.",
+      "Move stories, leave story comments and follow Shared activity. Connect your own coding tools in Workers. Starting a worker first confirms one claim for that story; a teammate cannot start another official worker until it is released.",
+      "Choose a saved report or artifact in Team and Publish it when ready. Only that file is uploaded, up to 5 MiB. Teammates click the published result to download and view the exact saved file.",
+      "Exchange source changes through Git, using the same epic branch when integrating that epic’s work. Browser sessions, terminals, model credentials, analysis and full agent conversations stay local; Fleet coordinates workers on each computer.",
+    ],
+    note: "Private preview: invitations grant access and display names are not verified Memtrace team identities. Keep the host’s MemCode open for sync. Changes queue while offline; new shared workers require a reachable relay. Receiving updates never starts a worker.",
+    destination: "team",
+    related: ["projects", "comments", "artifacts", "fleet"],
+  },
+  {
     id: "queue",
     group: "Working with agents",
     title: "Manage queued follow-ups",
@@ -190,7 +212,7 @@ export const guideArticles: GuideArticle[] = [
       "See what the worker will pick up next, and change it before pickup.",
     image: "queue",
     caption:
-      "Queued instructions stay visible in the card until the next pass picks them up.",
+      "Queue shows what is waiting. Edit or cancel a follow-up before the next worker pass picks it up.",
     steps: [
       "Send a follow-up while the worker is busy. It appears in the conversation and Queue.",
       "Open Queue to edit the instruction and attached comment wording, or cancel it. Original selected source references stay attached.",
@@ -208,14 +230,14 @@ export const guideArticles: GuideArticle[] = [
       "Discuss a story without starting a worker or adding instructions to its prompt.",
     image: "comments",
     caption:
-      "Discussion has its own tab, apart from the agent conversation and queue.",
+      "Comments are story discussion. Use Conversation to send an instruction to the worker.",
     steps: [
       "Open Comments in a story to leave a note or reply.",
       "Use Markdown for clear lists, links and code. Edit or remove your own comments.",
       "A comment is discussion. To ask a worker to act on it, explicitly send the relevant instruction through the conversation.",
-      "Comments are stored locally in this version. Memtrace account integration prepares identity reuse; live shared multiplayer is a later feature.",
+      "Comments stay local unless you share this project through Team. In a shared project, authored story comments and replies sync with the team; full agent conversations stay local.",
     ],
-    related: ["account", "prompts"],
+    related: ["team", "account", "prompts"],
   },
   {
     id: "runbook",
@@ -240,11 +262,12 @@ export const guideArticles: GuideArticle[] = [
     summary:
       "Memtrace measurements help qualify the work and choose a model and effort.",
     image: "routing",
-    caption: "The route card shows measured inputs and why a model was chosen.",
+    caption:
+      "The route explains the source measurements and model choice. Unknown source measurements stay blank until the scope is measured.",
     steps: [
-      "Use Plan worker to qualify the relevant source scope.",
+      "A defined story is measured on its own. The route names a harness and model without starting the worker.",
       "Inspect cognitive and cyclomatic complexity, nesting, observed impact and the coverage explanation.",
-      "Automatic assignment chooses among connected adapters. You can choose a harness or model manually when that makes sense.",
+      "Automatic assignment chooses among installed adapters. Connect the named worker before starting. You can choose a harness or model manually when that makes sense.",
       "Read unknown and partial-scope warnings. A short prompt can describe a hard change; task length is not a complexity measurement.",
     ],
     note: "Routing thresholds are provisional capability rules, not calibrated probabilities. Measurements describe the observed source scope, not a guarantee about the whole change.",
@@ -276,7 +299,7 @@ export const guideArticles: GuideArticle[] = [
       "Attach feedback to the exact text, line, cell, element or moment you mean.",
     image: "annotations",
     caption:
-      "Saved highlights and numbered pins stay with the source reference.",
+      "Save a comment beside its selected reference. Add chosen comments to a follow-up, then send when ready.",
     steps: [
       "Select text in a document or source file, choose lines in a diff, or select a spreadsheet range. HTML artifacts also support element and area selection.",
       "Choose Comment and save your note. The highlight and pin remain; no message is sent.",
@@ -293,7 +316,7 @@ export const guideArticles: GuideArticle[] = [
     summary: "See and interact with the page the worker is using in that card.",
     image: "browser",
     caption:
-      "Live browser tabs share page state between the worker and the user.",
+      "The card’s live browser shares page state with its worker. Saved HTML artifacts are viewed separately.",
     steps: [
       "Open Browser inside a story, or follow a web link from its conversation.",
       "Use tabs, navigation, selection, scrolling and native page controls. The worker uses MemCode’s browser tools to operate the same page.",
@@ -327,7 +350,7 @@ export const guideArticles: GuideArticle[] = [
     summary: "Open what the worker produced directly, apart from the live app.",
     image: "artifacts",
     caption:
-      "Saved output is available in its card and the project artifact library.",
+      "Preview saved output in the card or project library: readable documents, images, spreadsheets, presentations, PDFs and media.",
     steps: [
       "Open Artifacts in a story, or use the project-wide Artifacts tab.",
       "Preview Markdown, HTML, images, Word documents, Excel workbooks, presentations, PDFs, video, audio and source text.",
@@ -380,7 +403,7 @@ export const guideArticles: GuideArticle[] = [
     image: "account",
     caption: "Connect Memtrace separately from approving a coding worker.",
     steps: [
-        "Open Settings → Your Memtrace account, or use the account control in the top bar.",
+      "Open Settings → Your Memtrace account, or use the account control in the top bar.",
       "If needed, choose Sign in. The official claim page opens in your system browser; complete it there.",
       "Refresh the connection status after signing in. Your credentials remain with Memtrace.",
       "Approve coding adapters separately in Workers. Memtrace access and a coding provider’s authentication serve different roles.",
@@ -520,11 +543,11 @@ export const guideArticles: GuideArticle[] = [
     caption:
       "Worker connection approval explains the execution and model boundary.",
     steps: [
-      "Project files, coordination, execution and saved outputs live on this computer.",
+      "Project files, worker execution, local Fleet coordination and saved outputs live on this computer. Team Sync shares selected planning fields, comments and explicitly published results when you opt in.",
       "A coding tool may send relevant context to its configured model provider when you run a worker. Provider authentication remains with that tool.",
       "Use local-model mode where supported and local speech recognition for dictation.",
       "Account connection, worker approval and starting a coding task are separate actions. Nothing starts coding just because a tool is installed.",
     ],
-    related: ["workers", "account", "dictation"],
+    related: ["workers", "account", "dictation", "team"],
   },
 ];

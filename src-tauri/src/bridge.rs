@@ -1,3 +1,4 @@
+use crate::workspace::WorkspaceMailbox;
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -5,7 +6,7 @@ use std::{
     process::Stdio,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc,
+        Arc, Mutex as StdMutex, OnceLock,
     },
     time::Duration,
 };
@@ -18,6 +19,36 @@ use tokio::{
 
 type Reply = oneshot::Sender<Result<Value, String>>;
 
+fn transport_tracing() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var("MEMCODE_TRACE_TRANSPORT").as_deref() == Ok("1"))
+}
+
+fn transport_trace(stage: &str, sequence: u64, value: u64) {
+    if !transport_tracing() {
+        return;
+    }
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    eprintln!("[memcode-transport] {{\"stage\":\"{stage}\",\"at\":{at},\"sequence\":{sequence},\"value\":{value}}}");
+}
+
+fn transport_rpc_trace(stage: &str, method: &str, id: &str, pending: usize) {
+    if !transport_tracing() {
+        return;
+    }
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    eprintln!(
+        "[memcode-transport-rpc] {}",
+        json!({"stage":stage,"at":at,"method":method,"id":id,"pending":pending})
+    );
+}
+
 struct Inner {
     writer: Mutex<Option<ChildStdin>>,
     child: Mutex<Option<Child>>,
@@ -26,8 +57,34 @@ struct Inner {
     ready: Notify,
     failure: Mutex<Option<String>>,
     closing: AtomicBool,
-    events: Mutex<HashMap<String, Value>>,
-    events_draining: AtomicBool,
+    events: StdMutex<LatestEvents>,
+    workspace: StdMutex<WorkspaceMailbox<tauri::ipc::Channel<Value>>>,
+}
+
+#[derive(Default)]
+struct LatestEvents {
+    pending: HashMap<String, Value>,
+    draining: bool,
+}
+
+impl LatestEvents {
+    fn push(&mut self, event: String, payload: Value) -> bool {
+        self.pending.insert(event, payload);
+        if self.draining {
+            return false;
+        }
+        self.draining = true;
+        true
+    }
+
+    fn take(&mut self) -> HashMap<String, Value> {
+        std::mem::take(&mut self.pending)
+    }
+
+    fn continue_draining(&mut self) -> bool {
+        self.draining = !self.pending.is_empty();
+        self.draining
+    }
 }
 
 #[derive(Clone)]
@@ -43,8 +100,8 @@ impl RuntimeBridge {
             ready: Notify::new(),
             failure: Mutex::new(None),
             closing: AtomicBool::new(false),
-            events: Mutex::new(HashMap::new()),
-            events_draining: AtomicBool::new(false),
+            events: StdMutex::new(LatestEvents::default()),
+            workspace: StdMutex::new(WorkspaceMailbox::default()),
         }))
     }
 
@@ -133,6 +190,9 @@ impl RuntimeBridge {
         tauri::async_runtime::spawn(async move {
             let mut lines = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = lines.next_line().await {
+                if line.len() > 1024 * 1024 {
+                    transport_trace("rust-line-read", 0, line.len() as u64);
+                }
                 if line.len() > 32 * 1024 * 1024 {
                     bridge
                         .fail("Runtime message exceeded the 32MB transport limit.".into())
@@ -149,7 +209,9 @@ impl RuntimeBridge {
             let error = "The local runtime stopped. Reopen MemCode to reconnect; saved work has been preserved.".to_string();
             bridge.fail(error.clone()).await;
             let _ = app.emit_to(
-                tauri::EventTarget::Webview { label: "main".into() },
+                tauri::EventTarget::Webview {
+                    label: "main".into(),
+                },
                 "runtime:stopped",
                 json!({"message": error}),
             );
@@ -181,22 +243,35 @@ impl RuntimeBridge {
         }
         let id = self.0.next.fetch_add(1, Ordering::Relaxed).to_string();
         let (tx, rx) = oneshot::channel();
-        self.0.pending.lock().await.insert(id.clone(), tx);
+        let pending_count = {
+            let mut pending = self.0.pending.lock().await;
+            pending.insert(id.clone(), tx);
+            pending.len()
+        };
+        transport_rpc_trace("rpc-start", method, &id, pending_count);
         if let Err(error) = self
             .send(json!({"kind":"request","id":id,"method":method,"input":input}))
             .await
         {
             self.0.pending.lock().await.remove(&id);
+            transport_rpc_trace(
+                "rpc-send-failed",
+                method,
+                &id,
+                self.0.pending.lock().await.len(),
+            );
             return Err(error);
         }
-        match tokio::time::timeout(Duration::from_secs(900), rx).await {
+        let result = match tokio::time::timeout(Duration::from_secs(900), rx).await {
             Ok(Ok(result)) => result,
             Ok(Err(_)) => Err("The runtime response channel closed.".into()),
             Err(_) => {
                 self.0.pending.lock().await.remove(&id);
                 Err("The local runtime operation exceeded its 15 minute deadline.".into())
             }
-        }
+        };
+        transport_rpc_trace("rpc-end", method, &id, self.0.pending.lock().await.len());
+        result
     }
 
     async fn send(&self, message: Value) -> Result<(), String> {
@@ -211,7 +286,7 @@ impl RuntimeBridge {
         writer.flush().await.map_err(|e| e.to_string())
     }
 
-    async fn receive(&self, app: AppHandle, message: Value) {
+    async fn receive(&self, app: AppHandle, mut message: Value) {
         match message["kind"].as_str() {
             Some("response") => {
                 if let Some(id) = message["id"].as_str() {
@@ -225,6 +300,18 @@ impl RuntimeBridge {
                 }
             }
             Some("event") => {
+                if message["event"].as_str() == Some("workspace:state") {
+                    transport_trace(
+                        "rust-workspace-receive",
+                        message["transportSequence"].as_u64().unwrap_or(0),
+                        0,
+                    );
+                    let payload = message["payload"].take();
+                    if self.0.workspace.lock().unwrap().push(payload) {
+                        self.drain_workspace();
+                    }
+                    return;
+                }
                 if message["event"].as_str() == Some("review:event") {
                     let target = app.clone();
                     let payload = message["payload"].clone();
@@ -239,7 +326,7 @@ impl RuntimeBridge {
                     });
                     return;
                 }
-                if let Some(event @ ("workspace:state" | "preview:event" | "workspace:save-status")) =
+                if let Some(event @ ("preview:event" | "workspace:save-status")) =
                     message["event"].as_str()
                 {
                     self.queue_event(app, event.to_owned(), message["payload"].clone())
@@ -266,21 +353,85 @@ impl RuntimeBridge {
             _ => {}
         }
     }
+
+    pub fn connect_workspace(&self, channel: tauri::ipc::Channel<Value>, token: String) {
+        transport_trace("rust-workspace-connect", 0, 0);
+        if self.0.workspace.lock().unwrap().connect(channel, token) {
+            self.drain_workspace();
+        }
+    }
+
+    pub fn acknowledge_workspace(&self, sequence: u64, token: &str) -> bool {
+        let acknowledgement = self
+            .0
+            .workspace
+            .lock()
+            .unwrap()
+            .acknowledge(sequence, token);
+        transport_trace(
+            "rust-workspace-ack",
+            sequence,
+            acknowledgement.accepted as u64,
+        );
+        if acknowledgement.resume_drain {
+            self.drain_workspace();
+        }
+        acknowledgement.accepted
+    }
+
+    fn drain_workspace(&self) {
+        let bridge = self.clone();
+        tauri::async_runtime::spawn(async move {
+            loop {
+                let delivery = bridge.0.workspace.lock().unwrap().next();
+                let Some(delivery) = delivery else {
+                    break;
+                };
+                let sequence = delivery.sequence;
+                let token = delivery.token;
+                // Channels fetch large bodies over IPC instead of embedding the
+                // full workspace inside an evaluated JavaScript event script.
+                transport_trace("rust-channel-send-start", sequence, 0);
+                let sent = delivery.channel.send(json!({
+                    "sequence": sequence,
+                    "token": token,
+                    "base": delivery.base,
+                    "change": delivery.change,
+                }));
+                transport_trace("rust-channel-send-return", sequence, sent.is_ok() as u64);
+                let received = if sent.is_ok() {
+                    matches!(
+                        tokio::time::timeout(Duration::from_secs(5), delivery.acknowledged).await,
+                        Ok(Ok(()))
+                    )
+                } else {
+                    false
+                };
+                if !received && bridge.0.workspace.lock().unwrap().expire(sequence, &token) {
+                    eprintln!("MemCode paused workspace delivery until the renderer acknowledges or reconnects.");
+                    break;
+                }
+            }
+        });
+    }
+
     async fn queue_event(&self, app: AppHandle, event: String, payload: Value) {
-        self.0.events.lock().await.insert(event, payload);
-        if self.0.events_draining.swap(true, Ordering::SeqCst) {
+        if !self.0.events.lock().unwrap().push(event, payload) {
             return;
         }
         let bridge = self.clone();
         tauri::async_runtime::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_millis(33)).await;
-                let events = std::mem::take(&mut *bridge.0.events.lock().await);
-                for (event, payload) in events {
-                    let target = app.clone();
-                    // Never make the stdio reader wait on a native UI dispatch.
-                    // Workspace snapshots supersede earlier snapshots while busy.
-                    let _ = app.run_on_main_thread(move || {
+                let target = app.clone();
+                let queued = bridge.clone();
+                let (delivered, acknowledged) = oneshot::channel();
+                // Keep at most one native callback outstanding. Take the newest
+                // payload only when that callback executes, so a busy UI cannot
+                // accumulate closures retaining old multi-megabyte snapshots.
+                let dispatch = app.run_on_main_thread(move || {
+                    let events = queued.0.events.lock().unwrap().take();
+                    for (event, payload) in events {
                         let _ = target.emit_to(
                             tauri::EventTarget::Webview {
                                 label: "main".into(),
@@ -288,11 +439,14 @@ impl RuntimeBridge {
                             &event,
                             payload,
                         );
-                    });
+                    }
+                    let _ = delivered.send(());
+                });
+                if dispatch.is_err() || acknowledged.await.is_err() {
+                    bridge.0.events.lock().unwrap().draining = false;
+                    break;
                 }
-                let pending = bridge.0.events.lock().await;
-                if pending.is_empty() {
-                    bridge.0.events_draining.store(false, Ordering::SeqCst);
+                if !bridge.0.events.lock().unwrap().continue_draining() {
                     break;
                 }
             }
@@ -337,6 +491,38 @@ impl RuntimeBridge {
                 let _ = child.kill().await;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blocked_native_dispatch_keeps_only_latest_snapshots() {
+        let mut events = LatestEvents::default();
+        assert!(events.push("workspace:state".into(), json!({"sequence": 0})));
+        for sequence in 1..10_000 {
+            assert!(!events.push("workspace:state".into(), json!({"sequence": sequence})));
+            assert!(!events.push("preview:event".into(), json!({"sequence": sequence})));
+        }
+        let delivered = events.take();
+        assert_eq!(delivered.len(), 2);
+        assert_eq!(delivered["workspace:state"]["sequence"], 9_999);
+        assert_eq!(delivered["preview:event"]["sequence"], 9_999);
+        assert!(!events.continue_draining());
+    }
+
+    #[test]
+    fn update_during_delivery_is_not_lost_or_dispatched_twice() {
+        let mut events = LatestEvents::default();
+        assert!(events.push("workspace:state".into(), json!("running")));
+        assert_eq!(events.take()["workspace:state"], "running");
+        assert!(!events.push("workspace:state".into(), json!("finished")));
+        assert!(events.continue_draining());
+        assert_eq!(events.take()["workspace:state"], "finished");
+        assert!(!events.continue_draining());
+        assert!(events.push("workspace:state".into(), json!("new run")));
     }
 }
 

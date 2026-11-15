@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import {
   ArrowUpRight,
   BookOpen,
@@ -26,6 +26,7 @@ import {
   Sparkles,
   Square,
   Workflow,
+  Users,
   X,
 } from "lucide-react";
 import type { AppState, RuntimeInfo, WorkItem, Artifact } from "./shared";
@@ -40,8 +41,8 @@ import {
 } from "./components/UI";
 import { Workspace } from "./components/Workspace";
 import { Conversations } from "./components/Conversations";
-import { ArtifactThumbnail } from "./components/ArtifactThumbnail";
-import { artifactTypeLabel } from "./artifact-format";
+import { ArtifactCollection } from "./components/ArtifactCollection";
+import { groupedArtifacts } from "./artifact-purpose";
 import { WorkDetail } from "./components/WorkDetail";
 import { Roadmap } from "./components/Roadmap";
 import { FleetDecisions } from "./components/FleetDecisions";
@@ -49,6 +50,7 @@ import { Cycles } from "./components/Cycles";
 import { InsightsPage } from "./components/InsightsPage";
 import { Improve } from "./components/Improve";
 import { Onboarding } from "./components/Onboarding";
+import { Docs } from "./components/Docs";
 import {
   firstRunGuide,
   type OnboardingPatch,
@@ -56,14 +58,15 @@ import {
 } from "./onboarding";
 import type { GuideDestination } from "./guide-content";
 import { WorkerConnections } from "./components/WorkerConnections";
+import { TeamWorkspace } from "./components/TeamWorkspace";
+import "./styles-team.css";
 import { AccountConnections } from "./components/AccountConnections";
 import type { MemtraceAccount } from "./connections";
 import { approvedRuntime } from "./worker-availability";
 import { useRuntimeHealth } from "./useRuntimeHealth";
 import "./styles-runtime-health.css";
-const Docs = lazy(() =>
-  import("./components/Docs").then((module) => ({ default: module.Docs })),
-);
+import "./styles-artifact-collection.css";
+import "./styles-artifact-thumbnail.css";
 import {
   NewProjectDialog,
   NewTaskDialog,
@@ -82,8 +85,14 @@ type View =
   | "conversations"
   | "artifacts"
   | "activity"
-  | "docs";
+  | "docs"
+  | "team";
 const pageCopy: Record<View, [string, string, string]> = {
+  team: [
+    "BUILD WITH YOUR TEAM",
+    "Better together. Still local.",
+    "Keep the plan, the discussions and the results in sync.",
+  ],
   docs: [
     "A CLEAR PLACE TO BEGIN",
     "The MemCode guide.",
@@ -180,10 +189,12 @@ export function App() {
       setFatal("Open this workspace through the MemCode desktop app.");
       return;
     }
+    let mounted = true;
     void window.memcode
       .load()
       .then((result) => {
-        setState(result.state);
+        if (!mounted) return;
+        setState((previous) => previous ?? result.state);
         setRuntime(result.runtime);
         if (firstRunGuide(result.state))
           void window.memcode.updateOnboarding({
@@ -197,8 +208,14 @@ export function App() {
         )
           setView("roadmap");
       })
-      .catch((error) => setFatal(error.message));
-    return window.memcode.onState(setState);
+      .catch((error) => {
+        if (mounted) setFatal(error.message);
+      });
+    const unsubscribe = window.memcode.onState(setState);
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
   }, []);
   useEffect(() => {
     if (!toast) return;
@@ -399,9 +416,16 @@ export function App() {
       id: "artifacts",
       label: "Artifacts",
       icon: Files,
-      count: artifacts.length,
+      count: groupedArtifacts(artifacts).primary.length,
     },
     { id: "activity", label: "Activity", icon: Radio },
+    {
+      id: "team",
+      label: "Team",
+      icon: Users,
+      count: state.team?.find((item) => item.projectId === project.id)
+        ?.unreadCount,
+    },
     { id: "docs", label: "Docs", icon: BookOpen },
   ];
   return (
@@ -620,7 +644,7 @@ export function App() {
               <h1>{pageCopy[view][1]}</h1>
               <p>{pageCopy[view][2]}</p>
             </div>
-            {view !== "docs" && (
+            {view !== "docs" && view !== "team" && (
               <button
                 className="button primary"
                 data-guide="new-story"
@@ -632,6 +656,28 @@ export function App() {
               </button>
             )}
           </div>
+          {view === "team" && (
+            <TeamWorkspace
+              key={project.id}
+              state={state}
+              project={project}
+              notify={notify}
+              open={open}
+              openArtifact={(artifact) => {
+                const task = state.tasks.find(
+                  (item) => item.id === artifact.taskId,
+                );
+                if (task) {
+                  open(task);
+                  setSelectedArtifact(artifact);
+                } else {
+                  notify(
+                    "The result is saved locally. Open its shared story to view it.",
+                  );
+                }
+              }}
+            />
+          )}
           {view === "docs" && (
             <Suspense fallback={<Spinner />}>
               <Docs
@@ -822,37 +868,19 @@ export function App() {
           )}
           {view === "artifacts" &&
             (artifacts.length ? (
-              <div className="artifact-library">
-                {artifacts.map((artifact) => (
-                  <button
-                    className={"artifact-tile " + artifact.kind}
-                    key={artifact.id}
-                    onClick={() => {
-                      const task = tasks.find((t) => t.id === artifact.taskId);
-                      if (task) {
-                        open(task);
-                        setSelectedArtifact(artifact);
-                      }
-                    }}
-                  >
-                    <ArtifactThumbnail artifact={artifact} />
-                    <div>
-                      <span className="artifact-extension">
-                        {artifactTypeLabel(artifact.name)}
-                      </span>
-                      <h3>{artifact.name}</h3>
-                      <p>
-                        {artifact.source}
-                        <span>·</span>
-                        {
-                          tasks.find((t) => t.id === artifact.taskId)
-                            ?.identifier
-                        }
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <ArtifactCollection
+                key={project.id}
+                artifacts={artifacts}
+                layout="gallery"
+                tasks={tasks}
+                onOpen={(artifact) => {
+                  const task = tasks.find((t) => t.id === artifact.taskId);
+                  if (task) {
+                    open(task);
+                    setSelectedArtifact(artifact);
+                  }
+                }}
+              />
             ) : (
               <Empty
                 icon={<Files size={27} />}

@@ -35,6 +35,7 @@
     "resources": {
       "../dist-runtime/service.cjs": "runtime/service.cjs",
       "../dist-runtime/context-gateway.cjs": "runtime/context-gateway.cjs",
+      "../dist-runtime/team-relay.cjs": "runtime/team-relay.cjs",
       "../dist-artifact-viewer/": "artifact-viewer/",
       "../dist-artifact-annotations/": "artifact-annotations/",
       "../node_modules/playwright-core/": "runtime/node_modules/playwright-core/"

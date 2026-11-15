@@ -14,7 +14,8 @@
     "build:native": "node scripts/tauri-build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
-    "test:smoke": "node scripts/smoke.mjs"
+    "test:smoke": "node scripts/smoke.mjs",
+    "team:relay": "node scripts/team-relay.mjs"
   },
   "dependencies": {
     "@aiden0z/pptx-renderer": "1.4.0",

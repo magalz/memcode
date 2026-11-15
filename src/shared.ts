@@ -106,6 +106,8 @@ export interface ChecklistItem {
   done: boolean;
 }
 export interface Artifact {
+  /** Explicit producer intent takes precedence over filename-based grouping. */
+  purpose?: "deliverable" | "report" | "evidence";
   revision?: string;
   id: string;
   name: string;
@@ -224,7 +226,27 @@ export interface CreateEpic {
   description: string;
   phase: Epic["phase"];
 }
+/** Public collaboration state. Invitation and member credentials never enter renderer state. */
+export interface TeamWorkspaceState {
+  projectId: string;
+  connection: "online" | "syncing" | "offline" | "connecting";
+  workspace: import("./team").TeamSnapshot;
+  memberId: string;
+  deviceId: string;
+  pendingCount: number;
+  unreadCount: number;
+  lastSyncedAt?: string;
+  error?: string;
+  mode?: "invite-preview";
+}
+export interface TeamInvite {
+  endpoint: string;
+  workspaceId: string;
+  invitation: string;
+  expiresAt: string;
+}
 export interface AppState {
+  team?: TeamWorkspaceState[];
   workerInputs?: import("./worker-input").WorkerInputRequest[];
   onboarding?: import("./onboarding").OnboardingProgress;
   storyComments?: import("./story-comments").StoryComment[];
@@ -309,6 +331,33 @@ export interface PreviewInput {
   bounds: { x: number; y: number; width: number; height: number };
 }
 export interface MemCodeAPI {
+  teamStatus(projectId: string): Promise<TeamWorkspaceState | null>;
+  teamCreate(input: {
+    projectId: string;
+    endpoint?: string;
+    displayName: string;
+    bootstrapSecret?: string;
+    shareOnLAN?: boolean;
+    advertisedHost?: string;
+  }): Promise<TeamWorkspaceState>;
+  teamJoin(input: {
+    projectId: string;
+    invite: string;
+    displayName: string;
+  }): Promise<TeamWorkspaceState>;
+  teamInvite(projectId: string): Promise<TeamInvite>;
+  teamLeave(projectId: string): Promise<void>;
+  teamRelease(
+    projectId: string,
+    taskId: string,
+  ): Promise<TeamWorkspaceState | null>;
+  teamRead(projectId: string): Promise<TeamWorkspaceState>;
+  teamPublish(input: {
+    projectId: string;
+    taskId: string;
+    artifactId: string;
+  }): Promise<import("./team").TeamResult>;
+  teamDownloadResult(projectId: string, resultId: string): Promise<Artifact>;
   deleteStory(
     id: string,
     cascade?: boolean,

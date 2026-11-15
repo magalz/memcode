@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, memo, Suspense, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, Copy } from "lucide-react";
@@ -47,7 +47,7 @@ function CodeBlock({
     </div>
   );
 }
-export default function MessageMarkdown({
+export default memo(function MessageMarkdown({
   text,
   onOpenLink,
 }: {
@@ -100,4 +100,4 @@ export default function MessageMarkdown({
       </ReactMarkdown>
     </div>
   );
-}
+});

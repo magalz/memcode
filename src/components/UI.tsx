@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import type { Harness, Stage, WorkItem } from "../shared";
 import { harnessNames } from "../shared";
+import { timeLabel } from "../planning/dates";
 
 export function Mark({ small = false }: { small?: boolean }) {
   return (
@@ -118,12 +119,5 @@ export function Empty({
 }
 
 export function Time({ at }: { at: string }) {
-  return (
-    <time dateTime={at}>
-      {new Date(at).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      })}
-    </time>
-  );
+  return <time dateTime={at}>{timeLabel(at)}</time>;
 }

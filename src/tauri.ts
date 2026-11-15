@@ -1,9 +1,63 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { Channel, invoke as nativeInvoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AppState, MemCodeAPI } from "./shared";
 import { errorMessage } from "./errors";
 import { runtimeHealth } from "./runtime-health";
+import { applyStatePatch, type StatePatch } from "./state-patch";
+
+const traceWorkspace = (stage: number, sequence: number, value = 0) => {
+  if (import.meta.env.VITE_MEMCODE_TRACE_TRANSPORT === "1")
+    console.warn("[memcode-transport-js]", stage, Date.now(), sequence, value);
+};
+
+let invokeSequence = 0;
+function commandCode(command: string) {
+  return command === "rpc"
+    ? 1
+    : command.includes("__TAURI_CHANNEL__")
+      ? 2
+      : command === "workspace_ack"
+        ? 3
+        : command === "workspace_connect"
+          ? 4
+          : 0;
+}
+function invoke<T>(...args: Parameters<typeof nativeInvoke>): Promise<T> {
+  if (import.meta.env.VITE_MEMCODE_TRACE_TRANSPORT !== "1")
+    return nativeInvoke<T>(...args);
+  const id = ++invokeSequence;
+  const code = commandCode(args[0]);
+  console.warn("[memcode-invoke]", 0, Date.now(), id, code);
+  return nativeInvoke<T>(...args).finally(() =>
+    console.warn("[memcode-invoke]", 1, Date.now(), id, code),
+  );
+}
+
+function traceNativeFetch() {
+  if (import.meta.env.VITE_MEMCODE_TRACE_TRANSPORT !== "1") return;
+  const globals = window as Window & { __memcodeFetchTraced?: boolean };
+  if (globals.__memcodeFetchTraced) return;
+  globals.__memcodeFetchTraced = true;
+  const originalFetch = window.fetch;
+  window.fetch = (input, init) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
+    if (!url.includes("ipc.localhost") && !url.startsWith("ipc:"))
+      return originalFetch.call(window, input, init);
+    const command = decodeURIComponent(url.split("/").at(-1) ?? "");
+    const code = commandCode(command);
+    const id = ++invokeSequence;
+    console.warn("[memcode-fetch]", 0, Date.now(), id, code);
+    return originalFetch
+      .call(window, input, init)
+      .finally(() => console.warn("[memcode-fetch]", 1, Date.now(), id, code));
+  };
+}
 
 const call = async <T = void>(
   method: string,
@@ -28,6 +82,7 @@ function wavBase64(wav: ArrayBuffer): string {
 export async function installNativeBridge(): Promise<void> {
   if (!isTauri())
     throw new Error("Open MemCode through its Tauri desktop app.");
+  traceNativeFetch();
   const states = new Set<(state: AppState) => void>();
   const previews = new Set<Parameters<MemCodeAPI["onPreview"]>[0]>();
   const terminals = new Set<Parameters<MemCodeAPI["onTerminal"]>[0]>();
@@ -46,14 +101,94 @@ export async function installNativeBridge(): Promise<void> {
     "terminal:output",
     (event) => terminals.forEach((listener) => listener(event.payload)),
   );
-  await listen<AppState>("workspace:state", (event) =>
-    states.forEach((listener) => listener(event.payload)),
-  );
+  let workspaceToken = "";
+  const connectWorkspace = async () => {
+    const token = crypto.randomUUID();
+    workspaceToken = token;
+    let currentState: AppState | undefined;
+    let currentSequence = 0;
+    const channel = new Channel<
+      { sequence: number; token: string } & (
+        { base: number | null; change: StatePatch } | { state: AppState }
+      )
+    >();
+    channel.onmessage = (message) => {
+      if (message.token !== workspaceToken) return;
+      if (
+        "change" in message &&
+        message.base !== null &&
+        message.base !== currentSequence
+      ) {
+        void connectWorkspace().catch((error) =>
+          runtimeHealth.observeError(errorMessage(error)),
+        );
+        return;
+      }
+      traceWorkspace(1, message.sequence);
+      try {
+        // Keep a hot-reloading renderer compatible until the native restart.
+        currentState =
+          "change" in message
+            ? applyStatePatch(currentState, message.change)
+            : message.state;
+        currentSequence = message.sequence;
+      } catch (error) {
+        runtimeHealth.observeError(errorMessage(error));
+        void connectWorkspace().catch((failure) =>
+          runtimeHealth.observeError(errorMessage(failure)),
+        );
+        return;
+      }
+      for (const listener of states) {
+        try {
+          listener(currentState);
+        } catch (error) {
+          console.error("Workspace listener failed:", error);
+        }
+      }
+      // A native UI callback alone does not mean JS consumed a large state.
+      // Wait for a renderer turn before releasing the next latest snapshot.
+      requestAnimationFrame(() => {
+        if (workspaceToken !== token) return;
+        traceWorkspace(2, message.sequence);
+        void invoke<boolean>("workspace_ack", {
+          sequence: message.sequence,
+          token,
+        })
+          .then((accepted) => {
+            traceWorkspace(3, message.sequence, Number(accepted));
+            if (!accepted && workspaceToken === token)
+              return connectWorkspace();
+          })
+          .catch((error) => {
+            runtimeHealth.observeError(errorMessage(error));
+            if (workspaceToken === token)
+              void connectWorkspace().catch((failure) =>
+                runtimeHealth.observeError(errorMessage(failure)),
+              );
+          });
+      });
+    };
+    await invoke("workspace_connect", { channel, token });
+    traceWorkspace(0, 0);
+  };
+  await connectWorkspace();
   await listen<Parameters<Parameters<MemCodeAPI["onPreview"]>[0]>[0]>(
     "preview:event",
     (event) => previews.forEach((listener) => listener(event.payload)),
   );
   const api: MemCodeAPI = {
+    teamStatus: (projectId) => call("team:status", { projectId }),
+    teamCreate: (input) => call("team:create", input),
+    teamJoin: (input) => call("team:join", input),
+    teamInvite: (projectId) => call("team:invite", { projectId }),
+    teamLeave: (projectId) => call("team:leave", { projectId }),
+    teamRelease: (projectId, taskId) =>
+      call("team:release", { projectId, taskId }),
+    teamRead: (projectId) => call("team:read", { projectId }),
+    teamPublish: (input) => call("team:publish", input),
+    teamDownloadResult: (projectId, resultId) =>
+      call("team:download", { projectId, resultId }),
     deleteStory: (id, cascade) => call("story:delete", { id, cascade }),
     deleteEpic: (id) => call("epic:delete", { id }),
     deleteCycle: (id) => call("cycle:delete", { id }),

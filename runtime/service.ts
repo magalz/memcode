@@ -2,6 +2,8 @@ import { createInterface } from "node:readline";
 import { open, readFile, unlink, mkdir } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { createRuntime } from "./app";
+import type { AppState } from "../src/shared";
+import { LatestWorkspacePublisher } from "./workspace-publisher";
 
 const args = process.argv.slice(2),
   option = (name: string) => {
@@ -14,8 +16,48 @@ const dataDir = resolve(
     join(process.env.APPDATA ?? process.cwd(), "MemCode"),
 );
 const appPath = resolve(option("--app-path") ?? process.cwd());
-const send = (value: unknown) =>
-  process.stdout.write(JSON.stringify(value) + "\n");
+const traceTransport = process.env.MEMCODE_TRACE_TRANSPORT === "1";
+let traceSequence = 0;
+const traceWrite = (stage: string, sequence: number, value = 0) => {
+  if (traceTransport)
+    process.stderr.write(
+      "[memcode-transport] " +
+        JSON.stringify({ stage, at: Date.now(), sequence, value }) +
+        "\n",
+    );
+};
+const send = (value: unknown) => {
+  const envelope = value as { kind?: string; event?: string };
+  const traced = traceTransport && envelope.event === "workspace:state";
+  const sequence = traced ? ++traceSequence : 0;
+  if (traced) traceWrite("node-encode-start", sequence);
+  const encoded =
+    JSON.stringify(
+      traced ? { ...envelope, transportSequence: sequence } : value,
+    ) + "\n";
+  if (traced)
+    traceWrite("node-write-start", sequence, Buffer.byteLength(encoded));
+  const accepted = process.stdout.write(encoded);
+  if (traced)
+    traceWrite("node-write-return", sequence, process.stdout.writableLength);
+  return accepted;
+};
+if (traceTransport)
+  process.stdout.on("drain", () => traceWrite("node-drain", traceSequence));
+const workspacePublisher = new LatestWorkspacePublisher(
+  {
+    write: (payload) =>
+      send({ kind: "event", event: "workspace:state", payload }),
+    needsDrain: () => process.stdout.writableNeedDrain,
+    onDrain: (listener) => {
+      process.stdout.on("drain", listener);
+      return () => process.stdout.off("drain", listener);
+    },
+  },
+  {
+    onError: (error) => console.error("Workspace notification failed:", error),
+  },
+);
 console.log = (...args) =>
   process.stderr.write(
     args
@@ -89,7 +131,10 @@ const ready = (async () => {
     dataDir,
     appPath,
     host,
-    (event, payload) => send({ kind: "event", event, payload }),
+    (event, payload) =>
+      event === "workspace:state"
+        ? workspacePublisher.publish(payload as AppState)
+        : send({ kind: "event", event, payload }),
   );
   const openProject =
     option("--open-project") ?? process.env.MEMCODE_OPEN_PROJECT;
@@ -110,9 +155,27 @@ async function shutdown() {
   try {
     const app = await ready;
     await app.close();
+    if (!disconnected) {
+      let timeout: NodeJS.Timeout | undefined;
+      try {
+        await Promise.race([
+          workspacePublisher.flush(),
+          new Promise<never>((_resolve, reject) => {
+            timeout = setTimeout(
+              () =>
+                reject(new Error("Workspace notification drain timed out.")),
+              3000,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
   } catch (error) {
     process.stderr.write(`Runtime shutdown: ${(error as Error).message}\n`);
   } finally {
+    workspacePublisher.dispose();
     if (ownsLock) {
       await unlink(lockPath).catch(() => {});
       ownsLock = false;

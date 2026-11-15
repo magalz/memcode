@@ -8,8 +8,10 @@ do not copy the Memtrace backend into this repository.
 - Visual quality is a first-prototype requirement. Use the benchmark-derived
   charcoal, paper, mint and cyan tokens in `src/styles.css`.
 - Keep the board, conversation, runbook and artifact experience coherent.
-- Keep project state, coordination, execution and artifacts local. Cloud models
-  may be used by an explicitly selected installed harness.
+- Keep execution, credentials, local repository bindings and approvals local.
+  Personal projects stay local. Opt-in Team Sync may share planning, comments,
+  activity and explicitly published results; source changes use Git in this
+  preview. Cloud models may be used by an explicitly selected installed harness.
 - Do not invent live workers, successful tests, metric values or confidence.
   The example project must remain visibly labelled as example data.
 - A worker exit creates a review candidate, never an automatically verified change.

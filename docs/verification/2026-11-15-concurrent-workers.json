@@ -1,0 +1,183 @@
+{
+  "recordedAt": "2026-11-15T17:35:33.817Z",
+  "scope": "Windows development build, real installed Claude Code/Codex/Cursor running concurrently on one shared epic checkout. This is a local acceptance test, not a general hardware or model benchmark.",
+  "environment": {
+    "systemRuntime": "WebView2 157.0.4341.46",
+    "diagnosticRuntime": "Microsoft-signed fixed WebView2 156.0.4314.58 tested in a separate temporary profile only; system runtime unchanged",
+    "providers": [
+      {
+        "harness": "Claude Code",
+        "model": "haiku",
+        "permissions": "Smart auto"
+      },
+      {
+        "harness": "Codex",
+        "model": "gpt-6-luna",
+        "permissions": "Smart auto"
+      },
+      {
+        "harness": "Cursor",
+        "model": "composer-2.5",
+        "permissions": "Full access (existing approved default)"
+      }
+    ]
+  },
+  "changes": [
+    "Bound and memoize conversation rendering; collapsed tool results remain unmounted.",
+    "Send an initial workspace baseline followed by immutable patches over an acknowledged, coalesced channel.",
+    "Retain one paused receipt and latest state; a late matching ACK resumes delivery directly in Rust.",
+    "Remove all legacy Electron app-region CSS, including no-drag on every interactive element. Tauri handles titlebar dragging.",
+    "Preserve per-card drafts and avoid erasing newer typing when a send completes.",
+    "Present current queued requests explicitly after bounded historical context, shared by all adapters.",
+    "Refresh all 29 guide topics with responsive DOM/SVG illustrations and current provider marks; load Docs eagerly.",
+    "Coalesce native artifact bounds and preserve bounded thumbnail concurrency with late-success recovery."
+  ],
+  "responsiveness": {
+    "measurement": "Native WebView, trusted Playwright input. Input/card times end after two renderer animation frames; these are not OS-to-display hardware latency.",
+    "savedAt": "2026-11-15T17:32:26.979Z",
+    "allThreeFrames": {
+      "count": 4124,
+      "p50": 4.19999999999709,
+      "p95": 16.599999999998545,
+      "max": 187.5
+    },
+    "framesOver50": 40,
+    "typingToTwoRafs": {
+      "count": 169,
+      "p50": 19.5,
+      "p95": 56.5,
+      "max": 129
+    },
+    "switchesToTwoRafs": {
+      "count": 47,
+      "p50": 20.200000047683716,
+      "p95": 150.60000002384186,
+      "max": 201.39999997615814
+    },
+    "queues": [
+      {
+        "harness": "claude",
+        "marker": "QUEUE-NORMAL-claude-f09ae567-1764-40a3-a908-ec216a11ed65",
+        "ackRoundTripMs": 498
+      },
+      {
+        "harness": "codex",
+        "marker": "QUEUE-NORMAL-codex-2ea91c0b-9812-44a9-b60e-dcd38925324e",
+        "ackRoundTripMs": 489
+      },
+      {
+        "harness": "cursor",
+        "marker": "QUEUE-NORMAL-cursor-910284ca-be95-488a-a97a-5257ca119b74",
+        "ackRoundTripMs": 467
+      }
+    ],
+    "draftsPreserved": true,
+    "scrollChecks": 14,
+    "scrollsMoved": 14
+  },
+  "acceptance": {
+    "sourceTests": {
+      "pass": 258,
+      "fail": 0
+    },
+    "rustTests": {
+      "pass": 14,
+      "fail": 0
+    },
+    "ownedCodingTests": {
+      "pass": 770,
+      "fail": 0,
+      "byProvider": {
+        "claude": 292,
+        "codex": 73,
+        "cursor": 405
+      }
+    },
+    "independentQuality": {
+      "groups": 24,
+      "passed": 24,
+      "seededScenarios": 1500
+    },
+    "exactQueuedReceiptCompliance": "3/3 providers: exactly one submitted follow-up each, picked automatically, exact export + test + report matches, final queue empty",
+    "draftSwitching": "Pass; submitted composers remain empty after reopening; unsent drafts survive A→B→A",
+    "artifactGallery": "35cards settle on scroll; 20inline previews in copied profile,15historical captures correctly rejected by copied-profile capture boundary. All15load successfully in original main profile.",
+    "presentation": {
+      "type": "Actual Cursor-generated PPTX",
+      "openToCompleteFirstSlideMs": 1491,
+      "nextSlideMs": 45
+    },
+    "docs": {
+      "topics": 29,
+      "oldGuidePngRequests": 0,
+      "clickToMountedViewAndTwoFramesMs": 19.3,
+      "visualChecks": "Wide and narrow renderings inspected; final native screenshot captured after fonts and animation settle."
+    },
+    "nativeSmoke": "Passed: real native desktop, planning, isolated artifact guest without app RPC, subscriptions, capture and graceful shutdown."
+  },
+  "limitations": [
+    "Earlier failed cold-start attempts are retained in raw evidence. The first partial CSS removal was insufficient; the final normal157 and separate156runs both passed after removing all app-region declarations and adding native late-ACK recovery.",
+    "Some long frames remain: inspect p95/max values; no claim of zero jank or unlimited fleet size.",
+    "Models had equivalent small dedicated coding tasks; this does not establish quality on arbitrary repositories.",
+    "Prompt text size reductions were measured separately; provider token usage was not benchmarked in this UI test."
+  ],
+  "evidence": [
+    "../tmp/memcode-fleet-performance/queue-normal-metrics.json",
+    "../tmp/memcode-fleet-performance/queue-normal-independent-quality.json",
+    "../tmp/memcode-fleet-performance/queue-normal-final.json",
+    "../tmp/memcode-fleet-performance/queue156-independent-quality.json",
+    "../tmp/memcode-fleet-performance/native-artifact-evidence.json",
+    "../tmp/memcode-fleet-performance/main-historical-thumbnails.json",
+    "../tmp/memcode-fleet-performance/docs-native-timing.json",
+    "../tmp/memcode-fleet-performance/docs-native-updated.png",
+    "../tmp/memcode-fleet-performance/source-tests-final.log",
+    "../tmp/memcode-fleet-performance/native-final.log",
+    "../tmp/memcode-fleet-performance/native-smoke-delivery.log"
+  ],
+  "delivery": {
+    "appOpenOn": "Docs / Connect your first worker",
+    "normalSystemRuntime": "157.0.4341.46",
+    "stories": [
+      {
+        "identifier": "MC-070",
+        "stage": "done",
+        "estimate": 5,
+        "cycleId": "049cdd59-8855-4f62-bab2-7e26beb8b1b6"
+      },
+      {
+        "identifier": "MC-071",
+        "stage": "done",
+        "estimate": 2,
+        "cycleId": "049cdd59-8855-4f62-bab2-7e26beb8b1b6"
+      },
+      {
+        "identifier": "MC-072",
+        "stage": "done",
+        "estimate": 2,
+        "cycleId": "049cdd59-8855-4f62-bab2-7e26beb8b1b6"
+      }
+    ],
+    "demos": [
+      {
+        "port": 3000,
+        "started": true,
+        "reachable": true
+      },
+      {
+        "port": 57195,
+        "started": true,
+        "reachable": true
+      },
+      {
+        "port": 58415,
+        "started": true,
+        "reachable": true
+      },
+      {
+        "port": 57201,
+        "started": true,
+        "reachable": true
+      }
+    ],
+    "finalVerifiedAt": "2026-11-15T17:41:10.014Z"
+  }
+}

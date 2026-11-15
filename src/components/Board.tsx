@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useCallback, useRef, useState } from "react";
 import { ArrowUpRight, Check, Clock3, MessageSquare, Plus } from "lucide-react";
 import type { Cycle, Stage, WorkItem } from "../shared";
 import type { StoryComment } from "../story-comments";
@@ -28,7 +28,107 @@ interface Props {
   selected?: Set<string>;
   toggle?: (id: string) => void;
 }
-export function WorkBoard({
+type BoardRenderProps = Props & { today: string };
+
+function sameItems<T>(
+  a?: T[],
+  b?: T[],
+  equal: (a: T, b: T) => boolean = Object.is,
+) {
+  return (
+    a === b ||
+    ((a?.length ?? 0) === (b?.length ?? 0) &&
+      (a ?? []).every((value, index) => equal(value, b![index])))
+  );
+}
+
+function sameFields(a: object, b: object, except: string[]) {
+  if (a === b) return true;
+  const before = a as Record<string, unknown>;
+  const after = b as Record<string, unknown>;
+  const keys = Object.keys(before).filter((key) => !except.includes(key));
+  return (
+    keys.length ===
+      Object.keys(after).filter((key) => !except.includes(key)).length &&
+    keys.every((key) => Object.hasOwn(after, key) && before[key] === after[key])
+  );
+}
+
+/** Transcript bodies and activity timestamps do not appear on board cards. */
+export function sameBoardTask(a: WorkItem, b: WorkItem) {
+  return (
+    a === b ||
+    (sameFields(a, b, ["messages", "run", "updatedAt"]) &&
+      sameFields(a.run, b.run, ["activity"]) &&
+      a.run.activity?.phase === b.run.activity?.phase &&
+      sameItems(a.messages, b.messages, (before, after) =>
+        sameFields(before, after, ["text", "at"]),
+      ))
+  );
+}
+
+export function sameBoardRenderProps(a: BoardRenderProps, b: BoardRenderProps) {
+  return (
+    a.mode === b.mode &&
+    a.today === b.today &&
+    sameItems(a.tasks, b.tasks, sameBoardTask) &&
+    (a.groups === b.groups ||
+      (!!a.groups &&
+        !!b.groups &&
+        a.groups.length === b.groups.length &&
+        a.groups.every((group, index) => {
+          const next = b.groups![index];
+          return (
+            group.id === next.id &&
+            group.name === next.name &&
+            group.stage === next.stage &&
+            group.color === next.color &&
+            group.wipLimit === next.wipLimit &&
+            sameItems(group.tasks, next.tasks, sameBoardTask)
+          );
+        }))) &&
+    sameItems(a.cycles, b.cycles) &&
+    sameItems(a.storyComments, b.storyComments) &&
+    (a.selected === b.selected ||
+      ((a.selected?.size ?? 0) === (b.selected?.size ?? 0) &&
+        [...(a.selected ?? [])].every((id) => b.selected?.has(id)))) &&
+    a.open === b.open &&
+    a.create === b.create &&
+    a.move === b.move &&
+    a.toggle === b.toggle
+  );
+}
+
+/** Forward the latest actions without invalidating the expensive board view. */
+export function WorkBoard(props: Props) {
+  const actions = useRef(props);
+  actions.current = props;
+  const open = useCallback(
+    (task: WorkItem) =>
+      actions.current.open(
+        actions.current.tasks.find((current) => current.id === task.id) ?? task,
+      ),
+    [],
+  );
+  const create = useCallback(() => actions.current.create(), []);
+  const move = useCallback(
+    (id: string, group: string) => actions.current.move(id, group),
+    [],
+  );
+  const toggle = useCallback((id: string) => actions.current.toggle?.(id), []);
+  return (
+    <MemoBoardContent
+      {...props}
+      today={dayAt()}
+      open={open}
+      create={create}
+      move={move}
+      toggle={toggle}
+    />
+  );
+}
+
+function BoardContent({
   tasks,
   mode,
   groups,
@@ -39,7 +139,8 @@ export function WorkBoard({
   move,
   selected = new Set(),
   toggle,
-}: Props) {
+  today,
+}: BoardRenderProps) {
   const [dragged, setDragged] = useState<string | null>(null),
     [over, setOver] = useState<string | null>(null);
   const commentCounts = new Map<string, number>();
@@ -173,7 +274,7 @@ export function WorkBoard({
                   role="cell"
                   className={
                     task.dueDate &&
-                    task.dueDate < dayAt() &&
+                    task.dueDate < today &&
                     task.stage !== "done"
                       ? "overdue"
                       : ""
@@ -340,7 +441,7 @@ export function WorkBoard({
                     {task.dueDate && (
                       <span
                         className={
-                          task.dueDate < dayAt() && task.stage !== "done"
+                          task.dueDate < today && task.stage !== "done"
                             ? "overdue"
                             : ""
                         }
@@ -399,3 +500,5 @@ export function WorkBoard({
     </div>
   );
 }
+
+const MemoBoardContent = memo(BoardContent, sameBoardRenderProps);

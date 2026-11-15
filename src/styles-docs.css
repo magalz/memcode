@@ -151,29 +151,6 @@
   color: #78866a;
   margin: 0;
 }
-.docs-figure {
-  margin: 27px 0 25px;
-  overflow: hidden;
-  border: 1px solid #dce5d6;
-  background: #f9fcf5;
-  border-radius: 9px;
-}
-.docs-figure img {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: 620px;
-  object-fit: contain;
-  object-position: top;
-  background: #f6faf4;
-}
-.docs-figure figcaption {
-  font-size: 10px;
-  line-height: 1.8;
-  color: #8d9b80;
-  border-top: 1px solid #e4ebdc;
-  padding: 11px 16px;
-}
 .docs-article-footer {
   display: flex;
   gap: 18px;

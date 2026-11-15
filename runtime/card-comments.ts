@@ -17,11 +17,11 @@ export function registerCardComments(
   register: Register,
   state: () => AppState,
   changed: () => Promise<void>,
-  author: () => StoryAuthor | undefined = () => undefined,
+  author: (taskId?: string) => StoryAuthor | undefined = () => undefined,
 ) {
   const id = z.string().min(1).max(250),
     text = z.string().trim().min(1).max(20000),
-    current = () => author() ?? localAuthor,
+    current = (taskId?: string) => author(taskId) ?? localAuthor,
     task = (taskId: string) => {
       if (!state().tasks.some((t) => t.id === taskId))
         throw Error("Work item not found.");
@@ -33,8 +33,8 @@ export function registerCardComments(
       );
       if (!comment || comment.deletedAt) throw Error("Comment not found.");
       if (
-        comment.author.id !== current().id ||
-        comment.author.source !== current().source
+        comment.author.id !== current(taskId).id ||
+        comment.author.source !== current(taskId).source
       )
         throw Error("Only the author can change this comment.");
       return comment;
@@ -62,7 +62,7 @@ export function registerCardComments(
           taskId: input.taskId,
           text: input.text,
           parentId: input.parentId,
-          author: { ...current() },
+          author: { ...current(input.taskId) },
           createdAt: at,
           updatedAt: at,
         };

@@ -136,6 +136,7 @@ try {
           .flatMap((context) => context.pages())
           .filter(
             (p) =>
+              p !== page &&
               p.url().startsWith("http://127.0.0.1:") &&
               !p.url().includes(`:${port}`),
           ).length,
@@ -147,6 +148,7 @@ try {
     .flatMap((context) => context.pages())
     .find(
       (p) =>
+        p !== page &&
         p.url().startsWith("http://127.0.0.1:") &&
         !p.url().includes(`:${port}`),
     );

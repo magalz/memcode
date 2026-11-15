@@ -15,4 +15,5 @@ release/
 !.env.example
 test-results/
 playwright-report/
+tmp/
 *.log

@@ -1,12 +1,27 @@
 import { useEffect, useState } from "react";
-import { ArrowUpRight, GitBranch, Layers3, Link2, X } from "lucide-react";
-import type { AppState, Epic, Harness, RuntimeInfo, WorkItem } from "../shared";
+import {
+  ArrowUpRight,
+  GitBranch,
+  Layers3,
+  Link2,
+  ShieldCheck,
+  X,
+} from "lucide-react";
+import type {
+  AppState,
+  Epic,
+  Harness,
+  RuntimeInfo,
+  TeamWorkspaceState,
+  WorkItem,
+} from "../shared";
 import { harnessNames } from "../shared";
 import { workerReadiness } from "../worker-availability";
 import { isActive } from "../domain";
 import { Select } from "./Select";
 import { RoutingCard } from "./Routing";
 import { WorkerPermissions } from "./WorkerPermissions";
+import { teamClaimForStory, teamStartBlocked } from "../team-presentation";
 
 type Update = (patch: Parameters<Window["memcode"]["updateTask"]>[1]) => void;
 
@@ -19,6 +34,8 @@ export function WorkerAssignment({
   update,
   connections,
   onConnections,
+  team,
+  disabled = false,
 }: {
   task: WorkItem;
   runtime: RuntimeInfo;
@@ -28,17 +45,45 @@ export function WorkerAssignment({
   update: Update;
   connections: AppState["workerConnections"];
   onConnections: () => void;
+  team?: TeamWorkspaceState;
+  disabled?: boolean;
 }) {
   const automatic = task.assignment === "auto";
-  const readiness = workerReadiness(task, runtime.harnesses, connections),
-    displayTask =
-      automatic && !readiness.routeConnected
-        ? { ...task, route: undefined }
-        : task;
+  const owner = teamClaimForStory(team, task.id);
+  const claimBlock = teamStartBlocked(team, task.id);
+  const readiness = workerReadiness(task, runtime.harnesses, connections);
   const catalog =
     runtime.harnesses.find((h) => h.id === task.harness)?.models ?? [];
   return (
     <>
+      {team && (
+        <div className="team-claim-notice" role="status">
+          <span>
+            <ShieldCheck size={12} />
+            Shared story
+          </span>
+          <strong>
+            {owner
+              ? `${owner.name}${owner.local ? " · you" : ""}`
+              : claimBlock
+                ? "Waiting for connection"
+                : "Available to claim"}
+          </strong>
+          <small>
+            {owner
+              ? owner.device
+              : "Starting a worker reserves this story on this device."}
+          </small>
+          {claimBlock && <p>{claimBlock}</p>}
+          {owner && !owner.local && (
+            <small>
+              {team.connection === "offline" || team.connection === "connecting"
+                ? "Last known claim · reconnect to check its status."
+                : "Claim held · live worker status is local to its device."}
+            </small>
+          )}
+        </div>
+      )}
       <label className="inspector-field">
         <span>Assignment</span>
         <Select
@@ -74,7 +119,9 @@ export function WorkerAssignment({
           }
         >
           <option value="auto">
-            {automatic ? "Memtrace chooses" : "Match task complexity"}
+            {automatic
+              ? (task.route?.model ?? "Memtrace chooses")
+              : "Match task complexity"}
           </option>
           {catalog.map((model) => (
             <option key={model.id} value={model.id}>
@@ -108,7 +155,9 @@ export function WorkerAssignment({
           </span>
           <p>
             {automatic
-              ? "Automatic assignment uses only workers you approve. Connect one to plan and start this story."
+              ? task.route
+                ? `${harnessNames[task.route.harness]} / ${task.route.model} is named for this story. Connect it in Workers before starting. The assignment does not start the work.`
+                : "Memtrace names a harness and model from the measured story. Connect a worker in Workers before starting."
               : readiness.runtimeKnown
                 ? `${harnessNames[task.harness]} is installed. Approve its connection before starting work.`
                 : readiness.selectedInstalled
@@ -121,9 +170,9 @@ export function WorkerAssignment({
         </div>
       )}
       <RoutingCard
-        task={displayTask}
+        task={task}
         busy={busy || isActive(task)}
-        disabled={!task.example && !readiness.canStart}
+        disabled={disabled}
         plan={plan}
       />
     </>
