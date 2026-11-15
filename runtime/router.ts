@@ -1,4 +1,7 @@
-import { supportsPermissionMode } from "../src/permissions";
+import {
+  supportsPermissionMode,
+  effectivePermissionMode,
+} from "../src/permissions";
 import type {
   Evidence,
   Harness,
@@ -169,12 +172,18 @@ export function planRoute(
   const wanted = manual
     ? requested
     : preferredHarness(tier, surface(task, evidence));
-  const permissionMode = task.permissionMode ?? "review";
+  const permissionMode = task.permissionMode;
   if (permissionMode === "auto")
     reasons.push(
       "Smart auto requires a harness with native automatic approval review; unsupported transports are excluded.",
     );
-  if (manual && !supportsPermissionMode(requested, permissionMode))
+  if (
+    manual &&
+    !supportsPermissionMode(
+      requested,
+      effectivePermissionMode(task, settings, requested),
+    )
+  )
     throw new Error(
       "Cursor’s interactive ACP connection does not support Smart auto. Choose Review or Full access, or select Codex or Claude Code.",
     );
@@ -186,7 +195,8 @@ export function planRoute(
   ];
   for (const id of ranked) {
     if (manual && id !== requested) continue;
-    if (!supportsPermissionMode(id, permissionMode)) continue;
+    const candidateMode = effectivePermissionMode(task, settings, id);
+    if (!supportsPermissionMode(id, candidateMode)) continue;
     const runtime = runtimes.find((r) => r.id === id && r.available);
     if (!runtime) continue;
     if (pinnedModel) {
@@ -241,7 +251,12 @@ export function planRoute(
   throw new Error(
     permissionMode === "auto" &&
       !runtimes.some(
-        (r) => r.available && supportsPermissionMode(r.id, permissionMode),
+        (r) =>
+          r.available &&
+          supportsPermissionMode(
+            r.id,
+            effectivePermissionMode(task, settings, r.id),
+          ),
       )
       ? "No connected harness supports Smart auto. Connect Codex or Claude Code, or choose Review or Full access."
       : manual

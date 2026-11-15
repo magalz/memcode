@@ -1,4 +1,4 @@
-import type { WorkItem, TaskPatch } from "../shared";
+import type { WorkItem, TaskPatch, Settings } from "../shared";
 import { harnessNames } from "../shared";
 import { isActive } from "../domain";
 import {
@@ -6,6 +6,7 @@ import {
   permissionLabels,
   permissionDescription,
   supportsPermissionMode,
+  effectivePermissionMode,
   type PermissionMode,
 } from "../permissions";
 import { Select } from "./Select";
@@ -13,12 +14,17 @@ import "../styles-worker-permissions.css";
 
 export function WorkerPermissions({
   task,
+  settings,
+  onDefaults,
   update,
 }: {
   task: WorkItem;
+  settings: Settings;
+  onDefaults(): void;
   update(patch: TaskPatch): void;
 }) {
-  const mode = task.permissionMode ?? "review";
+  const inherited = task.permissionMode == null;
+  const mode = effectivePermissionMode(task, settings);
   const active = isActive(task);
   const current = task.run.permissionMode ?? "review";
   return (
@@ -27,11 +33,15 @@ export function WorkerPermissions({
         <span>Permissions</span>
         <Select
           aria-label="Worker permission mode"
-          value={mode}
+          value={inherited ? "inherit" : mode}
           onValueChange={(value) =>
-            update({ permissionMode: value as PermissionMode })
+            update({
+              permissionMode:
+                value === "inherit" ? null : (value as PermissionMode),
+            })
           }
         >
+          <option value="inherit">Worker default</option>
           {permissionModes.map((value) => (
             <option
               key={value}
@@ -46,11 +56,27 @@ export function WorkerPermissions({
           ))}
         </Select>
       </label>
+      {inherited && (
+        <p>
+          {task.assignment === "auto"
+            ? "Uses the default of the worker selected for this task."
+            : `${harnessNames[task.harness]} default: ${permissionLabels[mode]}.`}
+        </p>
+      )}
       <p>
-        {mode === "auto" && task.assignment === "auto"
-          ? "Uses the native reviewer in Codex or Claude Code. Automatic routing selects a connected worker that supports this mode."
-          : permissionDescription(task.harness, mode)}
+        {inherited && task.assignment === "auto"
+          ? "Set each worker’s standard permissions once in Workers."
+          : mode === "auto" && task.assignment === "auto"
+            ? "Uses the native reviewer in Codex or Claude Code. Automatic routing selects a connected worker that supports this mode."
+            : permissionDescription(task.harness, mode)}
       </p>
+      <button
+        type="button"
+        className="worker-defaults-link"
+        onClick={onDefaults}
+      >
+        Worker defaults <span aria-hidden="true">↗</span>
+      </button>
       {active && (
         <small>
           {current !== mode ? `Running: ${permissionLabels[current]}. ` : ""}

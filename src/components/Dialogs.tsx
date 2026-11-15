@@ -36,6 +36,8 @@ import { HarnessMark, Mark, PriorityMark, Spinner, StageIcon } from "./UI";
 import { estimateOptions } from "../planning/types";
 import { ContextSettings } from "./ContextSettings";
 import { DictationSettings } from "./DictationSettings";
+import { AccountConnections } from "./AccountConnections";
+import type { MemtraceAccount } from "../connections";
 
 export function Modal({
   title,
@@ -627,12 +629,14 @@ export function SettingsDialog({
   onClose,
   onSaved,
   notify,
+  onAccountStatus,
 }: {
   settings: Settings;
   runtime: RuntimeInfo;
   onClose: () => void;
   onSaved: (runtime: RuntimeInfo) => void;
   notify: (s: string) => void;
+  onAccountStatus?: (account: MemtraceAccount) => void;
 }) {
   const [draft, setDraft] = useState(settings);
   const [busy, setBusy] = useState(false);
@@ -656,6 +660,7 @@ export function SettingsDialog({
     >
       <form onSubmit={save}>
         <div className="modal-body settings-body">
+          <AccountConnections notify={notify} onStatus={onAccountStatus} />
           <div className="settings-section">
             <div>
               <GitBranch size={17} />

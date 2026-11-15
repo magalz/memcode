@@ -128,7 +128,7 @@ export const guideArticles: GuideArticle[] = [
       "Send a follow-up from the composer. If the worker is busy, it queues an automatic next pass after cleanup.",
       "Use the card’s Queue tab to review, edit or cancel requests before they are picked up.",
       "When a worker asks a question or requests approval, answer the request directly above the conversation input. This replies to the same agent; it is separate from a queued follow-up.",
-      "Choose Review, Smart auto or Full access in the worker’s Permissions selector. Changes apply on its next pass. Smart auto uses the harness’s own reviewer to reduce routine approvals. Full access bypasses tool approvals; questions and Fleet decisions still need your answer.",
+      "Set standard permissions once per connected harness in Workers → Default permissions. Cards inherit that default across projects; use the card’s Permissions selector only for an override, or choose Worker default to reset it. Changes apply on the next worker pass. Questions and Fleet decisions still need your answer.",
     ],
     note: "Saving an annotation and adding it to the composer do not send it. Send is the action that authorizes a worker pass.",
     related: ["queue", "annotations", "comments", "dictation"],
@@ -380,7 +380,7 @@ export const guideArticles: GuideArticle[] = [
     image: "account",
     caption: "Connect Memtrace separately from approving a coding worker.",
     steps: [
-      "Open the Memtrace account control in the top bar.",
+        "Open Settings → Your Memtrace account, or use the account control in the top bar.",
       "If needed, choose Sign in. The official claim page opens in your system browser; complete it there.",
       "Refresh the connection status after signing in. Your credentials remain with Memtrace.",
       "Approve coding adapters separately in Workers. Memtrace access and a coding provider’s authentication serve different roles.",

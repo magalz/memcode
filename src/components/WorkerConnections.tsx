@@ -15,8 +15,24 @@ import {
   type RuntimeInfo,
 } from "../shared";
 import type { WorkerConnectionStatus } from "../connections";
+import {
+  permissionModes,
+  permissionLabels,
+  permissionDescription,
+  supportsPermissionMode,
+  type PermissionMode,
+} from "../permissions";
 import { HarnessMark, Spinner } from "./UI";
+import { Select } from "./Select";
 import "../styles-connections.css";
+import "../styles-worker-defaults.css";
+
+const defaultSummary = (mode: PermissionMode) =>
+  mode === "full-access"
+    ? "Bypasses tool approvals and the harness sandbox where supported."
+    : mode === "auto"
+      ? "Native risk review handles routine actions and escalates decisions to you."
+      : "Uses the harness’s normal approval rules.";
 
 export function WorkerConnections({
   runtime,
@@ -38,7 +54,8 @@ export function WorkerConnections({
     [approved, setApproved] = useState(false),
     [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(true),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [savingDefault, setSavingDefault] = useState<Harness>();
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const refresh = useCallback(async () => {
@@ -130,6 +147,19 @@ export function WorkerConnections({
       setBusy(false);
     }
   };
+  const saveDefault = async (harness: Harness, mode: PermissionMode) => {
+    setSavingDefault(harness);
+    try {
+      await window.memcode.setWorkerPermissionDefault(harness, mode);
+      notify(
+        `${harnessNames[harness]} default set to ${permissionLabels[mode]}. Stories without an override inherit it.`,
+      );
+    } catch (error) {
+      notify((error as Error).message);
+    } finally {
+      setSavingDefault(undefined);
+    }
+  };
   return (
     <section
       className={"worker-connections " + (compact ? "compact" : "")}
@@ -141,16 +171,17 @@ export function WorkerConnections({
           <span className="eyebrow">YOUR INSTALLED TOOLS</span>
           <h2>Connect a worker. Keep your setup.</h2>
           <p>
-            Approve the tools MemCode may use. Work starts when you send a task.
+            Connect your tools and set their defaults once. Every story can
+            override them.
           </p>
         </div>
         <button
-          className="secondary-button"
+          className="button secondary worker-connections-refresh"
           onClick={() => void refresh()}
           disabled={loading || busy}
           aria-label="Refresh worker connections"
         >
-          <RefreshCw size={12} />
+          <RefreshCw size={12} className={loading ? "spin" : undefined} />
           {loading ? "Checking…" : "Refresh"}
         </button>
       </header>
@@ -163,6 +194,9 @@ export function WorkerConnections({
         {runtime.harnesses.map((installed) => {
           const status = statuses.find((s) => s.harness === installed.id),
             connected = status?.connected === true,
+            defaultMode =
+              state.settings.workerPermissionDefaults?.[installed.id] ??
+              "review",
             active = state.tasks.filter(
               (t) =>
                 !t.example &&
@@ -204,6 +238,51 @@ export function WorkerConnections({
                   {status.accountLabel}
                 </small>
               )}
+              {installed.available && (
+                <div className="worker-default-control">
+                  <label>
+                    <span>Default permissions</span>
+                    <Select
+                      aria-label={`${installed.name} default permissions`}
+                      value={defaultMode}
+                      disabled={!!savingDefault || busy}
+                      onValueChange={(mode) =>
+                        void saveDefault(installed.id, mode as PermissionMode)
+                      }
+                    >
+                      {permissionModes.map((mode) => (
+                        <option
+                          key={mode}
+                          value={mode}
+                          disabled={!supportsPermissionMode(installed.id, mode)}
+                        >
+                          {permissionLabels[mode]}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                  <p title={permissionDescription(installed.id, defaultMode)}>
+                    {defaultSummary(defaultMode)}
+                  </p>
+                  <small>
+                    {savingDefault === installed.id ? (
+                      <>
+                        <Spinner />
+                        Saving default…
+                      </>
+                    ) : active ? (
+                      "Applies across projects on the next worker pass."
+                    ) : (
+                      "Across all projects · stories can override"
+                    )}
+                  </small>
+                  {installed.id === "cursor" && (
+                    <span className="worker-default-availability">
+                      Smart Auto is unavailable through Cursor ACP.
+                    </span>
+                  )}
+                </div>
+              )}
               <footer>
                 {connected ? (
                   <>
@@ -236,7 +315,7 @@ export function WorkerConnections({
                   </>
                 ) : (
                   <button
-                    className="secondary-button"
+                    className="button secondary worker-connect-button"
                     disabled={!installed.available || busy || loading}
                     onClick={() => {
                       setSelected(
@@ -347,7 +426,7 @@ export function WorkerConnections({
             <footer>
               <small>Connecting does not start a coding task.</small>
               <button
-                className="primary-button"
+                className="button primary"
                 disabled={!approved || busy}
                 onClick={() => void connect()}
               >

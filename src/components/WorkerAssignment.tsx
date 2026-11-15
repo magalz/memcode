@@ -13,6 +13,7 @@ type Update = (patch: Parameters<Window["memcode"]["updateTask"]>[1]) => void;
 export function WorkerAssignment({
   task,
   runtime,
+  settings,
   busy,
   plan,
   update,
@@ -21,6 +22,7 @@ export function WorkerAssignment({
 }: {
   task: WorkItem;
   runtime: RuntimeInfo;
+  settings: AppState["settings"];
   busy: boolean;
   plan: () => void;
   update: Update;
@@ -92,7 +94,12 @@ export function WorkerAssignment({
           This computer
         </span>
       </div>
-      <WorkerPermissions task={task} update={update} />
+      <WorkerPermissions
+        task={task}
+        settings={settings}
+        update={update}
+        onDefaults={onConnections}
+      />
       {!task.example && !readiness.canStart && (
         <div className="assignment-connect" role="status">
           <span>

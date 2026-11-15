@@ -21,16 +21,20 @@ export function AccountConnections({
 }) {
   const [account, setAccount] = useState<MemtraceAccount>(),
     [busy, setBusy] = useState(false),
+    [refreshing, setRefreshing] = useState(false),
     [open, setOpen] = useState(!compact);
   const statusCallback = useRef(onStatus);
   statusCallback.current = onStatus;
   const refresh = useCallback(async () => {
+    setRefreshing(true);
     try {
       const next = await window.memcode.accountStatus();
       setAccount(next);
       statusCallback.current?.(next);
     } catch (error) {
       notify((error as Error).message);
+    } finally {
+      setRefreshing(false);
     }
   }, [notify]);
   useEffect(() => {
@@ -72,6 +76,7 @@ export function AccountConnections({
     <div className={"account-connections " + (compact ? "compact" : "")}>
       {compact && (
         <button
+          type="button"
           className="account-trigger"
           aria-label="Memtrace account"
           aria-expanded={open}
@@ -94,6 +99,7 @@ export function AccountConnections({
             </div>
             {compact && (
               <button
+                type="button"
                 className="icon-button"
                 aria-label="Close Memtrace account"
                 onClick={() => setOpen(false)}
@@ -138,16 +144,18 @@ export function AccountConnections({
           </details>
           <footer>
             <button
-              className="secondary-button"
+              type="button"
+              className="button secondary"
               onClick={() => void refresh()}
-              disabled={busy}
+              disabled={busy || refreshing}
             >
-              <RefreshCw size={12} />
-              Refresh
+              {refreshing ? <Spinner /> : <RefreshCw size={12} />}
+              {refreshing ? "Checking…" : "Refresh"}
             </button>
             {account?.status !== "connected" && (
               <button
-                className="primary-button"
+                type="button"
+                className="button primary"
                 disabled={busy || account?.loginPending}
                 onClick={() => void signIn()}
               >
@@ -168,6 +176,7 @@ export function AccountConnections({
               update when the CLI finishes signing in.{" "}
               {account.claimUrl && (
                 <button
+                  type="button"
                   className="text-button"
                   onClick={() =>
                     void navigator.clipboard

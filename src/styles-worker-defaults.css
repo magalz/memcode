@@ -1,0 +1,58 @@
+.worker-connections-refresh {
+  flex: none;
+  min-height: 32px;
+  gap: 7px;
+  padding: 0 12px;
+  font-size: 11px;
+}
+.worker-default-control {
+  border-top: 1px solid #edf0e7;
+  padding: 15px 0 17px;
+  margin-top: 2px;
+}
+.worker-default-control > label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.worker-default-control > label > span {
+  font-size: 11px;
+  font-weight: 500;
+  color: #526c5d;
+}
+.worker-default-control .mc-select-trigger {
+  min-width: 120px;
+  height: 32px;
+  font-size: 11px;
+  background: #fbfdfb;
+}
+.worker-default-control > p {
+  font-size: 11px;
+  line-height: 1.7;
+  margin: 10px 0 6px;
+  color: #83948a;
+}
+.worker-default-control > small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: #658b77;
+}
+.worker-default-availability {
+  display: block;
+  margin-top: 7px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: #9aa59c;
+}
+.worker-connect-button {
+  min-height: 34px;
+  width: 100%;
+  justify-content: center;
+  gap: 7px;
+  font-size: 11px;
+}

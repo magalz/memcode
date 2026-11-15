@@ -15,6 +15,15 @@ npm install
 npm run dev
 ```
 
+To develop MemCode using MemCode, close the compiled app after its active workers
+finish, then run `npm run dev` from this repository in an external terminal. It builds the local runtime
+and opens the Tauri development app against the same workspace data. UI changes
+hot-reload while workers and managed servers keep running. Runtime or Rust changes
+require a controlled restart: finish/stop active workers, close the app, and rerun
+`npm run dev`. Native automatic restarts are disabled. Restarting the desktop app
+currently ends its worker sessions; unattended self-updates with session reattachment
+are not implemented yet.
+
 For the compiled desktop app:
 
 ```sh
@@ -40,7 +49,7 @@ MemCode then connects to the installed Memtrace engine to analyze it.
 - Project briefs, editable runbooks, conversations, worker status and change review.
 - Visible follow-up queues with edit/cancel until pickup, plus separate story discussions.
 - Native questions, approval choices and plan review beside the conversation input for Codex, Claude Code and Cursor, with replies sent to the same waiting session.
-- Per-story Review / Smart auto / Full access permission preferences, mapped to native harness modes. Cursor ACP currently supports Review and Full access; unsupported automatic review is explicit.
+- Worker-wide Review / Smart auto / Full access defaults, inherited across projects with optional story overrides. Cursor ACP currently supports Review and Full access; unsupported automatic review is explicit.
 - Delete stories, epics and cycles with a clear confirmation. Epic/cycle deletion preserves their stories; active workers must stop first.
 - Progressive project → approved worker → epic → story onboarding and a searchable, illustrated Docs tab.
 - Native folder selection and project creation. State stays in the local workspace

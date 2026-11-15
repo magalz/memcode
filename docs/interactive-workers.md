@@ -19,9 +19,16 @@ native session but redacted from persisted workspace history and renderer drafts
 
 ## Permission modes
 
-Each story saves its own permission mode. The selected mode is captured when a
-worker pass starts. Changing the selector while a worker is active configures its
-next pass; it does not silently grant a pending request or change a running session.
+Set a default once for each connected harness in **Workers → Default permissions**.
+Existing and new stories inherit that harness's current default across projects.
+The card's selector shows **Worker default** unless an explicit override was saved;
+select Worker default again to clear an override. Automatic routing applies the
+default of its selected harness, while a story override takes precedence.
+
+The resolved mode and worker defaults are captured when a worker pass starts.
+Changes during preparation or execution affect its next pass; they do not silently
+grant a pending request or change a running session. Memtrace account/session
+settings live in Settings and the compact profile menu, separate from Workers.
 
 | Mode                             | Codex                                          | Claude Code            | Cursor ACP                                 |
 | -------------------------------- | ---------------------------------------------- | ---------------------- | ------------------------------------------ |

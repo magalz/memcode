@@ -57,7 +57,7 @@ const taskPatch = z
     harness: harness.optional(),
     assignment: z.enum(["auto", "manual"]).optional(),
     modelOverride: z.string().max(200).nullable().optional(),
-    permissionMode: z.enum(permissionModes).optional(),
+    permissionMode: z.enum(permissionModes).nullable().optional(),
     epicId: identifier.nullable().optional(),
     dependsOn: z.array(identifier).max(100).optional(),
     scope: z.array(z.string().max(1000)).max(20).optional(),
@@ -76,6 +76,13 @@ const taskPatch = z
   })
   .strict();
 type Handler = { schema: z.ZodType; handle: (input: any) => unknown };
+const workerPermissionDefaults = z
+  .object({
+    codex: z.enum(permissionModes).optional(),
+    claude: z.enum(permissionModes).optional(),
+    cursor: z.enum(["review", "full-access"]).optional(),
+  })
+  .strict();
 
 export async function createRuntime(
   dataDir: string,
@@ -409,9 +416,22 @@ export async function createRuntime(
     },
   );
   register(
+    "worker:permission-default",
+    z.object({ harness, mode: z.enum(permissionModes) }).strict(),
+    async ({ harness: id, mode }) => {
+      const defaults = workerPermissionDefaults.parse({
+        ...state().settings.workerPermissionDefaults,
+        [id]: mode,
+      });
+      state().settings.workerPermissionDefaults = defaults;
+      await changed();
+    },
+  );
+  register(
     "settings:save",
     z
       .object({
+        workerPermissionDefaults: workerPermissionDefaults.optional(),
         memtracePath: z.string().max(1000),
         speechEndpoint: z.string().max(1000),
         speech: speechSettingsSchema.optional(),
@@ -475,7 +495,11 @@ export async function createRuntime(
           "Stop active workers before changing runtime settings.",
         );
       await engine.close();
-      store.state.settings = settings;
+      // A Settings dialog opened before a worker-default change must not erase it.
+      store.state.settings = {
+        ...settings,
+        workerPermissionDefaults: state().settings.workerPermissionDefaults,
+      };
       await changed();
       return store.runtime();
     },
@@ -566,7 +590,7 @@ export async function createRuntime(
       priority,
       harness,
       assignment: z.enum(["auto", "manual"]).optional(),
-      permissionMode: z.enum(permissionModes).optional(),
+      permissionMode: z.enum(permissionModes).nullable().optional(),
       epicId: identifier.nullable().optional(),
       kind: kind.optional(),
       ...taskPlanningShape,

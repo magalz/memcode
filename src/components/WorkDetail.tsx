@@ -1047,6 +1047,7 @@ export function WorkDetail({
               <WorkerAssignment
                 task={task}
                 runtime={runtime}
+                settings={state.settings}
                 connections={state.workerConnections}
                 onConnections={openConnections}
                 busy={busy}

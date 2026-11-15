@@ -1,5 +1,5 @@
 import { spawn, execFile, type ChildProcess } from "node:child_process";
-import { promisify } from "node:util";
+import { promisify, stripVTControlCharacters } from "node:util";
 import { join } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import type { Command } from "./commands";
@@ -10,8 +10,45 @@ type OwnedProcess = {
   child: ChildProcess;
   failed?: Error;
   exited?: number | null;
+  startedAt: number;
+  output: string;
+  progress?: string;
 };
 const execute = promisify(execFile);
+
+/** The host must allow the native sidecar's recovery budget plus its final probe. */
+export function memtraceOwnerTimeoutMs(env: Record<string, string>): number {
+  const configured = Number(env.MEMTRACE_MEMDB_SIDECAR_STARTUP_SECS);
+  const seconds =
+    Number.isInteger(configured) && configured > 0
+      ? Math.min(configured, 3600)
+      : 900;
+  return (seconds + 30) * 1000;
+}
+
+function diagnostic(value: string): string {
+  return stripVTControlCharacters(value)
+    .replace(/\r/g, "\n")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+    .replace(/\bBearer\s+[^\s"',;}]+/gi, "Bearer [redacted]")
+    .replace(
+      /((?:authorization|api[_-]?key|(?:access[_-]?|refresh[_-]?)?token|password|secret|license[_-]?key)["']?\s*[:=]\s*["']?)[^\s"',;}]+/gi,
+      "$1[redacted]",
+    )
+    .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, "$1[redacted]@")
+    .replace(/\bsk-[a-zA-Z0-9_-]{8,}\b/g, "[redacted]")
+    .trim();
+}
+
+function diagnosticSuffix(owned: OwnedProcess): string {
+  const tail = diagnostic(owned.output)
+    .split("\n")
+    .filter(Boolean)
+    .slice(-12)
+    .join("\n")
+    .slice(-4000);
+  return tail ? `\n\n${tail}` : "";
+}
 
 /** A cold stdio session is healthy but cannot query until start publishes an owner. */
 export function pendingMemtraceOwner(error: unknown): boolean {
@@ -77,6 +114,7 @@ export class ManagedMemtraceOwners {
     command: Command,
     env: Record<string, string>,
     probe: () => Promise<void>,
+    onProgress?: (note: string) => void,
   ): Promise<void> {
     if (this.abort.signal.aborted)
       throw Error("The Memtrace connection is closing.");
@@ -114,7 +152,7 @@ export class ManagedMemtraceOwners {
           stdio: ["ignore", "pipe", "pipe"],
         },
       );
-      owned = { child };
+      owned = { child, startedAt: Date.now(), output: "" };
       this.owned.set(scope.dataDirectory, owned);
       const record = owned;
       child.once("error", (error) => {
@@ -125,24 +163,59 @@ export class ManagedMemtraceOwners {
         if (this.owned.get(scope.dataDirectory) === record)
           this.owned.delete(scope.dataDirectory);
       });
-      // Owner output is not MCP and must never block a long-running child.
-      child.stdout?.resume();
-      child.stderr?.resume();
+      // Drain both pipes while retaining only a bounded diagnostic tail. Native
+      // backoff/recovery messages must not disappear behind a generic exit code.
+      const capture = (chunk: Buffer | string) => {
+        record.output = (record.output + chunk.toString()).slice(-8192);
+        const lines = diagnostic(record.output).split("\n").filter(Boolean);
+        const latest = lines
+          .reverse()
+          .find((line) =>
+            /start|recover|migrat|restor|wait|ready|backoff|paused|fail|error/i.test(
+              line,
+            ),
+          );
+        if (latest) record.progress = latest.slice(0, 500);
+      };
+      child.stdout?.on("data", capture);
+      child.stderr?.on("data", capture);
     }
-    const deadline = Date.now() + (this.options.timeoutMs ?? 90_000);
+    const deadline =
+      owned.startedAt + (this.options.timeoutMs ?? memtraceOwnerTimeoutMs(env));
+    let lastProgress = "",
+      lastReport = 0;
+    const report = (note: string) => {
+      if (note === lastProgress && Date.now() - lastReport < 10_000) return;
+      lastProgress = note;
+      lastReport = Date.now();
+      try {
+        onProgress?.(note);
+      } catch {
+        /* A UI observer cannot abort recovery. */
+      }
+    };
     try {
       while (!this.abort.signal.aborted) {
+        const elapsed = Math.floor((Date.now() - owned.startedAt) / 1000);
+        report(
+          owned.progress
+            ? `Memtrace · ${owned.progress}`
+            : `Preparing the local Memtrace engine · ${elapsed}s elapsed. Recovery can take several minutes.`,
+        );
         if (owned.failed)
           throw new Error(
-            "Memtrace could not launch this project's local engine.",
+            "Memtrace could not launch this project's local engine. " +
+              diagnostic(owned.failed.message) +
+              diagnosticSuffix(owned),
             { cause: owned.failed },
           );
         if (owned.exited !== undefined && owned.exited !== 0)
           throw Error(
-            `Memtrace could not start this project's local engine (exit ${owned.exited ?? "signal"}).`,
+            `Memtrace could not start this project's local engine (exit ${owned.exited ?? "signal"}).${diagnosticSuffix(owned)}`,
           );
         try {
           await probe();
+          report("The local Memtrace engine is ready.");
           return;
         } catch (error) {
           if (
@@ -153,7 +226,8 @@ export class ManagedMemtraceOwners {
         }
         if (Date.now() >= deadline)
           throw Error(
-            "Memtrace is taking too long to prepare this project's local engine. Reconnect to try again.",
+            "Memtrace is taking too long to prepare this project's local engine. Reconnect to inspect its state." +
+              diagnosticSuffix(owned),
           );
         await pause(this.options.pollMs ?? 500, undefined, {
           signal: this.abort.signal,

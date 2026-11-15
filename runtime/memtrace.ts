@@ -42,6 +42,7 @@ export class MemtraceEngine {
   private readonly connecting = new Set<Client>();
   private closing = false;
   private opening = new Map<string, Promise<Client>>();
+  private connectionProgress = new Map<string, Set<(note: string) => void>>();
   private scopes = new Map<string, MemtraceScopeBinding>();
   private clients = new Map<
     string,
@@ -52,18 +53,35 @@ export class MemtraceEngine {
     const scope = this.scopes.get(projectId);
     return scope ? { ...scope } : null;
   }
-  async connect(project: Project): Promise<Client> {
+  async connect(
+    project: Project,
+    update?: (note: string) => void,
+  ): Promise<Client> {
     if (this.closing) throw Error("The Memtrace connection is closing.");
     const existing = this.clients.get(project.id);
     if (existing) return existing.client;
-    const pending = this.opening.get(project.id);
-    if (pending) return pending;
-    const connection = this.open(
-      project,
-      this.scopes.get(project.id)?.mode === "project",
-    ).finally(() => this.opening.delete(project.id));
-    this.opening.set(project.id, connection);
-    return connection;
+    if (update) {
+      let listeners = this.connectionProgress.get(project.id);
+      if (!listeners)
+        this.connectionProgress.set(project.id, (listeners = new Set()));
+      listeners.add(update);
+    }
+    try {
+      const pending = this.opening.get(project.id);
+      if (pending) return await pending;
+      const connection = this.open(
+        project,
+        this.scopes.get(project.id)?.mode === "project",
+      ).finally(() => this.opening.delete(project.id));
+      this.opening.set(project.id, connection);
+      return await connection;
+    } finally {
+      if (update) {
+        const listeners = this.connectionProgress.get(project.id);
+        listeners?.delete(update);
+        if (!listeners?.size) this.connectionProgress.delete(project.id);
+      }
+    }
   }
   private async open(
     project: Project,
@@ -153,11 +171,26 @@ export class MemtraceEngine {
           await disconnect();
           return this.open(project, true);
         }
-        await this.owners.ready(local, command, env, async () => {
-          // Pending clients can retain a stale attachment during owner election.
-          await attach();
-          discovered = await discover();
-        });
+        await this.owners.ready(
+          local,
+          command,
+          env,
+          async () => {
+            // Pending clients can retain a stale attachment during owner election.
+            await attach();
+            discovered = await discover();
+          },
+          (note) => {
+            for (const listener of this.connectionProgress.get(project.id) ??
+              []) {
+              try {
+                listener(note);
+              } catch {
+                /* Keep connection ownership independent of UI. */
+              }
+            }
+          },
+        );
       }
       const repos: Json[] = Array.isArray(discovered)
         ? discovered
@@ -259,6 +292,7 @@ export class MemtraceEngine {
     force = false,
   ): Promise<string> {
     update("Connecting to the local Memtrace engine…");
+    await this.connect(project, update);
     const result = await this.call(project, "list_indexed_repositories", {});
     const repos: Json[] = Array.isArray(result) ? result : (result.repos ?? []);
     const normalize = (s: string) =>

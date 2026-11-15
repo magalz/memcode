@@ -1,7 +1,19 @@
-import type { Harness } from "./shared";
+import type { Harness, Settings, WorkItem } from "./shared";
 
 export const permissionModes = ["review", "auto", "full-access"] as const;
 export type PermissionMode = (typeof permissionModes)[number];
+
+export function effectivePermissionMode(
+  task: Pick<WorkItem, "permissionMode" | "harness">,
+  settings: Pick<Settings, "workerPermissionDefaults">,
+  harness: Harness = task.harness,
+): PermissionMode {
+  return (
+    task.permissionMode ??
+    settings.workerPermissionDefaults?.[harness] ??
+    "review"
+  );
+}
 
 export const permissionLabels: Record<PermissionMode, string> = {
   review: "Review",

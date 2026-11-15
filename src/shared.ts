@@ -149,7 +149,7 @@ export interface WorkItem extends TaskPlanningFields {
   harness: Harness;
   assignment?: "auto" | "manual";
   modelOverride?: string | null;
-  permissionMode?: import("./permissions").PermissionMode;
+  permissionMode?: import("./permissions").PermissionMode | null;
   route?: RouteDecision;
   epicId?: string | null;
   dependsOn?: string[];
@@ -193,6 +193,9 @@ export interface Project {
   example?: boolean;
 }
 export interface Settings {
+  workerPermissionDefaults?: Partial<
+    Record<Harness, import("./permissions").PermissionMode>
+  >;
   speech?: import("./speech").SpeechSettings;
   contextAssistant?: ContextAssistantSettings;
   memtracePath: string;
@@ -284,7 +287,7 @@ export interface CreateTask extends TaskPlanningFields {
   priority: Priority;
   harness: Harness;
   assignment?: "auto" | "manual";
-  permissionMode?: import("./permissions").PermissionMode;
+  permissionMode?: import("./permissions").PermissionMode | null;
   epicId?: string | null;
   kind?: WorkItem["kind"];
 }
@@ -437,6 +440,10 @@ export interface MemCodeAPI {
   startWorker(id: string): Promise<void>;
   stopWorker(id: string): Promise<void>;
   saveSettings(settings: Settings): Promise<RuntimeInfo>;
+  setWorkerPermissionDefault(
+    harness: Harness,
+    mode: import("./permissions").PermissionMode,
+  ): Promise<void>;
   showPreview(input: PreviewInput): Promise<void>;
   browser(taskId: string, request: BrowserRequest): Promise<BrowserReply>;
   hidePreview(): Promise<void>;

@@ -1,10 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import type { ChildProcess, spawn } from "node:child_process";
 import {
   ManagedMemtraceOwners,
   pendingMemtraceOwner,
+  memtraceOwnerTimeoutMs,
 } from "../runtime/memtrace-owner.ts";
 
 const pending = () =>
@@ -24,8 +26,8 @@ function fixture() {
     pid: 123456,
     exitCode: null as number | null,
     signalCode: null,
-    stdout: { resume() {} },
-    stderr: { resume() {} },
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
   }) as unknown as ChildProcess;
   const spawns: unknown[][] = [],
     stopped: ChildProcess[] = [];
@@ -149,4 +151,88 @@ test("close cancels bootstrap and cannot launch or stop a borrowed owner", async
     /closing/,
   );
   assert.equal(f.spawns.length, 1);
+});
+
+test("owner readiness budget includes native recovery timeout instead of a 90 second cutoff", () => {
+  assert.equal(memtraceOwnerTimeoutMs({}), 930_000);
+  assert.equal(
+    memtraceOwnerTimeoutMs({ MEMTRACE_MEMDB_SIDECAR_STARTUP_SECS: "1200" }),
+    1_230_000,
+  );
+  assert.equal(
+    memtraceOwnerTimeoutMs({ MEMTRACE_MEMDB_SIDECAR_STARTUP_SECS: "-1" }),
+    930_000,
+  );
+  assert.equal(
+    memtraceOwnerTimeoutMs({ MEMTRACE_MEMDB_SIDECAR_STARTUP_SECS: "invalid" }),
+    930_000,
+  );
+  assert.equal(
+    memtraceOwnerTimeoutMs({ MEMTRACE_MEMDB_SIDECAR_STARTUP_SECS: "7200" }),
+    3_630_000,
+  );
+});
+
+test("native startup backoff is visible and bounded with sensitive values redacted", async () => {
+  const f = fixture();
+  let probes = 0;
+  await assert.rejects(
+    f.owners.ready(scope, command, {}, async () => {
+      if (++probes > 1) {
+        f.child.stderr!.emit(
+          "data",
+          Buffer.from(
+            "earlier noise ".repeat(2000) +
+              "\n\u001b[31mStartup is paused after 3 failures. Use MEMTRACE_MEMDB_STARTUP_RETRY=1 for an explicit retry.\u001b[0m\napi_key=private-key password:private-pass Authorization: Bearer private-token\n",
+          ),
+        );
+        f.child.emit("close", 1);
+      }
+      throw pending();
+    }),
+    (error) => {
+      const message = (error as Error).message;
+      assert.match(message, /Startup is paused after 3 failures/);
+      assert.match(message, /MEMTRACE_MEMDB_STARTUP_RETRY=1/);
+      assert.match(message, /exit 1/);
+      assert.ok(message.length < 4300);
+      assert.doesNotMatch(
+        message,
+        /private-key|private-pass|private-token|\u001b/,
+      );
+      return true;
+    },
+  );
+  assert.equal(f.spawns.length, 1, "No automatic retry is attempted");
+  await f.owners.close();
+});
+
+test("native recovery progress reaches the connection observer before readiness", async () => {
+  const f = fixture(),
+    notes: string[] = [];
+  let probes = 0;
+  await f.owners.ready(
+    scope,
+    command,
+    {},
+    async () => {
+      if (++probes < 4) {
+        if (probes === 2)
+          f.child.stderr!.emit(
+            "data",
+            Buffer.from("Recovering the existing code graph · pass 2\n"),
+          );
+        throw pending();
+      }
+    },
+    (note) => notes.push(note),
+  );
+  assert.ok(
+    notes.some((note) => /Preparing the local Memtrace engine/.test(note)),
+  );
+  assert.ok(
+    notes.some((note) => /Recovering the existing code graph/.test(note)),
+  );
+  assert.match(notes.at(-1)!, /engine is ready/);
+  await f.owners.close();
 });

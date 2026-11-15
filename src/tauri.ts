@@ -141,6 +141,8 @@ export async function installNativeBridge(): Promise<void> {
     saveCustomFields: (projectId, fields) =>
       call("fields:save", { projectId, fields }),
     saveSettings: (settings) => call("settings:save", settings),
+    setWorkerPermissionDefault: (harness, mode) =>
+      call("worker:permission-default", { harness, mode }),
     showPreview: (input) => call("preview:show", input),
     browser: (taskId, request) => call("browser:request", { taskId, request }),
     hidePreview: () => call("preview:hide"),

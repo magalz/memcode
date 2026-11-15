@@ -350,7 +350,7 @@ export function App() {
       return;
     }
     if (destination === "account") {
-      setView("workers");
+      setDialog("settings");
       return;
     }
     setView(destination);
@@ -416,7 +416,7 @@ export function App() {
         </div>
         <div className="titlebar-center">
           <span className="tiny-local-dot" />
-          Local workspace
+          {import.meta.env.DEV ? "Development · live UI" : "Local workspace"}
         </div>
         <div className="window-controls">
           <button
@@ -714,7 +714,6 @@ export function App() {
                     )
                   );
                 })}
-              <AccountConnections notify={notify} onStatus={setAccount} />
               <WorkerConnections
                 runtime={runtime}
                 state={state}
@@ -978,6 +977,7 @@ export function App() {
           onClose={() => setDialog(null)}
           onSaved={setRuntime}
           notify={notify}
+          onAccountStatus={setAccount}
         />
       )}
       {dialog === "search" && (

@@ -37,6 +37,7 @@ import { workerToolProfile, type WorkerToolProfile } from "./worker-profile";
 import { watchArtifacts } from "./artifact-watch";
 import { WorkerInputs } from "./worker-input";
 import { startHarnessSession } from "./agents";
+import { effectivePermissionMode } from "../src/permissions";
 import type { AgentEvent } from "./agents/types";
 import {
   claimReviewContext,
@@ -423,7 +424,14 @@ export class WorkerManager {
           "Worker preparation was cancelled. Any checkout is preserved.",
         );
     };
-    const permissionMode = task.permissionMode ?? "review";
+    const permissionPreference = task.permissionMode;
+    const permissionSettings = {
+      ...this.state().settings,
+      workerPermissionDefaults: {
+        ...this.state().settings.workerPermissionDefaults,
+      },
+    };
+    let permissionMode = effectivePermissionMode(task, permissionSettings);
     task.run = {
       ...task.run,
       state: "preparing",
@@ -512,11 +520,17 @@ export class WorkerManager {
       if (!approved.length)
         throw Error("Connect a worker in Workers before starting a worker.");
       task.route = planRoute(
-        { ...task, permissionMode },
+        { ...task, permissionMode: permissionPreference },
         task.evidence,
         approved,
-        this.state().settings,
+        permissionSettings,
       );
+      permissionMode = effectivePermissionMode(
+        { ...task, permissionMode: permissionPreference },
+        permissionSettings,
+        task.route.harness,
+      );
+      task.run.permissionMode = permissionMode;
       task.harness = task.route.harness;
       assertWorkerConnected(this.state(), task.harness);
       const command = await this.resolveCommand(task.harness);
