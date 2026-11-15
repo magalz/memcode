@@ -1,0 +1,12 @@
+{
+  "date": "2026-11-15",
+  "scope": "Named teams, invitation-first project opening, local repository setup and account lifecycle",
+  "sourceTests": { "passed": 345, "failed": 0, "log": ".memcode/verification/collaboration-release-suite.log" },
+  "additionalRecoveryTests": { "passed": 19, "failed": 0, "log": ".memcode/verification/collaboration-final-recovery.log" },
+  "renderer": { "synthetic": true, "onboardingFlows": 13, "accountFlows": 11, "consoleErrors": 0, "onboardingCommand": "node scripts/team-onboarding-smoke.mjs", "accountCommand": "node scripts/account-ui-smoke.mjs" },
+  "repository": { "passed": 9, "realGitClone": true, "dirtyFilesPreserved": true, "cancellationTerminatesOwnedProcessTree": true },
+  "checks": { "typecheck": true, "productionBuild": true, "windowsNativeDebugBuild": true, "nativeUrlValidationTests": 2, "highConfidenceCredentialScanFindings": 0 },
+  "identity": { "webReleaseCommit": "1c52dd3e52be0c9b76448b6a8aacac5831720acc", "webTargetedTests": 20, "actualIssuerToActualRelayIntegration": "passed with synthetic users and an ephemeral key", "productionJwks": 200, "productionPublicKeyVerified": true, "invalidProductionAuthorization": 400, "invalidProductionExchange": 400, "realBrowserConsent": "Found no-referrer/Origin:null regression on first live approval; correction and re-verification pending" },
+  "native": { "actualMainProfileOpened": true, "separatePilotProfileOpened": true, "configuredTeamService": true, "liveIdentityReadiness": true, "realAccountMembership": "pending browser consent correction" },
+  "limitations": ["Physical macOS and two-computer acceptance remains a separate test", "Source changes use Git; uncommitted files and cross-computer Fleet are not replicated", "Remote pilot uses an invitation-protected temporary HTTPS relay which requires its host to keep running", "Owner service configuration is operator-managed in this pilot; invitees receive it through their invitation", "Published outputs are explicit individual files up to 5 MiB"]
+}

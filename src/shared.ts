@@ -229,6 +229,8 @@ export interface CreateEpic {
 /** Public collaboration state. Invitation and member credentials never enter renderer state. */
 export interface TeamWorkspaceState {
   projectId: string;
+  teamId?: string;
+  teamName?: string;
   connection: "online" | "syncing" | "offline" | "connecting";
   workspace: import("./team").TeamSnapshot;
   memberId: string;
@@ -237,7 +239,7 @@ export interface TeamWorkspaceState {
   unreadCount: number;
   lastSyncedAt?: string;
   error?: string;
-  mode?: "invite-preview";
+  mode?: "invite-preview" | "memtrace";
 }
 export interface TeamInvite {
   endpoint: string;
@@ -331,6 +333,61 @@ export interface PreviewInput {
   bounds: { x: number; y: number; width: number; height: number };
 }
 export interface MemCodeAPI {
+  teamsList(): Promise<import("./team-space").TeamDirectory>;
+  createTeamWorkspace(input: {
+    name: string;
+  }): Promise<import("./team-space").WorkspaceTeam>;
+  shareTeamProject(input: {
+    teamId: string;
+    projectId: string;
+    repository?: import("./repository").RepositoryDescriptor;
+  }): Promise<TeamWorkspaceState>;
+  openTeamProject(input: {
+    teamId: string;
+    workspaceId: string;
+  }): Promise<TeamWorkspaceState>;
+  inviteTeamMember(input: {
+    teamId: string;
+    projectWorkspaceId?: string;
+    email?: string;
+  }): Promise<import("./team-space").TeamMemberInvitation>;
+  previewTeamInvitation(input: {
+    invite: string;
+  }): Promise<import("./team-space").TeamInvitationPreview>;
+  acceptTeamInvitation(input: {
+    invite: string;
+  }): Promise<import("./team-space").AcceptedTeamInvitation>;
+  revokeTeamMember(input: { teamId: string; memberId: string }): Promise<void>;
+  revokeTeamInvitation(input: {
+    teamId: string;
+    invitationId: string;
+  }): Promise<void>;
+  reauthenticateTeam(input: {
+    teamId: string;
+  }): Promise<import("./team-space").WorkspaceTeam>;
+  cancelTeamSignIn(): Promise<void>;
+  inspectProjectRepository(
+    projectId: string,
+  ): Promise<import("./repository").RepositoryInspection>;
+  findProjectCheckouts(
+    repository: import("./repository").RepositoryDescriptor,
+  ): Promise<import("./repository").RepositoryInspection[]>;
+  repositoryAccess(
+    repository: import("./repository").RepositoryDescriptor,
+  ): Promise<import("./repository").RepositoryAccess>;
+  cloneProjectRepository(input: {
+    projectId: string;
+    repository: import("./repository").RepositoryDescriptor;
+    parent: string;
+    name: string;
+  }): Promise<Project>;
+  cancelRepositorySetup(projectId: string): Promise<void>;
+  repositorySetupStatus(
+    projectId: string,
+  ): Promise<import("./repository").RepositoryProgress | null>;
+  githubRepositorySignIn(
+    action: "start" | "status" | "cancel",
+  ): Promise<import("./repository").RepositoryGitHubSignIn>;
   teamStatus(projectId: string): Promise<TeamWorkspaceState | null>;
   teamCreate(input: {
     projectId: string;
@@ -341,10 +398,11 @@ export interface MemCodeAPI {
     advertisedHost?: string;
   }): Promise<TeamWorkspaceState>;
   teamJoin(input: {
-    projectId: string;
+    projectId?: string;
     invite: string;
     displayName: string;
   }): Promise<TeamWorkspaceState>;
+  bindProjectFolder(projectId: string, path: string): Promise<Project>;
   teamInvite(projectId: string): Promise<TeamInvite>;
   teamLeave(projectId: string): Promise<void>;
   teamRelease(
@@ -397,6 +455,9 @@ export interface MemCodeAPI {
   disconnectWorker(harness: Harness): Promise<void>;
   accountStatus(): Promise<import("./connections").MemtraceAccount>;
   signInMemtrace(): Promise<import("./connections").MemtraceAccount>;
+  signOutMemtrace(): Promise<import("./connections").MemtraceAccount>;
+  switchMemtraceAccount(): Promise<import("./connections").MemtraceAccount>;
+  cancelMemtraceSignIn(): Promise<import("./connections").MemtraceAccount>;
   speechStatus(): Promise<import("./speech").SpeechStatus>;
   prepareSpeech(): Promise<import("./speech").SpeechStatus>;
   installSpeech(): Promise<import("./speech").SpeechStatus>;

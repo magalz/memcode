@@ -18,7 +18,7 @@ const relay = await startTeamRelay({
 });
 console.log(`Private Team Sync preview listening at ${relay.url}`);
 console.log(
-  `Setup capability is stored locally in ${relay.adminFile}. It is not a verified Memtrace organization identity.`,
+  `Service administration is stored locally in ${relay.adminFile}. Named team members sign in with Memtrace; legacy preview invitations use separate access.`,
 );
 for (const signal of ["SIGINT", "SIGTERM"])
   process.once(signal, () => {

@@ -2,7 +2,7 @@ import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { networkInterfaces } from "node:os";
-import type { AppState, Artifact, TeamWorkspaceState, WorkItem } from "../../src/shared";
+import type { AppState, Artifact, Project, TeamWorkspaceState, WorkItem } from "../../src/shared";
 import type { TeamClaim, TeamCommand, TeamCommandReply, TeamCredential, TeamInvite, TeamResult, TeamSessionReply, TeamSnapshot } from "../../src/team";
 import { applyTeamEvent, teamSessionReplySchema, teamSyncReplySchema } from "./protocol";
 import { startTeamRelay } from "./relay";
@@ -11,6 +11,12 @@ import { replaceWorkspace } from "../persistence";
 import { outputRoots } from "../files";
 import { within } from "../local";
 import type { TeamWorkerClaims } from "../workers";
+import { emptyTeamLocalIds, localTeamId, localTeamProjection, localTeamSnapshot, remoteTeamId, remoteTeamProjection, type TeamLocalIds } from "./identity";
+import type { AcceptedTeamInvitation, TeamDirectory, TeamInvitationPreview, TeamMemberInvitation, WorkspaceTeam } from "../../src/team-space";
+import type { RepositoryDescriptor } from "../../src/repository";
+import type { TeamIdentityChallenge, TeamIdentityProofProvider } from "../team-identity";
+import type { TeamSpaceCredential, TeamSpaceSession } from "./spaces";
+import { formatTeamInvitation, parseTeamInvitation } from "./invitation";
 
 interface PendingCommand { opId: string; command: TeamCommand; deletionId?: string }
 interface DeletionBackup {
@@ -27,17 +33,26 @@ interface SavedConnection {
   claimAttempts?: Record<string, { opId: string; attemptId: string; state: "requesting" | "owned" }>;
   rejected?: Array<{ opId: string; command: TeamCommand; message: string; at: string }>;
   deletions?: DeletionBackup[];
+  /** Only invitation-created projects need a namespace for their local records. */
+  localIds?: TeamLocalIds;
+  /** Recovers the linked board if private credentials were saved before workspace.json. */
+  linkedProject?: Project;
+  teamId?: string;
+  repository?: RepositoryDescriptor;
 }
 interface Connection extends SavedConnection {
   status: TeamWorkspaceState["connection"]; error?: string; lastSyncedAt?: string;
   flushing?: Promise<void>; leases: Map<string, TeamClaim>;
   preparingDeletionId?: string;
 }
-interface PrivateProfile { version: 1; deviceId: string; host?: { port: number; bind?: string; advertisedEndpoint?: string }; connections: SavedConnection[] }
+interface SavedTeam { endpoint: string; credential: TeamSpaceCredential; snapshot: WorkspaceTeam; locked?: boolean }
+interface PrivateProfile { version: 1; deviceId: string; host?: { port: number; bind?: string; advertisedEndpoint?: string }; connections: SavedConnection[]; teams?: SavedTeam[]; projectShares?: Record<string, string>; teamCreates?: Array<{name:string;opId:string}> }
 export interface TeamClientOptions {
   fetch?: typeof fetch;
   /** Tests can synchronize explicitly without a background long poll. */
   background?: boolean;
+  identityProof?: TeamIdentityProofProvider;
+  identityAvailable?: () => Promise<boolean>;
 }
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const mimeTypes: Record<string, string> = {
@@ -91,6 +106,10 @@ export class TeamSyncClient implements TeamWorkerClaims {
   private connections = new Map<string, Connection>();
   private unavailable = new Map<string, TeamWorkspaceState>();
   private pendingShares = new Set<string>();
+  private pendingJoins = new Set<string>();
+  private pendingOpens = new Map<string,Promise<TeamWorkspaceState>>();
+  private creatingTeam = false;
+  private accountEpoch = 0;
   private writes: Promise<void> = Promise.resolve();
   private requests = new Set<AbortController>();
   private closed = false;
@@ -117,6 +136,10 @@ export class TeamSyncClient implements TeamWorkerClaims {
     }
     this.state().team = [];
     for (const saved of this.profile.connections) {
+      if (!this.state().projects.some((project) => project.id === saved.projectId) && saved.linkedProject) {
+        this.state().projects.push(structuredClone(saved.linkedProject));
+        this.state().activeProjectId = saved.projectId;
+      }
       if (!this.state().projects.some((project) => project.id === saved.projectId)) continue;
       const connection: Connection = { ...saved, status: "connecting", leases: new Map() };
       this.connections.set(saved.projectId, connection);
@@ -127,7 +150,8 @@ export class TeamSyncClient implements TeamWorkerClaims {
           const known = new Set(connection.baseline[collection].map((item) => item.id));
           // The old renderer snapshot is a managed-ID mask only. Canonical
           // values come from the durable private snapshot and pending outbox.
-          (connection.baseline[collection] as Array<{ id: string }>).push(...previous[collection].filter((item) => !known.has(item.id)));
+          const remotePrevious = remoteTeamProjection(connection, { ...emptySharedProjection(), [collection]: previous[collection] });
+          (connection.baseline[collection] as Array<{ id: string }>).push(...remotePrevious[collection].filter((item) => !known.has(item.id)));
         }
       }
       this.apply(connection);
@@ -140,7 +164,7 @@ export class TeamSyncClient implements TeamWorkerClaims {
     for (const connection of this.connections.values()) this.startLoop(connection);
   }
   private persist(): Promise<void> {
-    const connections = [...this.connections.values()].map(({ projectId, endpoint, credential, snapshot, baseline, outbox, cursor, readThrough, claimAttempts, rejected, deletions }) => ({ projectId, endpoint, credential, snapshot, baseline, outbox, cursor, readThrough, claimAttempts, rejected, deletions }));
+    const connections = [...this.connections.values()].map(({ projectId, endpoint, credential, snapshot, baseline, outbox, cursor, readThrough, claimAttempts, rejected, deletions, localIds, linkedProject, teamId, repository }) => ({ projectId, endpoint, credential, snapshot, baseline, outbox, cursor, readThrough, claimAttempts, rejected, deletions, localIds, linkedProject, teamId, repository }));
     const serialized = JSON.stringify({ ...this.profile, connections });
     const pending = this.writes.catch(() => {}).then(async () => {
       const temp = `${this.file}.next`;
@@ -152,11 +176,12 @@ export class TeamSyncClient implements TeamWorkerClaims {
   }
   private publishState(): void {
     this.state().team = [...this.unavailable.values(), ...[...this.connections.values()].map((connection) => ({
-      projectId: connection.projectId, connection: connection.status, workspace: structuredClone(connection.snapshot),
+      projectId: connection.projectId, connection: connection.status, workspace: structuredClone(localTeamSnapshot(connection, connection.snapshot)),
+      ...(connection.teamId ? {teamId:connection.teamId,teamName:this.profile.teams?.find((item)=>item.credential.teamId===connection.teamId)?.snapshot.name} : {}),
       memberId: connection.credential.memberId, deviceId: connection.credential.deviceId,
       pendingCount: connection.outbox.length,
       unreadCount: connection.snapshot.activity.filter((item) => item.sequence > connection.readThrough && item.memberId !== connection.credential.memberId).length,
-      lastSyncedAt: connection.lastSyncedAt, error: connection.error, mode: "invite-preview" as const,
+      lastSyncedAt: connection.lastSyncedAt, error: connection.error, mode: connection.teamId ? "memtrace" as const : "invite-preview" as const,
     }))];
   }
   status(projectId: string): TeamWorkspaceState | null {
@@ -171,7 +196,7 @@ export class TeamSyncClient implements TeamWorkerClaims {
   async capture(): Promise<void> {
     let dirty = false;
     for (const connection of this.connections.values()) {
-      const next = projectSharedState(this.state(), connection.projectId);
+      const next = remoteTeamProjection(connection, projectSharedState(this.state(), connection.projectId));
       const commands = sharedCommands(connection.baseline, next);
       if (!commands.length) continue;
       connection.baseline = next;
@@ -187,6 +212,7 @@ export class TeamSyncClient implements TeamWorkerClaims {
     if (this.options.background !== false) for (const connection of this.connections.values()) void this.flush(connection).catch(() => {});
   }
   private async request<T>(endpoint: string, path: string, capability: string | undefined, body?: unknown, waitMs = 0, raw?: Uint8Array, rawMime = "application/octet-stream", binary = false): Promise<T> {
+    if (capability && this.profile.teams?.some((team) => team.endpoint === endpoint && team.credential.capability === capability && team.locked)) throw Error("Reconnect this Team with your Memtrace account before syncing. Local work and queued changes are preserved.");
     const controller = new AbortController();
     this.requests.add(controller);
     const timer = setTimeout(() => controller.abort(), Math.max(10000, waitMs + 5000));
@@ -230,8 +256,8 @@ export class TeamSyncClient implements TeamWorkerClaims {
   }
   private apply(connection: Connection): void {
     for (const backup of connection.deletions ?? []) if (backup.rejected) this.restoreDeletion(connection, backup);
-    applySharedSnapshot(this.state(), connection.projectId, optimistic(connection.snapshot, connection.outbox, connection.baseline, connection.credential.memberId), connection.baseline);
-    connection.baseline = projectSharedState(this.state(), connection.projectId);
+    applySharedSnapshot(this.state(), connection.projectId, localTeamSnapshot(connection, optimistic(connection.snapshot, connection.outbox, connection.baseline, connection.credential.memberId)), localTeamProjection(connection, connection.baseline));
+    connection.baseline = remoteTeamProjection(connection, projectSharedState(this.state(), connection.projectId));
   }
   private async pull(connection: Connection, waitMs = 0): Promise<void> {
     const query = new URLSearchParams({ workspaceId: connection.credential.workspaceId, after: String(connection.cursor), waitMs: String(waitMs) });
@@ -264,7 +290,8 @@ export class TeamSyncClient implements TeamWorkerClaims {
             reply = await this.request<TeamCommandReply>(connection.endpoint, "/v1/commands", connection.credential.capability, { workspaceId: connection.credential.workspaceId, opId: operation.opId, command: operation.command });
           } catch (error) {
             const status = (error as Error & { status?: number }).status;
-            if (!status || status >= 500 || status === 408 || status === 429 || status === 401) throw error;
+            const code = (error as Error & { code?: string }).code;
+            if (!status || status >= 500 || status === 408 || status === 429 || status === 401 || ["AUTH", "TEAM_AUTH", "TEAM_REVOKED"].includes(code ?? "")) throw error;
             // A semantic rejection must not hold unrelated later edits hostage.
             connection.rejected = [...(connection.rejected ?? []), { ...operation, message: message(error), at: new Date().toISOString() }].slice(-50);
             const backup = connection.deletions?.find((item) => item.id === operation.deletionId);
@@ -307,6 +334,10 @@ export class TeamSyncClient implements TeamWorkerClaims {
     if (this.options.background === false) return;
     void (async () => {
       while (!this.closed && this.connections.get(connection.projectId) === connection) {
+        if (connection.teamId && this.profile.teams?.some((team) => team.credential.teamId === connection.teamId && team.locked)) {
+          await new Promise<void>((resolve) => { const timer = setTimeout(resolve, 1500); timer.unref(); });
+          continue;
+        }
         try { await this.flush(connection); await this.pull(connection, 10000); }
         catch (error) {
           if (this.closed) break;
@@ -330,7 +361,7 @@ export class TeamSyncClient implements TeamWorkerClaims {
     const taskIds = new Set(this.state().tasks.filter((task) => method === "story:delete" ? task.id === id : method === "epic:delete" ? task.epicId === id : task.cycleId === id).map((task) => task.id));
     if (method === "story:delete") for (const taskId of taskIds) for (const task of this.state().tasks) if (task.parentId === taskId) taskIds.add(task.id);
     const connection = this.connection(entity.projectId);
-    const claim = connection.snapshot.claims.find((claim) => taskIds.has(claim.storyId));
+    const claim = connection.snapshot.claims.find((claim) => taskIds.has(localTeamId(connection, "story", claim.storyId)));
     if (claim) {
       const owner = connection.snapshot.members.find((member) => member.id === claim.memberId)?.name ?? "A teammate";
       throw Error(`${owner} has an active story claim. Stop or hand off that worker before deleting this planning item.`);
@@ -376,7 +407,7 @@ export class TeamSyncClient implements TeamWorkerClaims {
   }
   private restoreDeletion(connection: Connection, backup: DeletionBackup): void {
     const state = this.state();
-    const retained = new Set(connection.snapshot.stories.map((story) => story.id));
+    const retained = new Set(connection.snapshot.stories.map((story) => localTeamId(connection, "story", story.id)));
     const ids = new Set(backup.tasks.filter((task) => retained.has(task.id)).map((task) => task.id));
     for (const task of backup.tasks) if (ids.has(task.id)) {
       const index = state.tasks.findIndex((item) => item.id === task.id);
@@ -392,19 +423,223 @@ export class TeamSyncClient implements TeamWorkerClaims {
     restore(state.reviewComments ??= [], backup.reviews.filter((item) => ids.has(item.taskId)));
     restore(state.planning.events, backup.events.filter((item) => ids.has(item.taskId)));
     for (const [taskId, observation] of Object.entries(backup.observations)) if (ids.has(taskId)) state.planning.observations[taskId] = structuredClone(observation);
-    restore(state.epics, backup.epics.filter((item) => connection.snapshot.epics.some((epic) => epic.id === item.id)));
-    restore(state.cycles, backup.cycles.filter((item) => connection.snapshot.cycles.some((cycle) => cycle.id === item.id)));
+    restore(state.epics, backup.epics.filter((item) => connection.snapshot.epics.some((epic) => localTeamId(connection, "epic", epic.id) === item.id)));
+    restore(state.cycles, backup.cycles.filter((item) => connection.snapshot.cycles.some((cycle) => localTeamId(connection, "cycle", cycle.id) === item.id)));
   }
-  private async attach(projectId: string, endpoint: string, reply: TeamSessionReply, baseline: SharedProjection) {
+  private async attach(projectId: string, endpoint: string, reply: TeamSessionReply, baseline: SharedProjection, linkedProject?: Project, binding?: { teamId: string; repository?: RepositoryDescriptor }) {
     if ([...this.connections.values()].some((connection) => connection.credential.workspaceId === reply.credential.workspaceId && connection.endpoint === endpoint)) throw Error("This team is already connected to another local project in this profile. Open that project instead.");
-    const connection: Connection = { projectId, endpoint, credential: reply.credential, snapshot: reply.snapshot, baseline, outbox: [], cursor: reply.snapshot.head, readThrough: 0, status: "online", leases: new Map() };
+    const connection: Connection = { projectId, endpoint, credential: reply.credential, snapshot: reply.snapshot, baseline, outbox: [], cursor: reply.snapshot.head, readThrough: 0, status: "online", leases: new Map(), ...(linkedProject ? { localIds: emptyTeamLocalIds(), linkedProject } : {}), ...binding };
     // Validate the entire incoming projection before persisting credentials or
     // modifying the real workspace, so a failed binding leaves no half-join.
-    applySharedSnapshot(structuredClone(this.state()), projectId, reply.snapshot, baseline);
+    const staged = structuredClone(this.state());
+    if (linkedProject) staged.projects.push(structuredClone(linkedProject));
+    applySharedSnapshot(staged, projectId, localTeamSnapshot(connection, reply.snapshot), localTeamProjection(connection, baseline));
     this.connections.set(projectId, connection);
-    await this.persist();
+    try { await this.persist(); } catch (error) { this.connections.delete(projectId); throw error; }
+    if (linkedProject) this.state().projects.push(linkedProject);
+    this.state().activeProjectId = projectId;
     this.apply(connection); this.publishState(); await this.changed(); this.startLoop(connection);
     return this.status(projectId)!;
+  }
+  private device() { return { deviceId: this.profile.deviceId, deviceName: process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "Mac" : "Linux" }; }
+  private async serviceConfiguration(): Promise<{ endpoint: string; bootstrapSecret?: string } | undefined> {
+    try {
+      const value = JSON.parse(await readFile(join(this.dataDir, "team", "service.private.json"), "utf8")) as { endpoint: string; bootstrapSecret?: string };
+      return { endpoint: endpointURL(value.endpoint), ...(value.bootstrapSecret ? { bootstrapSecret: value.bootstrapSecret } : {}) };
+    } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw Error("The private Team service configuration is invalid. Its file has been preserved."); }
+  }
+  private savedTeam(teamId: string, allowLocked = false): SavedTeam {
+    const value = this.profile.teams?.find((team) => team.credential.teamId === teamId);
+    if (!value) throw Error("Join this Team with your Memtrace account first.");
+    if (value.locked && !allowLocked) throw Error("Reconnect this Team with your Memtrace account first. Local work and queued changes are preserved.");
+    return value;
+  }
+  private async saveTeam(endpoint: string, session: TeamSpaceSession) {
+    const prior = this.profile.teams ?? [];
+    if(prior.some((item)=>item.credential.teamId===session.credential.teamId&&item.endpoint!==endpoint))throw Error("This Team identifier is already bound to a different service. Existing Team connections have been preserved.");
+    const previous = prior.find((item)=>item.endpoint===endpoint&&item.credential.teamId===session.credential.teamId);
+    if(previous&&previous.credential.subject!==session.credential.subject) throw Error("This local Team binding belongs to another Memtrace account. Its saved work has been preserved.");
+    const credentials = new Map<string,TeamCredential>();
+    for(const connection of this.connections.values()) if(connection.endpoint===endpoint&&connection.teamId===session.credential.teamId){
+      credentials.set(connection.projectId,connection.credential);
+      connection.credential={workspaceId:connection.credential.workspaceId,memberId:session.credential.memberId,deviceId:session.credential.deviceId,capability:session.credential.capability};
+    }
+    this.profile.teams = [...prior.filter((item) => item.credential.teamId !== session.credential.teamId || item.endpoint !== endpoint), { endpoint, credential: session.credential, snapshot: session.team }];
+    try { await this.persist(); } catch (error) { this.profile.teams = prior;for(const[id,credential]of credentials)this.connection(id).credential=credential; throw error; }
+  }
+  private async accountProof(endpoint: string): Promise<{ proof: string; nonce: string }> {
+    const epoch = this.accountEpoch;
+    if (!this.options.identityProof) throw Error("Verified Team sign-in is not configured in this MemCode runtime. Your existing local work is preserved.");
+    const challenge = await this.request<TeamIdentityChallenge>(endpoint, "/v1/team-auth/challenge", undefined);
+    if (challenge.audience !== endpointURL(endpoint) || !/^[A-Za-z0-9_-]{32,200}$/.test(challenge.nonce) || !Number.isFinite(Date.parse(challenge.expiresAt)) || Date.parse(challenge.expiresAt) > Date.now() + 5 * 60 * 1000 + 10000) throw Error("The Team service returned an invalid identity challenge.");
+    const proof = await this.options.identityProof(challenge);
+    if (epoch !== this.accountEpoch) throw Error("The Memtrace account changed during sign-in. Retry with the account you want to use.");
+    return { proof, nonce: challenge.nonce };
+  }
+  private decoratedTeam(saved: SavedTeam, connection: WorkspaceTeam["connection"] = "online", error?: string): WorkspaceTeam {
+    const value = structuredClone(saved.snapshot);
+    value.projects = value.projects.map((project) => ({ ...project, localProjectId: [...this.connections.values()].find((item) => item.endpoint === saved.endpoint && item.credential.workspaceId === project.workspaceId)?.projectId }));
+    return { ...value, connection, ...(error ? { error } : {}) };
+  }
+  async teamsList(): Promise<TeamDirectory> {
+    const service = await this.serviceConfiguration();
+    const identityAvailable = !!this.options.identityProof && (this.options.identityAvailable ? await this.options.identityAvailable().catch(() => false) : true);
+    const teams = await Promise.all((this.profile.teams ?? []).map(async (saved) => {
+      if (saved.locked) return this.decoratedTeam(saved, "signed-out", "Reconnect with your Memtrace account to sync this Team. Local work and queued changes are preserved.");
+      try { saved.snapshot = await this.request<WorkspaceTeam>(saved.endpoint, `/v1/teams?teamId=${encodeURIComponent(saved.credential.teamId)}`, saved.credential.capability); return this.decoratedTeam(saved); }
+      catch (error) { return this.decoratedTeam(saved, (error as Error & { code?: string }).code === "TEAM_REVOKED" ? "revoked" : "offline", message(error)); }
+    }));
+    await this.persist();
+    return { teams, configured: !!service || !!this.profile.teams?.length, identityAvailable, ...(!identityAvailable ? {detail:"Verified Team sign-in is not available yet. Your local projects and existing preview rooms remain available."} : !service && !this.profile.teams?.length ? { detail: "The Team service has not been configured for this installation. Invitation links can still connect to their Team service." } : {}) };
+  }
+  async createTeamWorkspace(input: { name: string }): Promise<WorkspaceTeam> {
+    if (this.creatingTeam) throw Error("A Team is already being created. Finish its Memtrace sign-in first.");
+    this.creatingTeam = true;
+    const epoch = this.accountEpoch;
+    try {
+    const service = await this.serviceConfiguration();
+    if (!service?.bootstrapSecret) throw Error("This installation needs a configured Team service before creating a Team. You can still join an invitation.");
+    const creates=(this.profile.teamCreates??=[]);
+    let operation=creates.find((item)=>item.name===input.name);
+    if(!operation){operation={name:input.name,opId:randomUUID()};creates.push(operation);await this.persist();}
+    const session = await this.request<TeamSpaceSession>(service.endpoint, "/v1/teams", service.bootstrapSecret, { name: input.name, opId:operation.opId,...await this.accountProof(service.endpoint), ...this.device() });
+    if (epoch !== this.accountEpoch) throw Error("The Memtrace account changed before Team creation finished. No Team connection was opened on this computer.");
+    await this.saveTeam(service.endpoint, session);
+    this.profile.teamCreates=this.profile.teamCreates?.filter((item)=>item.opId!==operation!.opId);await this.persist();
+    return this.decoratedTeam(this.savedTeam(session.team.id));
+    } finally { this.creatingTeam = false; }
+  }
+  async inviteTeamMember(input: { teamId: string; projectWorkspaceId?: string; email?: string }): Promise<TeamMemberInvitation> {
+    const saved = this.savedTeam(input.teamId);
+    const value = await this.request<{ invitation: string; expiresAt: string; invitedEmail?: string }>(saved.endpoint, "/v1/teams/invites", saved.credential.capability, input);
+    return { url: formatTeamInvitation(saved.endpoint, input.teamId, value.invitation), expiresAt: value.expiresAt, ...(value.invitedEmail ? { invitedEmail: value.invitedEmail } : {}) };
+  }
+  async previewTeamInvitation(input: { invite: string }): Promise<TeamInvitationPreview> {
+    const invite = parseTeamInvitation(input.invite);
+    if (invite.kind !== "team") throw Error("This is an older project-preview invitation. Use the preview section to join it; it does not establish verified Team membership.");
+    const existing = this.profile.teams?.find((item) => item.endpoint === invite.endpoint && item.credential.teamId === invite.id && !item.locked);
+    const body={ teamId: invite.id, invitation: invite.invitation };
+    try{return await this.request(invite.endpoint, "/v1/teams/invites/preview", existing?.credential.capability, body);}
+    catch(error){
+      if(!existing||!["TEAM_AUTH","TEAM_REVOKED"].includes((error as Error&{code?:string}).code??""))throw error;
+      // A new targeted invitation may restore revoked membership. Preview it
+      // as an invitation holder; acceptance still requires a fresh proof.
+      return this.request(invite.endpoint,"/v1/teams/invites/preview",undefined,body);
+    }
+  }
+  async acceptTeamInvitation(input: { invite: string }): Promise<AcceptedTeamInvitation> {
+    const epoch = this.accountEpoch;
+    const invite = parseTeamInvitation(input.invite);
+    if (invite.kind !== "team") throw Error("Use the project-preview flow for this older invitation.");
+    const key = `team:${invite.endpoint}/${invite.id}`;
+    if (this.pendingJoins.has(key)) throw Error("This Team invitation is already being opened.");
+    this.pendingJoins.add(key);
+    try {
+      const existing = this.profile.teams?.find((item) => item.endpoint === invite.endpoint && item.credential.teamId === invite.id);
+      let saved = existing;
+      let workspaceId: string | undefined;
+      let usable = !!saved && !saved.locked;
+      if (saved && usable) {
+        try {
+          const preview = await this.request<TeamInvitationPreview>(saved.endpoint, "/v1/teams/invites/preview", saved.credential.capability, {teamId:invite.id,invitation:invite.invitation});
+          workspaceId = preview.projectWorkspaceId;
+          saved.snapshot = await this.request<WorkspaceTeam>(saved.endpoint, `/v1/teams?teamId=${encodeURIComponent(invite.id)}`, saved.credential.capability);
+        } catch(error) {
+          if(!["TEAM_AUTH","TEAM_REVOKED"].includes((error as Error&{code?:string}).code??"")) throw error;
+          usable=false;
+        }
+      }
+      if (!usable) {
+        const session = await this.request<TeamSpaceSession>(invite.endpoint, "/v1/teams/invites/accept", undefined, { teamId: invite.id, invitation: invite.invitation, ...await this.accountProof(invite.endpoint), ...this.device() });
+        if (epoch !== this.accountEpoch) throw Error("The Memtrace account changed before joining finished. Reconnect with the intended account.");
+        await this.saveTeam(invite.endpoint, session); saved = this.savedTeam(invite.id); workspaceId = session.projectWorkspaceId;
+      }
+      workspaceId ??= saved!.snapshot.projects[0]?.workspaceId;
+      const project = workspaceId ? await this.openTeamProject({ teamId: invite.id, workspaceId }) : undefined;
+      return { team: this.decoratedTeam(saved!), ...(project ? { project } : {}) };
+    } finally { this.pendingJoins.delete(key); }
+  }
+  async openTeamProject(input: { teamId: string; workspaceId: string }): Promise<TeamWorkspaceState> {
+    const key=input.teamId+"/"+input.workspaceId,previous=this.pendingOpens.get(key);
+    if(previous)return previous;
+    const pending=this.openProject(input).finally(()=>{if(this.pendingOpens.get(key)===pending)this.pendingOpens.delete(key);});
+    this.pendingOpens.set(key,pending);return pending;
+  }
+  private async openProject(input: {teamId:string;workspaceId:string}):Promise<TeamWorkspaceState>{
+    const saved = this.savedTeam(input.teamId);
+    const reply = teamSessionReplySchema.parse(await this.request(saved.endpoint, "/v1/teams/projects/open", saved.credential.capability, input)) as TeamSessionReply;
+    const existing = [...this.connections.values()].find((item) => item.endpoint === saved.endpoint && item.credential.workspaceId === input.workspaceId);
+    const repository = saved.snapshot.projects.find((item) => item.workspaceId === input.workspaceId)?.repository;
+    if (existing) {
+      if (!existing.teamId) throw Error("This project still has a preview connection. Its owner must move it into the Team first.");
+      existing.credential = reply.credential; existing.snapshot = reply.snapshot; existing.repository = repository; this.apply(existing); this.state().activeProjectId = existing.projectId;
+      await this.persist(); this.publishState(); await this.changed(); return this.status(existing.projectId)!;
+    }
+    const project: Project = { id: randomUUID(), name: reply.snapshot.name, description: "Shared Team planning. Connect your local repository when you want to run workers.", path: null, branch: repository?.defaultBranch ?? "main", analysis: "idle", createdAt: new Date().toISOString() };
+    return this.attach(project.id, saved.endpoint, reply, emptySharedProjection(), project, { teamId: input.teamId, repository });
+  }
+  repositoryForProject(projectId: string): RepositoryDescriptor | undefined { const value = this.connections.get(projectId)?.repository; return value ? structuredClone(value) : undefined; }
+  async shareProject(input: { teamId: string; projectId: string; repository?: RepositoryDescriptor }): Promise<TeamWorkspaceState> {
+    const saved = this.savedTeam(input.teamId), project = this.state().projects.find((item) => item.id === input.projectId && !item.example);
+    if (!project) throw Error("Choose a local project to share.");
+    if(this.unavailable.has(project.id))throw Error("Restore this project’s existing private Team credentials, or explicitly disconnect it before sharing it with another Team.");
+    if (this.pendingShares.has(project.id)) throw Error("This project is already being shared.");
+    if (this.state().tasks.some((task) => task.projectId === project.id && ["preparing", "running", "stopping"].includes(task.run.state))) throw Error("Stop this project’s active workers before sharing so future workers obtain Team story claims.");
+    const previous = this.connections.get(project.id);
+    if (previous?.teamId) {
+      if (previous.teamId !== input.teamId) throw Error("This project already belongs to another Team.");
+      return this.openTeamProject({ teamId: input.teamId, workspaceId: previous.credential.workspaceId });
+    }
+    if (previous && previous.endpoint !== saved.endpoint) throw Error("A project preview can only move into a Team on the same service. Its current planning has been preserved.");
+    this.pendingShares.add(project.id);
+    try {
+      if (previous) await this.synchronize(project.id);
+      const shares = (this.profile.projectShares ??= {}), key = input.teamId + "/" + project.id;
+      shares[key] ??= randomUUID(); await this.persist();
+      const raw = await this.request<TeamSessionReply & { project: { repository?: RepositoryDescriptor } }>(saved.endpoint, "/v1/teams/projects", saved.credential.capability, { teamId: input.teamId, opId: shares[key], name: project.name, ...(input.repository ? { repository: input.repository } : {}), ...(previous ? { workspaceId: previous.credential.workspaceId, legacyCapability: previous.credential.capability } : {}) });
+      const { project: descriptor, ...session } = raw;
+      const reply = teamSessionReplySchema.parse(session) as TeamSessionReply;
+      if (previous) {
+        previous.teamId = input.teamId; previous.credential = reply.credential; previous.snapshot = reply.snapshot; previous.repository = descriptor.repository; previous.status = "online";
+        this.apply(previous); await this.persist(); this.publishState(); await this.changed();
+      } else {
+        const initial = projectSharedState(this.state(), project.id);
+        const connection: Connection = { projectId: project.id, endpoint: saved.endpoint, credential: reply.credential, snapshot: reply.snapshot, baseline: initial, outbox: sharedCommands(emptySharedProjection(), initial).map((command) => ({ opId: randomUUID(), command })), cursor: reply.snapshot.head, readThrough: 0, status: "syncing", leases: new Map(), teamId: input.teamId, repository: descriptor.repository };
+        this.connections.set(project.id, connection); await this.persist(); this.publishState(); await this.changed(); await this.flush(connection); this.startLoop(connection);
+      }
+      saved.snapshot = await this.request(saved.endpoint, `/v1/teams?teamId=${encodeURIComponent(input.teamId)}`, saved.credential.capability); await this.persist();
+      return this.status(project.id)!;
+    } finally { this.pendingShares.delete(project.id); }
+  }
+  async revokeTeamMember(input: { teamId: string; memberId: string }): Promise<WorkspaceTeam> {
+    const saved = this.savedTeam(input.teamId); saved.snapshot = await this.request(saved.endpoint, "/v1/teams/members/revoke", saved.credential.capability, input); await this.persist(); return this.decoratedTeam(saved);
+  }
+  async revokeTeamInvitation(input: { teamId: string; invitationId: string }): Promise<WorkspaceTeam> {
+    const saved = this.savedTeam(input.teamId); saved.snapshot = await this.request(saved.endpoint, "/v1/teams/invites/revoke", saved.credential.capability, input); await this.persist(); return this.decoratedTeam(saved);
+  }
+  async suspendAccount(): Promise<void> {
+    this.accountEpoch++;
+    for (const team of this.profile.teams ?? []) team.locked = true;
+    // Persist the lock before account logout/switch can alter identity state.
+    await this.persist();
+    for (const controller of this.requests) controller.abort();
+    for (const connection of this.connections.values()) if (connection.teamId) { connection.status = "offline"; connection.error = "Reconnect this Team with your Memtrace account. Local work and queued changes are preserved."; }
+    this.publishState(); await this.changed();
+  }
+  async reauthenticateTeam(input: {teamId: string}): Promise<WorkspaceTeam> {
+    const epoch = this.accountEpoch;
+    const saved = this.savedTeam(input.teamId, true);
+    const session = await this.request<TeamSpaceSession>(saved.endpoint, "/v1/teams/reconnect", undefined, {teamId:input.teamId,...await this.accountProof(saved.endpoint),...this.device()});
+    if (epoch !== this.accountEpoch) throw Error("The Memtrace account changed before reconnecting finished. This Team remains locked.");
+    if (session.credential.subject !== saved.credential.subject) throw Error("This local Team binding belongs to another Memtrace account. Sign in with its original account; local work has been preserved.");
+    const previous = structuredClone(saved), oldCredentials = new Map<string, TeamCredential>();
+    saved.credential = session.credential; saved.snapshot = session.team; saved.locked = false;
+    for (const connection of this.connections.values()) if (connection.teamId === input.teamId && connection.endpoint === saved.endpoint) {
+      oldCredentials.set(connection.projectId, connection.credential);
+      connection.credential = {workspaceId:connection.credential.workspaceId,memberId:session.credential.memberId,deviceId:session.credential.deviceId,capability:session.credential.capability};
+    }
+    try { await this.persist(); } catch (error) { Object.assign(saved, previous); for (const [id,credential] of oldCredentials) this.connection(id).credential = credential; throw error; }
+    this.publishState(); await this.changed(); return this.decoratedTeam(saved);
   }
   async create(input: { projectId: string; endpoint?: string; displayName: string; bootstrapSecret?: string; shareOnLAN?: boolean; advertisedHost?: string }): Promise<TeamWorkspaceState> {
     if (this.connections.has(input.projectId) || this.unavailable.has(input.projectId)) throw Error("This project is already connected to a team. Restore its private profile or disconnect before changing its team.");
@@ -439,19 +674,40 @@ export class TeamSyncClient implements TeamWorkerClaims {
     return this.status(project.id)!;
     } finally { this.pendingShares.delete(project.id); }
   }
-  async join(input: { projectId: string; invite: string; displayName: string }): Promise<TeamWorkspaceState> {
-    if (this.connections.has(input.projectId) || this.unavailable.has(input.projectId)) throw Error("This project is already connected to a team.");
-    if (this.state().tasks.some((task) => task.projectId === input.projectId && ["preparing", "running", "stopping"].includes(task.run.state))) throw Error("Stop this project’s active workers before joining a team.");
-    if (!this.state().projects.some((project) => project.id === input.projectId && !project.example)) throw Error("Choose a real local project to join.");
-    if (this.state().tasks.some((task) => task.projectId === input.projectId && !task.example) || this.state().epics.some((epic) => epic.projectId === input.projectId) || this.state().cycles.some((cycle) => cycle.projectId === input.projectId)) throw Error("Choose a new, empty local project to join a team; your existing project stays private.");
+  async join(input: { projectId?: string; invite: string; displayName: string }): Promise<TeamWorkspaceState> {
     let invite: TeamInvite;
     try { invite = JSON.parse(input.invite) as TeamInvite; } catch { throw Error("Paste the complete Team invitation."); }
     if (!invite || typeof invite.workspaceId !== "string" || typeof invite.invitation !== "string" || typeof invite.endpoint !== "string") throw Error("This Team invitation is incomplete.");
     const endpoint = endpointURL(invite.endpoint);
-    if ([...this.connections.values()].some((connection) => connection.credential.workspaceId === invite.workspaceId && connection.endpoint === endpoint)) throw Error("This team is already connected to another local project in this profile. Open that project instead.");
+    const existing = [...this.connections.values()].find((connection) => connection.credential.workspaceId === invite.workspaceId && connection.endpoint === endpoint);
+    if (existing) {
+      if (input.projectId && input.projectId !== existing.projectId) throw Error("This team is already connected to another local project in this profile. Open that project instead.");
+      this.state().activeProjectId = existing.projectId;
+      await this.changed();
+      return this.status(existing.projectId)!;
+    }
+    if ([...this.unavailable.values()].some((binding) => binding.workspace.workspaceId === invite.workspaceId)) throw Error("Restore this team’s private profile, or explicitly disconnect its saved binding before joining again.");
+    if (input.projectId) {
+      if (this.connections.has(input.projectId) || this.unavailable.has(input.projectId)) throw Error("This project is already connected to a team.");
+      if (this.state().tasks.some((task) => task.projectId === input.projectId && ["preparing", "running", "stopping"].includes(task.run.state))) throw Error("Stop this project’s active workers before joining a team.");
+      if (!this.state().projects.some((project) => project.id === input.projectId && !project.example)) throw Error("Choose a real local project to join.");
+      if (this.state().tasks.some((task) => task.projectId === input.projectId && !task.example) || this.state().epics.some((epic) => epic.projectId === input.projectId) || this.state().cycles.some((cycle) => cycle.projectId === input.projectId)) throw Error("This local project has private planning. Join the invitation as a linked project instead.");
+    }
+    const joinKey = `${endpoint}/${invite.workspaceId}`;
+    if (this.pendingJoins.has(joinKey)) throw Error("This workspace invitation is already being opened.");
+    this.pendingJoins.add(joinKey);
+    try {
     const reply = teamSessionReplySchema.parse(await this.request(endpoint, "/v1/join", undefined, { workspaceId: invite.workspaceId, invitation: invite.invitation, memberName: input.displayName, deviceId: this.profile.deviceId, deviceName: process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "Mac" : "Linux" })) as TeamSessionReply;
-    if (this.state().tasks.some((task) => task.projectId === input.projectId && !task.example) || this.state().epics.some((epic) => epic.projectId === input.projectId) || this.state().cycles.some((cycle) => cycle.projectId === input.projectId)) throw Error("This local project changed while joining. Its private planning has been preserved; choose a new, empty project.");
-    return this.attach(input.projectId, endpoint, reply, emptySharedProjection());
+    if (input.projectId) {
+      if (this.state().tasks.some((task) => task.projectId === input.projectId && !task.example) || this.state().epics.some((epic) => epic.projectId === input.projectId) || this.state().cycles.some((cycle) => cycle.projectId === input.projectId)) throw Error("This local project changed while joining. Its private planning has been preserved; open the invitation as a linked project.");
+      return await this.attach(input.projectId, endpoint, reply, emptySharedProjection());
+    }
+    const linkedProject: Project = {
+      id: randomUUID(), name: reply.snapshot.name, description: "Shared team planning. Connect a local code folder when you want to run workers.",
+      path: null, branch: reply.snapshot.epics.find((epic) => epic.branch)?.branch ?? "main", analysis: "idle", createdAt: new Date().toISOString(),
+    };
+    return await this.attach(linkedProject.id, endpoint, reply, emptySharedProjection(), linkedProject);
+    } finally { this.pendingJoins.delete(joinKey); }
   }
   async invite(projectId: string): Promise<TeamInvite> {
     const connection = this.connection(projectId);
@@ -463,7 +719,7 @@ export class TeamSyncClient implements TeamWorkerClaims {
     if (this.unavailable.delete(projectId)) { this.publishState(); await this.changed(); return; }
     const connection = this.connection(projectId);
     if (connection.outbox.length) throw Error("Sync queued team changes before leaving so your teammates do not miss them.");
-    for (const claim of connection.snapshot.claims.filter((claim) => claim.memberId === connection.credential.memberId && claim.deviceId === connection.credential.deviceId)) await this.release(claim.storyId, projectId);
+    for (const claim of connection.snapshot.claims.filter((claim) => claim.memberId === connection.credential.memberId && claim.deviceId === connection.credential.deviceId)) await this.release(localTeamId(connection, "story", claim.storyId), projectId);
     if (connection.outbox.length) throw Error("The claim release is queued. Reconnect before leaving so teammates receive it.");
     this.connections.delete(projectId); this.publishState(); await this.persist(); await this.changed();
   }
@@ -484,6 +740,7 @@ export class TeamSyncClient implements TeamWorkerClaims {
     }
     if (connection.deletions?.some((backup) => backup.tasks.some((task) => task.id === taskId))) throw Error("Wait for this story’s pending deletion to finish syncing before starting a worker.");
     await this.synchronize(projectId);
+    const remoteTaskId = remoteTeamId(connection, "story", taskId);
     if (connection.leases.has(taskId)) return;
     const attempts = (connection.claimAttempts ??= {});
     let attempt = attempts[taskId];
@@ -495,8 +752,8 @@ export class TeamSyncClient implements TeamWorkerClaims {
     }
     const { attemptId, opId } = attempt;
     try {
-      const reply = await this.request<TeamCommandReply>(connection.endpoint, "/v1/commands", connection.credential.capability, { workspaceId: connection.credential.workspaceId, opId, command: { type: "claim.acquire", storyId: taskId, attemptId } });
-      const claim = reply.event.changes.find((item) => item.collection === "claims" && item.id === taskId)?.value as TeamClaim | undefined;
+      const reply = await this.request<TeamCommandReply>(connection.endpoint, "/v1/commands", connection.credential.capability, { workspaceId: connection.credential.workspaceId, opId, command: { type: "claim.acquire", storyId: remoteTaskId, attemptId } });
+      const claim = reply.event.changes.find((item) => item.collection === "claims" && item.id === remoteTaskId)?.value as TeamClaim | undefined;
       if (!claim || claim.attemptId !== attemptId) throw Error("The relay did not confirm this worker’s story claim.");
       connection.leases.set(taskId, claim);
       attempt.state = "owned";
@@ -520,9 +777,10 @@ export class TeamSyncClient implements TeamWorkerClaims {
       if (this.unavailable.has(projectId)) throw Error("The Team credentials are missing; this claim cannot be released from this profile.");
       return;
     }
-    const claim = connection.leases.get(taskId) ?? connection.snapshot.claims.find((claim) => claim.storyId === taskId && claim.memberId === connection.credential.memberId && claim.deviceId === connection.credential.deviceId);
+    const remoteTaskId = remoteTeamId(connection, "story", taskId);
+    const claim = connection.leases.get(taskId) ?? connection.snapshot.claims.find((claim) => claim.storyId === remoteTaskId && claim.memberId === connection.credential.memberId && claim.deviceId === connection.credential.deviceId);
     if (!claim) return;
-    connection.outbox.push({ opId: randomUUID(), command: { type: "claim.release", storyId: taskId, attemptId: claim.attemptId, epoch: claim.epoch } });
+    connection.outbox.push({ opId: randomUUID(), command: { type: "claim.release", storyId: remoteTaskId, attemptId: claim.attemptId, epoch: claim.epoch } });
     connection.leases.delete(taskId);
     if (connection.claimAttempts) delete connection.claimAttempts[taskId];
     await this.persist(); this.publishState();
@@ -543,30 +801,31 @@ export class TeamSyncClient implements TeamWorkerClaims {
     const bytes = await readFile(path);
     const mime = mimeTypes[extname(artifact.name).toLowerCase()] ?? "application/octet-stream";
     const upload = await this.request<{ hash: string; size: number; mime: string }>(connection.endpoint, `/v1/blobs?workspaceId=${encodeURIComponent(connection.credential.workspaceId)}`, connection.credential.capability, undefined, 0, bytes, mime);
-    const result = { id: randomUUID(), storyId: task.id, name: basename(artifact.name), mime: upload.mime, hash: upload.hash, size: upload.size, kind: artifact.purpose === "report" ? "report" as const : "artifact" as const };
+    const result = { id: randomUUID(), storyId: remoteTeamId(connection, "story", task.id), name: basename(artifact.name), mime: upload.mime, hash: upload.hash, size: upload.size, kind: artifact.purpose === "report" ? "report" as const : "artifact" as const };
     connection.outbox.push({ opId: randomUUID(), command: { type: "result.publish", result } });
     await this.persist(); await this.flush(connection);
     const published = connection.snapshot.results.find((item) => item.id === result.id);
     if (!published) throw Error("The published output has not been confirmed by the relay.");
-    return published;
+    return { ...published, storyId: task.id };
   }
   async download(projectId: string, resultId: string): Promise<Artifact> {
     const connection = this.connection(projectId);
     const result = connection.snapshot.results.find((item) => item.id === resultId);
     if (!result) throw Error("Shared output not found. Refresh Team first.");
-    if (!this.state().tasks.some((task) => task.id === result.storyId && task.projectId === projectId)) throw Error("This output’s story has not synchronized yet.");
+    const taskId = localTeamId(connection, "story", result.storyId);
+    if (!this.state().tasks.some((task) => task.id === taskId && task.projectId === projectId)) throw Error("This output’s story has not synchronized yet.");
     const bytes = await this.request<Uint8Array>(connection.endpoint, `/v1/blobs/${encodeURIComponent(result.hash)}?workspaceId=${encodeURIComponent(connection.credential.workspaceId)}`, connection.credential.capability, undefined, 0, undefined, undefined, true);
     if (bytes.byteLength !== result.size || bytes.byteLength > 5 * 1024 * 1024 || createHash("sha256").update(bytes).digest("hex") !== result.hash) throw Error("This shared output failed its integrity check.");
     const safeName = basename(result.name).replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").slice(0, 160) || "shared-output";
     const root = resolve(this.dataDir, "captures");
-    const directory = resolve(root, result.storyId);
+    const directory = resolve(root, taskId);
     if (!within(root, directory)) throw Error("Invalid shared story location.");
     await mkdir(directory, { recursive: true });
     const resultKey = createHash("sha256").update(result.id).digest("hex").slice(0, 20);
     const path = join(directory, `team-${resultKey}-${safeName}`);
     if (!within(directory, path)) throw Error("Invalid shared output name.");
     await writeFile(path, bytes);
-    const artifact: Artifact = { id: `team:${result.id}`, projectId, taskId: result.storyId, name: result.name,
+    const artifact: Artifact = { id: `team:${result.id}`, projectId, taskId, name: result.name,
       kind: result.mime.startsWith("image/") ? "image" : /html/.test(result.mime) ? "html" : "text",
       path, createdAt: result.createdAt, source: connection.snapshot.members.find((member) => member.id === result.memberId)?.name ?? "Teammate", purpose: result.kind === "report" ? "report" : "deliverable", revision: result.hash };
     const existing = this.state().artifacts.findIndex((item) => item.id === artifact.id);

@@ -178,9 +178,34 @@ export async function installNativeBridge(): Promise<void> {
     (event) => previews.forEach((listener) => listener(event.payload)),
   );
   const api: MemCodeAPI = {
+    teamsList: () => call("team:list"),
+    createTeamWorkspace: (input) => call("team:create-workspace", input),
+    shareTeamProject: (input) => call("team:share-project", input),
+    openTeamProject: (input) => call("team:open-project", input),
+    inviteTeamMember: (input) => call("team:invite-member", input),
+    previewTeamInvitation: (input) => call("team:preview-invite", input),
+    acceptTeamInvitation: (input) => call("team:accept-invite", input),
+    revokeTeamMember: (input) => call("team:revoke-member", input),
+    revokeTeamInvitation: (input) => call("team:revoke-invite", input),
+    reauthenticateTeam: (input) => call("team:reconnect", input),
+    cancelTeamSignIn: () => call("team:cancel-sign-in"),
+    inspectProjectRepository: (projectId) =>
+      call("repository:inspect", { projectId }),
+    findProjectCheckouts: (repository) =>
+      call("repository:find-checkouts", { repository }),
+    repositoryAccess: (repository) => call("repository:access", { repository }),
+    cloneProjectRepository: (input) => call("repository:clone", input),
+    cancelRepositorySetup: (projectId) =>
+      call("repository:cancel", { projectId }),
+    repositorySetupStatus: (projectId) =>
+      call("repository:status", { projectId }),
+    githubRepositorySignIn: (action) =>
+      call("repository:github-sign-in", { action }),
     teamStatus: (projectId) => call("team:status", { projectId }),
     teamCreate: (input) => call("team:create", input),
     teamJoin: (input) => call("team:join", input),
+    bindProjectFolder: (projectId, path) =>
+      call("project:bind-folder", { projectId, path }),
     teamInvite: (projectId) => call("team:invite", { projectId }),
     teamLeave: (projectId) => call("team:leave", { projectId }),
     teamRelease: (projectId, taskId) =>
@@ -212,6 +237,9 @@ export async function installNativeBridge(): Promise<void> {
     disconnectWorker: (harness) => call("connection:disconnect", { harness }),
     accountStatus: () => call("account:status"),
     signInMemtrace: () => call("account:sign-in"),
+    signOutMemtrace: () => call("account:sign-out"),
+    switchMemtraceAccount: () => call("account:switch"),
+    cancelMemtraceSignIn: () => call("account:cancel-sign-in"),
     speechStatus: () => call("speech:status"),
     prepareSpeech: () => call("speech:prepare"),
     installSpeech: () => call("speech:install"),

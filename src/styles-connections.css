@@ -337,7 +337,69 @@
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
   margin-top: 20px;
+}
+.account-session-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-left: auto;
+}
+.account-sign-out {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  padding: 7px 0;
+  color: #718674;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+}
+.account-sign-out:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.account-panel .account-session-note,
+.account-popover .account-session-note {
+  border-top: 1px solid #e6eddf;
+  margin: 14px 0 0;
+  padding-top: 12px;
+  font-size: 10px;
+}
+.account-session-note code {
+  overflow-wrap: anywhere;
+  color: #648169;
+}
+.account-confirmation {
+  margin-top: 16px;
+  padding: 15px;
+  border: 1px solid #dce7d5;
+  border-radius: 9px;
+  background: #f5f9f0;
+}
+.account-confirmation > strong {
+  font-size: 12px;
+  color: #365c43;
+  font-weight: 500;
+}
+.account-confirmation p {
+  color: #83957d;
+  font-size: 10px;
+  line-height: 1.8;
+  margin: 9px 0;
+}
+.account-confirmation > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 13px;
+}
+.account-confirmation .button {
+  font-size: 10px;
+  padding: 8px 10px;
 }
 .account-login-hint {
   font-size: 10px;

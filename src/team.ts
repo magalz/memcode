@@ -133,7 +133,7 @@ export interface TeamCredential {
 export interface TeamSessionReply {
   credential: TeamCredential;
   snapshot: TeamWorkspaceSnapshot;
-  identity: "invite-preview";
+  identity: "invite-preview" | "memtrace";
 }
 export interface TeamInvitation {
   workspaceId: string;

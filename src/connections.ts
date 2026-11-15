@@ -33,4 +33,10 @@ export interface MemtraceAccount {
   organizationId?: string;
   loginPending: boolean;
   claimUrl?: string;
+  authMode?: "session" | "environment";
+  sessionAction?: "signing-out" | "switching" | "signing-in";
+  signedOut?: boolean;
+  reconnectRequired?: boolean;
+  /** Environment variable names only. Values never enter renderer state. */
+  managedBy?: string[];
 }

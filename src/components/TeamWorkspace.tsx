@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Copy,
   FileText,
+  FolderOpen,
   GitBranch,
   Globe2,
   Link2,
@@ -19,6 +20,7 @@ import {
   ShieldCheck,
   Users,
   WifiOff,
+  X,
 } from "lucide-react";
 import type {
   AppState,
@@ -43,6 +45,7 @@ interface Props {
   notify: (message: string) => void;
   open: (task: WorkItem) => void;
   openArtifact: (artifact: Artifact) => void;
+  managed?: boolean;
 }
 
 export function TeamWorkspace({
@@ -51,6 +54,7 @@ export function TeamWorkspace({
   notify,
   open,
   openArtifact,
+  managed = false,
 }: Props) {
   const [team, setTeam] = useState<TeamWorkspaceState | null>(
     () => state.team?.find((item) => item.projectId === project.id) ?? null,
@@ -66,6 +70,7 @@ export function TeamWorkspace({
   const [error, setError] = useState("");
   const [publishId, setPublishId] = useState("none");
   const [leaving, setLeaving] = useState(false);
+  const [joining, setJoining] = useState(false);
   const tasks = state.tasks.filter((task) => task.projectId === project.id);
   const artifacts = groupedArtifacts(
     state.artifacts.filter((item) => item.projectId === project.id),
@@ -107,6 +112,90 @@ export function TeamWorkspace({
     "Workspace member";
   const online =
     team?.connection === "online" || team?.connection === "syncing";
+  const joinProject = () =>
+    void perform("join", async () => {
+      const next = await window.memcode.teamJoin({
+        displayName: displayName.trim(),
+        invite: invitation.trim(),
+      });
+      await window.memcode.selectProject(next.projectId);
+      setTeam(next);
+      setJoining(false);
+      setInvitation("");
+      notify("Shared project opened");
+    });
+  const connectFolder = () =>
+    void perform("folder", async () => {
+      const path = await window.memcode.selectFolder();
+      if (!path) return;
+      await window.memcode.bindProjectFolder(project.id, path);
+      notify("Local project folder connected");
+    });
+  const joinForm = (
+    <form
+      className="team-panel team-setup-panel team-join-panel"
+      onSubmit={(event) => {
+        event.preventDefault();
+        joinProject();
+      }}
+    >
+      <div className="team-join-heading">
+        <span className="team-panel-icon">
+          <Link2 size={19} />
+        </span>
+        {team && (
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Close join project"
+            onClick={() => setJoining(false)}
+          >
+            <X size={15} />
+          </button>
+        )}
+      </div>
+      <h3>Join a project</h3>
+      <p>
+        Paste an invitation to open the project’s current board, epics,
+        comments and published results.
+      </p>
+      <label className="team-field">
+        <span>Your display name</span>
+        <input
+          value={displayName}
+          onChange={(event) => setDisplayName(event.target.value)}
+          placeholder="How teammates know you"
+          maxLength={80}
+          autoComplete="nickname"
+        />
+      </label>
+      <label className="team-field">
+        <span>Workspace invitation</span>
+        <textarea
+          value={invitation}
+          onChange={(event) => setInvitation(event.target.value)}
+          placeholder="Paste the invitation from your teammate"
+          rows={3}
+          spellCheck={false}
+        />
+      </label>
+      <button
+        className="button primary team-setup-submit"
+        disabled={!!busy || !displayName.trim() || !invitation.trim()}
+      >
+        {busy === "join" ? (
+          <LoaderCircle className="team-spin" size={14} />
+        ) : (
+          <ArrowRight size={14} />
+        )}
+        Join project
+      </button>
+      <small className="team-form-note">
+        Your existing projects stay as they are. Connect a local code folder
+        later when you want to run workers.
+      </small>
+    </form>
+  );
   if (!team)
     return (
       <section className="team-workspace">
@@ -122,18 +211,6 @@ export function TeamWorkspace({
               their own workers and uses Git for code.
             </p>
           </div>
-        </div>
-        <div className="team-setup-context">
-          <GitBranch size={15} />
-          <span>
-            Local project <strong>{project.name}</strong>
-          </span>
-          <span className="team-context-separator" />
-          <span>
-            {project.path
-              ? "Bound to your selected folder"
-              : "Select a local project to share"}
-          </span>
         </div>
         {error && (
           <div className="team-error" role="alert">
@@ -179,6 +256,12 @@ export function TeamWorkspace({
               Start a private team workspace with this project’s stories, epics
               and cycles.
             </p>
+            <div className="team-setup-context">
+              <GitBranch size={14} />
+              <span>
+                {project.path ? project.name : "Choose a local project to share"}
+              </span>
+            </div>
             <label className="team-field">
               <span>Your display name</span>
               <input
@@ -271,68 +354,7 @@ export function TeamWorkspace({
                   : "Without network access, invitations work on this computer only."}
             </small>
           </form>
-          <form
-            className="team-panel team-setup-panel"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void perform("join", async () =>
-                setTeam(
-                  await window.memcode.teamJoin({
-                    projectId: project.id,
-                    displayName: displayName.trim(),
-                    invite: invitation.trim(),
-                  }),
-                ),
-              );
-            }}
-          >
-            <span className="team-panel-icon">
-              <Link2 size={19} />
-            </span>
-            <h3>Join a workspace</h3>
-            <p>Connect a teammate’s workspace to your local clone.</p>
-            <label className="team-field">
-              <span>Your display name</span>
-              <input
-                value={displayName}
-                onChange={(event) => setDisplayName(event.target.value)}
-                placeholder="How teammates know you"
-                maxLength={80}
-                autoComplete="nickname"
-              />
-            </label>
-            <label className="team-field">
-              <span>Workspace invitation</span>
-              <textarea
-                value={invitation}
-                onChange={(event) => setInvitation(event.target.value)}
-                placeholder="Paste the invitation from your teammate"
-                rows={3}
-                spellCheck={false}
-              />
-            </label>
-            <button
-              className="button secondary team-setup-submit"
-              disabled={
-                !!busy ||
-                !displayName.trim() ||
-                !invitation.trim() ||
-                !project.path ||
-                !!project.example
-              }
-            >
-              {busy === "join" ? (
-                <LoaderCircle className="team-spin" size={14} />
-              ) : (
-                <ArrowRight size={14} />
-              )}
-              Join workspace
-            </button>
-            <small className="team-form-note">
-              Choose Open existing project for your local clone first. Joining
-              adds shared planning without replacing personal stories.
-            </small>
-          </form>
+          {joinForm}
         </div>
         <div className="team-sharing-note">
           <ShieldCheck size={17} />
@@ -358,7 +380,7 @@ export function TeamWorkspace({
             <Users size={22} />
           </span>
           <div>
-            <span className="team-kicker">PRIVATE PREVIEW · INVITE ACCESS</span>
+            <span className="team-kicker">{managed ? "PROJECT ACTIVITY" : "PRIVATE PREVIEW · INVITE ACCESS"}</span>
             <h2>{workspace.name}</h2>
             <p>Shared work. Local workers. Source changes through Git.</p>
           </div>
@@ -386,7 +408,7 @@ export function TeamWorkspace({
               size={13}
             />
           </button>
-          <button
+          {!managed && <button
             className="button primary"
             disabled={!!busy || !online}
             onClick={() =>
@@ -398,12 +420,45 @@ export function TeamWorkspace({
           >
             <Link2 size={14} />
             Invite teammate
-          </button>
+          </button>}
+          {!managed && <button
+            className="button secondary"
+            disabled={!!busy}
+            onClick={() => setJoining((value) => !value)}
+          >
+            <Link2 size={13} />
+            Join another project
+          </button>}
         </div>
       </div>
       {(error || team.error) && (
         <div className="team-error" role="alert">
           {error || team.error}
+        </div>
+      )}
+      {joining && joinForm}
+      {!managed && !project.path && (
+        <div className="team-folder-note">
+          <FolderOpen size={19} />
+          <div>
+            <strong>Your shared project is ready.</strong>
+            <p>
+              Plan work, discuss stories and view results now. Connect your
+              existing local code folder when you want to run workers.
+            </p>
+          </div>
+          <button
+            className="button secondary"
+            disabled={!!busy}
+            onClick={connectFolder}
+          >
+            {busy === "folder" ? (
+              <LoaderCircle className="team-spin" size={13} />
+            ) : (
+              <FolderOpen size={13} />
+            )}
+            Connect local folder
+          </button>
         </div>
       )}
       {!online && (
@@ -483,7 +538,7 @@ export function TeamWorkspace({
         </span>
         <span className="team-summary-self">
           You’re <strong>{currentMember?.name ?? "a workspace member"}</strong>
-          <small>Preview identity</small>
+          <small>{managed ? "Team member" : "Preview identity"}</small>
         </span>
       </div>
       <div className="team-main-grid">

@@ -37,6 +37,8 @@ import { registerOnboarding } from "./onboarding";
 import { registerCardComments } from "./card-comments";
 import { registerConnections } from "./worker-connections";
 import { TeamSyncClient } from "./team/client";
+import { registerRepositoryRoutes } from "./repository-routes";
+import { createMemtraceIdentityProofProvider } from "./team-identity";
 import { SpeechManager, registerSpeech } from "./speech";
 import { speechSettingsSchema } from "../src/speech";
 import {
@@ -155,9 +157,12 @@ export async function createRuntime(
       terminals,
       undefined,
       {
-        acquire: (taskId, projectId) => team?.acquire(taskId, projectId) ?? Promise.resolve(),
-        release: (taskId, projectId) => team?.release(taskId, projectId) ?? Promise.resolve(),
+        acquire: (taskId, projectId) =>
+          team?.acquire(taskId, projectId) ?? Promise.resolve(),
+        release: (taskId, projectId) =>
+          team?.release(taskId, projectId) ?? Promise.resolve(),
       },
+      () => connections.account.assertMayStart(),
     ),
     preview = new PreviewManager(
       host,
@@ -187,37 +192,176 @@ export async function createRuntime(
   ) => {
     handlers.set(name, { schema, handle });
   };
-  team = new TeamSyncClient(state, store.dir, changed);
+  const teamIdentity = createMemtraceIdentityProofProvider({
+    openExternal: (url) => host.call("open_memcode_identity", { url }),
+  });
+  team = new TeamSyncClient(state, store.dir, changed, {
+    identityProof: teamIdentity,
+    identityAvailable: teamIdentity.available,
+  });
   const teamProject = z.object({ projectId: identifier }).strict();
+  register("team:list", z.undefined(), () => team!.teamsList());
+  register(
+    "team:create-workspace",
+    z.object({ name: nonempty.max(80) }).strict(),
+    (input) => team!.createTeamWorkspace(input),
+  );
+  register(
+    "team:share-project",
+    z
+      .object({
+        teamId: identifier,
+        projectId: identifier,
+        repository: z
+          .object({
+            url: nonempty.max(3000),
+            identity: nonempty.max(3000),
+            provider: z.enum(["github", "gitlab", "bitbucket", "git"]),
+            name: nonempty.max(500),
+            defaultBranch: nonempty.max(250).optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict(),
+    (input) => team!.shareProject(input),
+  );
+  register(
+    "team:open-project",
+    z.object({ teamId: identifier, workspaceId: identifier }).strict(),
+    (input) => team!.openTeamProject(input),
+  );
+  register(
+    "team:invite-member",
+    z
+      .object({
+        teamId: identifier,
+        projectWorkspaceId: identifier.optional(),
+        email: z.string().email().max(320).optional(),
+      })
+      .strict(),
+    (input) => team!.inviteTeamMember(input),
+  );
+  register(
+    "team:preview-invite",
+    z.object({ invite: nonempty.max(10000) }).strict(),
+    (input) => team!.previewTeamInvitation(input),
+  );
+  register(
+    "team:accept-invite",
+    z.object({ invite: nonempty.max(10000) }).strict(),
+    (input) => team!.acceptTeamInvitation(input),
+  );
+  register(
+    "team:revoke-member",
+    z.object({ teamId: identifier, memberId: identifier }).strict(),
+    async (input) => {
+      await team!.revokeTeamMember(input);
+    },
+  );
+  register(
+    "team:revoke-invite",
+    z.object({ teamId: identifier, invitationId: identifier }).strict(),
+    async (input) => {
+      await team!.revokeTeamInvitation(input);
+    },
+  );
+  register(
+    "team:reconnect",
+    z.object({ teamId: identifier }).strict(),
+    (input) => team!.reauthenticateTeam(input),
+  );
+  register("team:cancel-sign-in", z.undefined(), () => teamIdentity.cancel());
   register("team:status", teamProject, async ({ projectId }) => {
     project(projectId);
-    if (team!.status(projectId)) await team!.synchronize(projectId).catch(() => {});
+    if (team!.status(projectId))
+      await team!.synchronize(projectId).catch(() => {});
     return team!.status(projectId);
   });
-  register("team:create", z.object({ projectId: identifier, endpoint: z.string().max(2000).optional(), displayName: nonempty.max(100), bootstrapSecret: z.string().max(1000).optional(), shareOnLAN: z.boolean().optional(), advertisedHost: z.string().max(250).optional() }).strict(), (input) => team!.create(input));
-  register("team:join", z.object({ projectId: identifier, invite: nonempty.max(10000), displayName: nonempty.max(100) }).strict(), (input) => team!.join(input));
-  register("team:invite", teamProject, ({ projectId }) => team!.invite(projectId));
-  register("team:leave", teamProject, ({ projectId }) => team!.leave(projectId));
+  register(
+    "team:create",
+    z
+      .object({
+        projectId: identifier,
+        endpoint: z.string().max(2000).optional(),
+        displayName: nonempty.max(100),
+        bootstrapSecret: z.string().max(1000).optional(),
+        shareOnLAN: z.boolean().optional(),
+        advertisedHost: z.string().max(250).optional(),
+      })
+      .strict(),
+    (input) => team!.create(input),
+  );
+  register(
+    "team:join",
+    z
+      .object({
+        projectId: identifier.optional(),
+        invite: nonempty.max(10000),
+        displayName: nonempty.max(100),
+      })
+      .strict(),
+    (input) => team!.join(input),
+  );
+  register("team:invite", teamProject, ({ projectId }) =>
+    team!.invite(projectId),
+  );
+  register("team:leave", teamProject, ({ projectId }) =>
+    team!.leave(projectId),
+  );
   register("team:read", teamProject, ({ projectId }) => team!.read(projectId));
-  register("team:publish", z.object({ projectId: identifier, taskId: identifier, artifactId: identifier }).strict(), (input) => team!.publish(input));
-  register("team:download", z.object({ projectId: identifier, resultId: identifier }).strict(), ({ projectId, resultId }) => team!.download(projectId, resultId));
-  register("team:claim", z.object({ projectId: identifier, taskId: identifier }).strict(), async ({ projectId, taskId }) => {
-    if (task(taskId).projectId !== projectId) throw Error("Choose a story in this project.");
-    await team!.acquire(taskId, projectId);
-    return team!.status(projectId);
-  });
-  register("team:release", z.object({ projectId: identifier, taskId: identifier }).strict(), async ({ projectId, taskId }) => {
-    if (task(taskId).projectId !== projectId) throw Error("Choose a story in this project.");
-    if (isActive(task(taskId))) throw Error("Stop this worker before releasing its team claim.");
-    await team!.release(taskId, projectId);
-    return team!.status(projectId);
-  });
+  register(
+    "team:publish",
+    z
+      .object({
+        projectId: identifier,
+        taskId: identifier,
+        artifactId: identifier,
+      })
+      .strict(),
+    (input) => team!.publish(input),
+  );
+  register(
+    "team:download",
+    z.object({ projectId: identifier, resultId: identifier }).strict(),
+    ({ projectId, resultId }) => team!.download(projectId, resultId),
+  );
+  register(
+    "team:claim",
+    z.object({ projectId: identifier, taskId: identifier }).strict(),
+    async ({ projectId, taskId }) => {
+      if (task(taskId).projectId !== projectId)
+        throw Error("Choose a story in this project.");
+      await team!.acquire(taskId, projectId);
+      return team!.status(projectId);
+    },
+  );
+  register(
+    "team:release",
+    z.object({ projectId: identifier, taskId: identifier }).strict(),
+    async ({ projectId, taskId }) => {
+      if (task(taskId).projectId !== projectId)
+        throw Error("Choose a story in this project.");
+      if (isActive(task(taskId)))
+        throw Error("Stop this worker before releasing its team claim.");
+      await team!.release(taskId, projectId);
+      return team!.status(projectId);
+    },
+  );
   const connections = registerConnections(
     register,
     state,
     changed,
     () => store.state.settings.memtracePath,
     host,
+    undefined,
+    {
+      stateFile: join(store.dir, "account-session.json"),
+      beforeChange: async () => {
+        teamIdentity.cancel();
+        await team!.suspendAccount();
+      },
+    },
   );
   const speech = new SpeechManager(
     () => store.state.settings,
@@ -259,6 +403,16 @@ export async function createRuntime(
     analyses.set(id, pending);
     return pending;
   };
+  const repositories = registerRepositoryRoutes(
+    register,
+    state,
+    project,
+    selectedFolders,
+    changed,
+    analyze,
+    (id) => team?.repositoryForProject(id),
+    () => host.call("open_github_device", {}),
+  );
   const assigning = new Map<string, Promise<void>>();
   const activeRouteError =
     "This worker is active. Its current route stays bound to the running attempt.";
@@ -652,15 +806,15 @@ export async function createRuntime(
   registerPlanning(register, state, project, changed);
   registerOnboarding(register, state, changed);
   registerDeletion(register, state, changed);
-  registerCardComments(
-    register,
-    state,
-    changed,
-    (taskId) => {
-      const projectId = taskId ? state().tasks.find((task) => task.id === taskId)?.projectId : state().activeProjectId;
-      return (projectId ? team?.identity(projectId) : undefined) ?? connections.account.current.principal;
-    },
-  );
+  registerCardComments(register, state, changed, (taskId) => {
+    const projectId = taskId
+      ? state().tasks.find((task) => task.id === taskId)?.projectId
+      : state().activeProjectId;
+    return (
+      (projectId ? team?.identity(projectId) : undefined) ??
+      connections.account.current.principal
+    );
+  });
   registerSpeech(register, speech);
   registerReview(
     register,
@@ -916,10 +1070,19 @@ export async function createRuntime(
           : input;
       const parsed = route.schema.parse(value);
       if (["story:delete", "epic:delete", "cycle:delete"].includes(method)) {
-        await team?.assertDeletionAllowed(method, (parsed as { id: string }).id);
-        const deletion = await team?.beginDeletion(method, (parsed as { id: string }).id);
-        try { return await route.handle(parsed); }
-        finally { await team?.finishDeletion(deletion); }
+        await team?.assertDeletionAllowed(
+          method,
+          (parsed as { id: string }).id,
+        );
+        const deletion = await team?.beginDeletion(
+          method,
+          (parsed as { id: string }).id,
+        );
+        try {
+          return await route.handle(parsed);
+        } finally {
+          await team?.finishDeletion(deletion);
+        }
       }
       return route.handle(parsed);
     },
@@ -931,6 +1094,8 @@ export async function createRuntime(
         console.error("Artifact catalog check failed:", error),
       );
       await workers.close();
+      teamIdentity.cancel();
+      await repositories.close();
       await team?.close();
       await speech.close();
       await connections.close();

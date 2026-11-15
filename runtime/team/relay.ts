@@ -15,6 +15,10 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { TeamSpaceStore } from "./spaces";
+import { createMemtraceIdentityVerifier, teamIdentityAudience, type TeamIdentityChallenge, type TeamIdentityProofVerifier } from "../team-identity";
+import { sanitizeRepositoryURL } from "../repository-onboarding";
+import { teamInvitationLanding } from "./landing";
 import type {
   TeamCredential,
   TeamEvent,
@@ -69,6 +73,7 @@ export interface TeamRelayOptions {
   adminCapability?: string;
   /** Acceptance-test hook after durable commit and before HTTP acknowledgement. */
   afterCommit?: (event: TeamEvent) => void | Promise<void>;
+  verifyIdentity?: TeamIdentityProofVerifier;
 }
 export interface TeamRelay {
   url: string;
@@ -220,6 +225,11 @@ export async function startTeamRelay(
   await mkdir(options.dataDir, { recursive: true, mode: 0o700 });
   const roomsDir = join(options.dataDir, "workspaces");
   await mkdir(roomsDir, { recursive: true, mode: 0o700 });
+  const spaces = new TeamSpaceStore(join(options.dataDir, "teams"));
+  await spaces.initialize();
+  const challenges = new Map<string, TeamIdentityChallenge>();
+  const verifyIdentity = options.verifyIdentity ?? createMemtraceIdentityVerifier();
+  let canonicalOrigin = advertised?.origin ?? "";
   const adminFile = join(options.dataDir, "admin.private.json"),
     readyFile = join(options.dataDir, "ready.private.json"),
     lockFile = join(options.dataDir, "relay.lock");
@@ -349,9 +359,9 @@ export async function startTeamRelay(
       return value.slice(7);
     };
     const authenticate = (request: IncomingMessage, workspaceId: string) => {
-      const token = bearer(request),
-        room = roomFor(workspaceId),
-        actor = room.credentials.get(digest(token));
+      const token = bearer(request), room = roomFor(workspaceId);
+      const teamId = spaces.projectTeam(workspaceId);
+      const actor = teamId ? spaces.authenticate(teamId, token).actor : room.credentials.get(digest(token));
       if (!actor)
         return error(
           "AUTH",
@@ -359,6 +369,42 @@ export async function startTeamRelay(
           403,
         );
       return { room, actor };
+    };
+    const verified = async (input: { proof: string; nonce: string }) => {
+      const challenge = challenges.get(input.nonce);
+      if (!challenge || Date.parse(challenge.expiresAt) <= Date.now()) return error("IDENTITY_CHALLENGE", "This identity handoff expired. Sign in again.", 403);
+      challenges.delete(input.nonce);
+      try { return await verifyIdentity(input.proof, challenge); }
+      catch { return error("IDENTITY", "Memtrace could not verify this account. Complete sign-in and try again.", 403); }
+    };
+    const creatingTeamRooms = new Map<string, Promise<Room>>();
+    const ensureTeamRoom = async (teamId: string, workspaceId: string, capability: string) => {
+      const project = spaces.project(teamId, workspaceId, capability), team = spaces.read(teamId, capability), { actor } = spaces.authenticate(teamId, capability);
+      let room = rooms.get(workspaceId);
+      const asMember = (member: typeof team.members[number]): TeamMember => ({ id: member.id, name: member.name, role: member.role === "owner" ? "owner" : "editor", devices: member.devices, joinedAt: member.joinedAt });
+      if (!room) {
+        let creating = creatingTeamRooms.get(workspaceId);
+        if (!creating) {
+        creating = (async () => {
+        const owner = team.members.find((member) => member.role === "owner" && member.status === "active")!;
+        const snapshot = emptyTeamSnapshot(workspaceId, project.name, asMember(owner));
+        snapshot.members = team.members.filter((member) => member.status === "active").map(asMember);
+        const record: Extract<RecordEntry, { kind: "create" }> = { kind: "create", snapshot, credentialHash: digest(capability), actor };
+        await append(workspaceId, record); const created = roomFrom(record); rooms.set(workspaceId, created); await checkpoint(created); return created;
+        })();
+        creatingTeamRooms.set(workspaceId, creating);
+        void creating.finally(() => { if (creatingTeamRooms.get(workspaceId) === creating) creatingTeamRooms.delete(workspaceId); }).catch(() => {});
+        }
+        room = await creating;
+      }
+      const target = room;
+      await serialized(target, async () => {
+        spaces.authenticate(teamId, capability);
+        const member = asMember(team.members.find((member) => member.id === actor.memberId)!);
+        const prior = target.snapshot.members.find((item) => item.id === member.id);
+        if (JSON.stringify(prior) !== JSON.stringify(member)) await commit(target, { kind: "command", dedup: `team-member/${member.id}/${team.revision}`, commandHash: digest(JSON.stringify(member)), event: teamEvent(target.snapshot, actor, randomUUID(), new Date().toISOString(), [{ collection: "members", id: member.id, value: member }], `${member.name} connected to the project`, "member.joined", member.id) });
+      });
+      return { room: target, actor };
     };
     const memberFor = (room: Room, actor: Actor) =>
       room.snapshot.members.find((item) => item.id === actor.memberId) ??
@@ -403,6 +449,72 @@ export async function startTeamRelay(
         );
         if (!allowedHosts.has(url.hostname))
           return error("HOST", "Unrecognized relay host.", 403);
+        if (request.method === "GET" && url.pathname === "/v1/team-auth/challenge") {
+          for (const [key, value] of challenges) if (Date.parse(value.expiresAt) <= Date.now()) challenges.delete(key);
+          if (challenges.size >= 500) return error("LIMIT", "Too many pending identity requests. Try again shortly.", 429);
+          const challenge: TeamIdentityChallenge = { audience: teamIdentityAudience(canonicalOrigin), nonce: secret(), expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString() };
+          challenges.set(challenge.nonce, challenge); return reply(response, 200, challenge);
+        }
+        const proof = { proof: z.string().min(1).max(16000), nonce: z.string().min(32).max(200) };
+        const teamDevice = { deviceId: teamId, deviceName: label };
+        if (request.method === "POST" && url.pathname === "/v1/teams") {
+          if (digest(bearer(request)) !== digest(adminCapability!)) return error("AUTH", "This relay’s private setup capability is required to create a Team.", 403);
+          const input = z.object({ name: label, opId:teamId.optional(), ...proof, ...teamDevice }).strict().parse(await json(request));
+          return reply(response, 201, await spaces.create(input.name, await verified(input), { id: input.deviceId, name: input.deviceName },input.opId));
+        }
+        if (request.method === "GET" && url.pathname === "/v1/teams") {
+          const id = teamId.parse(url.searchParams.get("teamId")); return reply(response, 200, spaces.read(id, bearer(request)));
+        }
+        if (request.method === "POST" && url.pathname === "/v1/teams/invites") {
+          const input = z.object({ teamId, email: z.string().email().max(250).optional(), projectWorkspaceId: teamId.optional() }).strict().parse(await json(request));
+          return reply(response, 201, await spaces.invite(input.teamId, bearer(request), input));
+        }
+        if (request.method === "POST" && url.pathname === "/v1/teams/invites/preview") {
+          const input = z.object({ teamId, invitation: z.string().min(32).max(200) }).strict().parse(await json(request)); return reply(response, 200, spaces.preview(input.teamId, input.invitation, request.headers.authorization ? bearer(request) : undefined));
+        }
+        if (request.method === "POST" && url.pathname === "/v1/teams/invites/accept") {
+          const input = z.object({ teamId, invitation: z.string().min(32).max(200), ...proof, ...teamDevice }).strict().parse(await json(request));
+          return reply(response, 200, await spaces.accept(input.teamId, input.invitation, await verified(input), { id: input.deviceId, name: input.deviceName }));
+        }
+        if (request.method === "POST" && url.pathname === "/v1/teams/reconnect") {
+          const input = z.object({teamId, ...proof, ...teamDevice}).strict().parse(await json(request));
+          return reply(response, 200, await spaces.reconnect(input.teamId, await verified(input), {id:input.deviceId,name:input.deviceName}));
+        }
+        if (request.method === "POST" && url.pathname === "/v1/teams/members/revoke") {
+          const input = z.object({ teamId, memberId: teamId }).strict().parse(await json(request));
+          const team = await spaces.revoke(input.teamId, bearer(request), input.memberId);
+          for (const project of team.projects) for (const wake of [...(rooms.get(project.workspaceId)?.waiters ?? [])]) wake();
+          return reply(response, 200, team);
+        }
+        if (request.method === "POST" && url.pathname === "/v1/teams/invites/revoke") {
+          const input = z.object({ teamId, invitationId: teamId }).strict().parse(await json(request)); return reply(response, 200, await spaces.revokeInvitation(input.teamId, bearer(request), input.invitationId));
+        }
+        if (request.method === "POST" && url.pathname === "/v1/teams/projects") {
+          const repository = z.object({ url: z.string().max(3000), identity: z.string().max(1000), provider: z.enum(["github", "gitlab", "bitbucket", "git"]), name: z.string().max(500), defaultBranch: z.string().max(250).optional() }).strict();
+          const input = z.object({ teamId, opId: teamId, name: label, repository: repository.optional(), workspaceId: teamId.optional(), legacyCapability: z.string().min(32).max(200).optional() }).strict().parse(await json(request));
+          const capability = bearer(request), team = spaces.read(input.teamId, capability);
+          if (team.role !== "owner") return error("TEAM_FORBIDDEN", "Only a Team owner can share projects.", 403);
+          let safeRepository = input.repository ? sanitizeRepositoryURL(input.repository.url, input.repository.defaultBranch) : undefined;
+          if (input.repository && safeRepository!.identity !== input.repository.identity) return error("REPOSITORY", "This repository identity does not match its URL.");
+          if (input.workspaceId) {
+            const room = roomFor(input.workspaceId), existingTeam = spaces.projectTeam(input.workspaceId);
+            if (!existingTeam) {
+              const actor = input.legacyCapability && room.credentials.get(digest(input.legacyCapability));
+              if (!actor || memberFor(room, actor).role !== "owner") return error("TEAM_FORBIDDEN", "Only this project’s existing owner can move it into a Team.", 403);
+            }
+          }
+          const project = await spaces.addProject(input.teamId, capability, { opId: input.opId, workspaceId: input.workspaceId ?? randomUUID(), name: input.name, ...(safeRepository ? { repository: safeRepository } : {}) });
+          const { room, actor } = await ensureTeamRoom(input.teamId, project.workspaceId, capability);
+          return reply(response, 201, { project, credential: { workspaceId: project.workspaceId, memberId: actor.memberId, deviceId: actor.deviceId, capability }, snapshot: room.snapshot, identity: "memtrace" });
+        }
+        if (request.method === "POST" && url.pathname === "/v1/teams/projects/open") {
+          const input = z.object({ teamId, workspaceId: teamId }).strict().parse(await json(request)), capability = bearer(request);
+          const { room, actor } = await ensureTeamRoom(input.teamId, input.workspaceId, capability);
+          return reply(response, 200, { credential: { workspaceId: input.workspaceId, memberId: actor.memberId, deviceId: actor.deviceId, capability }, snapshot: room.snapshot, identity: "memtrace" });
+        }
+        if (request.method === "GET" && /^\/join\/(team|project)\/[A-Za-z0-9._:-]+$/.test(url.pathname)) {
+          const page=teamInvitationLanding(); response.writeHead(200,page.headers); response.end(page.html); return;
+        }
         if (request.method === "POST" && url.pathname === "/v1/workspaces") {
           if (digest(bearer(request)) !== digest(adminCapability!))
             return error(
@@ -454,6 +566,7 @@ export async function startTeamRelay(
         if (request.method === "POST" && url.pathname === "/v1/invites") {
           const input = inviteSchema.parse(await json(request)),
             { room, actor } = authenticate(request, input.workspaceId);
+          if (spaces.projectTeam(input.workspaceId)) return error("TEAM_INVITE", "Invite this person through the Team membership controls.", 409);
           if (memberFor(room, actor).role !== "owner")
             return error(
               "FORBIDDEN",
@@ -490,6 +603,7 @@ export async function startTeamRelay(
         if (request.method === "POST" && url.pathname === "/v1/join") {
           const input = joinSchema.parse(await json(request)),
             room = roomFor(input.workspaceId);
+          if (spaces.projectTeam(input.workspaceId)) return error("TEAM_INVITE", "This project now belongs to a Team. Ask its owner for a Team invitation.", 403);
           return await serialized(room, async () => {
             const hash = digest(input.invitation),
               invitation = room.invitations.get(hash);
@@ -588,6 +702,7 @@ export async function startTeamRelay(
           if (response.destroyed) return;
           if (closing)
             return error("CLOSED", "The Team relay is closing.", 503);
+          authenticate(request, workspaceId);
           const events =
             after === 0
               ? []
@@ -611,6 +726,7 @@ export async function startTeamRelay(
           const input = commandSchema.parse(await json(request)),
             { room, actor } = authenticate(request, input.workspaceId);
           return await serialized(room, async () => {
+            authenticate(request, input.workspaceId);
             const key = `${actor.memberId}/${actor.deviceId}/${input.opId}`,
               hash = digest(JSON.stringify(input.command)),
               prior = room.operations.get(key);
@@ -689,6 +805,7 @@ export async function startTeamRelay(
               409,
             );
           await serialized(room, async () => {
+            authenticate(request, workspaceId);
             const directory = blobsDir(workspaceId);
             await mkdir(directory, { recursive: true, mode: 0o700 });
             let existing: Awaited<ReturnType<typeof blobMeta>> | undefined;
@@ -773,6 +890,7 @@ export async function startTeamRelay(
           const bytes = await readFile(
             join(blobsDir(workspaceId), blob[1] + ".bin"),
           );
+          authenticate(request, workspaceId);
           if (digest(bytes) !== metadata.hash || bytes.length !== metadata.size)
             return error(
               "BLOB",
@@ -842,6 +960,7 @@ export async function startTeamRelay(
     const url = advertised
       ? advertised.origin
       : `http://${host === "::1" ? "[::1]" : host}:${address.port}`;
+    canonicalOrigin = url;
     await durableFile(
       readyFile,
       JSON.stringify({
@@ -865,6 +984,7 @@ export async function startTeamRelay(
           await Promise.allSettled(
             [...rooms.values()].map((room) => room.pending),
           );
+          await spaces.settled();
           await new Promise<void>((resolve) => {
             server.close(() => resolve());
             server.closeIdleConnections();

@@ -129,16 +129,18 @@ test("claim identity distinguishes the same member on another device and never i
   assert.doesNotMatch(markup, />Running</);
 });
 
-test("setup explains preview identity and private source boundaries, with no invented teammates", () => {
-  const markup = render();
+test("legacy standalone setup explains current-state joining and its preview identity boundary", () => {
+  const markup = render().replace(/\s+/g, " ");
   assert.match(markup, /Share this project/);
-  assert.match(markup, /Open existing project/);
+  assert.match(markup, /Join a project/);
+  assert.match(markup, /open the project’s current board/);
+  assert.match(markup, /Connect a local code folder later/);
   assert.match(markup, /not verified Memtrace team identities/);
   assert.match(markup, /uses Git for code/);
   assert.doesNotMatch(markup, /Alice|Bob|Account connected/);
 });
 
-test("Team guide reaches the actual Team view and keeps related articles and preview boundaries accurate", () => {
+test("Team guide explains named teams, current-state joining and separate local-code approval", () => {
   const article = guideArticles.find((item) => item.id === "team")!;
   assert.equal(article.destination, "team");
   assert.ok(
@@ -148,15 +150,24 @@ test("Team guide reaches the actual Team view and keeps related articles and pre
   );
   const text = [...article.steps, article.note].join(" ");
   for (const detail of [
-    "Open existing project",
-    "local-network",
-    "one claim",
+    "Create a team",
+    "Memtrace approval in your browser",
+    "verified email",
+    "existing shared work opens immediately",
+    "No empty project",
+    "Work on this computer",
+    "Existing local changes are preserved",
+    "GitHub access is checked separately",
+    "explicit approval",
+    "confirmed story claim",
     "5 MiB",
-    "Git",
-    "not verified Memtrace team identities",
-    "Receiving updates never starts a worker",
+    "Git carries source changes",
+    "receiving an update never starts work automatically",
+    "Planning changes queue while offline",
+    "Removing Team access blocks future requests",
   ])
     assert.ok(text.includes(detail), detail);
+  assert.doesNotMatch(text, /empty MemCode project|enters a display name|Advanced connection/);
   assert.ok(
     guideArticles.every(
       (item) =>

@@ -1,0 +1,417 @@
+.collab-home {
+  max-width: 1420px;
+  margin: 0 auto;
+  color: var(--ink);
+  padding-bottom: 24px;
+}
+.collab-header,
+.collab-actions,
+.collab-section-heading,
+.collab-flow-top,
+.collab-flow-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.collab-header {
+  margin: 0 0 26px;
+}
+.collab-header h2 {
+  font-size: 28px;
+  font-weight: 550;
+  letter-spacing: -0.035em;
+  margin: 9px 0;
+}
+.collab-header p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.65;
+}
+.collab-actions {
+  justify-content: flex-end;
+  gap: 9px;
+}
+.collab-home h3 {
+  font-size: 18px;
+  font-weight: 550;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+.collab-home .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.collab-home .team-field {
+  margin: 20px 0;
+}
+.collab-home .team-field input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.collab-welcome {
+  display: grid;
+  grid-template-columns: auto minmax(240px, 1fr) minmax(240px, 0.7fr);
+  align-items: center;
+  gap: 25px;
+  border: 1px solid #d9e6dc;
+  border-radius: 14px;
+  background: linear-gradient(120deg, #f1f8f2, #fff);
+  padding: 34px;
+  margin-bottom: 24px;
+}
+.collab-welcome p {
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--muted);
+  max-width: 490px;
+  margin: 12px 0 20px;
+}
+.collab-welcome ol {
+  list-style: none;
+  padding: 12px 0 12px 28px;
+  margin: 0;
+  border-left: 1px solid #dce9df;
+}
+.collab-welcome li {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  font-size: 12px;
+  margin: 18px 0;
+}
+.collab-welcome li span {
+  font: 9px var(--mono);
+  color: #799386;
+}
+.collab-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid #e1e6d7;
+  background: #f7f9f1;
+  padding: 16px 19px;
+  border-radius: 9px;
+  margin-bottom: 20px;
+  font-size: 12px;
+  color: #667461;
+  line-height: 1.65;
+}
+.collab-notice p {
+  margin: 4px 0 0;
+}
+.collab-notice strong {
+  font-weight: 550;
+  color: var(--ink);
+}
+.collab-flow {
+  max-width: 740px;
+  border: 1px solid #cddfd4;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 6px 24px #15382505;
+  margin: 0 0 26px;
+  padding: 22px 26px;
+}
+.collab-flow-top {
+  margin-bottom: 18px;
+}
+.collab-flow h3 {
+  font-size: 22px;
+}
+.collab-flow p {
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--muted);
+  margin: 10px 0 17px;
+}
+.collab-flow-footer {
+  padding-top: 17px;
+  margin-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.collab-flow-footer small {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 340px;
+}
+.collab-flow .collab-pending {
+  margin: 17px 0 0;
+  padding-top: 15px;
+  border-top: 1px solid var(--line);
+  color: #527966;
+}
+.collab-share-summary,
+.collab-invite-preview {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  background: #f4f8f4;
+  border: 1px solid #e0e9df;
+  border-radius: 9px;
+  padding: 18px;
+  margin: 20px 0;
+}
+.collab-share-summary div,
+.collab-invite-preview div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+.collab-share-summary strong,
+.collab-invite-preview strong {
+  font-size: 14px;
+  font-weight: 550;
+}
+.collab-share-summary small,
+.collab-invite-preview small {
+  font-size: 10px;
+  color: var(--muted);
+}
+.collab-invite-preview span {
+  font-size: 12px;
+}
+.collab-repository {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.collab-repository small {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+}
+.collab-caption {
+  font-size: 11px !important;
+}
+.collab-directory {
+  display: grid;
+  grid-template-columns: 205px minmax(0, 1fr);
+  border: 1px solid #dce6de;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.collab-team-list {
+  background: #f6f9f6;
+  padding: 22px 12px;
+  border-right: 1px solid #e0e8e0;
+}
+.collab-team-list > .team-kicker {
+  display: block;
+  padding: 0 10px 14px;
+}
+.collab-team-list button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 10px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #6b8275;
+  text-align: left;
+  margin: 3px 0;
+}
+.collab-team-list button.selected {
+  border-color: #d4e6da;
+  background: #e7f3ec;
+  color: #254c3b;
+}
+.collab-team-list button span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.collab-team-list small {
+  font: 9px var(--mono);
+}
+.collab-team-content {
+  padding: 25px 28px;
+  min-width: 0;
+}
+.collab-section-heading {
+  margin-bottom: 17px;
+}
+.collab-section-heading h3 {
+  margin-top: 6px;
+}
+.collab-role {
+  color: #7e9386;
+  font-size: 10px;
+  text-transform: capitalize;
+}
+.collab-projects {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 30px;
+}
+.collab-project {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+  padding: 17px;
+  border: 1px solid #e0e8df;
+  background: #fff;
+  border-radius: 9px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink);
+}
+.collab-project:hover {
+  border-color: #afc9b9;
+  background: #fafdfa;
+}
+.collab-project.selected {
+  border-color: #bdd7c7;
+  background: #f7fbf8;
+}
+.collab-project > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  flex: 1;
+}
+.collab-project strong {
+  font-size: 13px;
+  font-weight: 550;
+}
+.collab-project small {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.collab-members {
+  border-top: 1px solid var(--line);
+}
+.collab-member {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--line);
+}
+.collab-member > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+.collab-member strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+.collab-member small {
+  font-size: 10px;
+  color: var(--muted);
+}
+.collab-current-project {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 21px 24px;
+  border: 1px solid #dce7df;
+  border-radius: 10px;
+  margin-bottom: 21px;
+  background: #f8fbf8;
+}
+.collab-current-project > div {
+  flex: 1;
+  min-width: 0;
+}
+.collab-current-project strong {
+  font-size: 13px;
+  font-weight: 550;
+}
+.collab-current-project p {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.65;
+  margin: 6px 0 0;
+}
+.collab-principle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #839789;
+  font-size: 10px;
+  line-height: 1.7;
+  padding: 23px 2px 0;
+}
+.collab-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 30px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.collab-empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 12px 0;
+  line-height: 1.7;
+}
+@media (max-width: 1000px) {
+  .collab-welcome {
+    grid-template-columns: auto 1fr;
+  }
+  .collab-welcome ol {
+    display: none;
+  }
+  .collab-header {
+    flex-wrap: wrap;
+  }
+  .collab-directory {
+    grid-template-columns: 165px minmax(0, 1fr);
+  }
+  .collab-team-content {
+    padding: 21px;
+  }
+  .collab-current-project {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 650px) {
+  .collab-directory {
+    grid-template-columns: 1fr;
+  }
+  .collab-team-list {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .collab-flow {
+    padding: 18px;
+  }
+  .collab-flow-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .collab-welcome {
+    padding: 23px;
+  }
+  .collab-repository {
+    flex-wrap: wrap;
+  }
+  .collab-repository small {
+    margin-left: 0;
+  }
+}

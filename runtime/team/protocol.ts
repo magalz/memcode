@@ -286,7 +286,7 @@ export const teamSessionReplySchema = z
       })
       .strict(),
     snapshot: teamSnapshotSchema,
-    identity: z.literal("invite-preview"),
+    identity: z.enum(["invite-preview", "memtrace"]),
   })
   .strict();
 export const teamCommandSchema = z.discriminatedUnion("type", [

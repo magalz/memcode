@@ -16,6 +16,45 @@ There is no `memtrace auth status` command: in the current CLI it falls through
 to login. MemCode never calls it. It also never runs global `auth logout` as a
 side effect of disconnecting a worker.
 
+## Sign out or use another account
+
+Open the account button at the top right, or **Settings → Your Memtrace account**.
+Choose **Switch account** or **Sign out**, then confirm the action in the same panel.
+Switch runs the official `memtrace auth logout` command before starting
+`memtrace auth login`. **Cancel sign-in** stops only the pending login process
+started by MemCode. A failed or cancelled login is not presented as a completed switch.
+
+This changes the shared Memtrace CLI session for the current OS user, across local
+projects. It does not delete local MemCode projects, sign Codex/Claude/Cursor out
+of their providers, or delete saved Team membership. Verified Teams lock locally
+until the intended Memtrace person confirms the account in the browser again.
+Older invitation-preview memberships stay separate. The browser's memtrace.io
+login is separate from the installed CLI session; the Team approval page lets
+you explicitly choose a different browser account.
+
+Account changes are blocked while workers are preparing, running or stopping.
+After changing the session, restart MemCode before starting more workers. Restart
+any Memtrace workspace running separately as well: CLI logout removes saved
+credentials but does not replace an already-running daemon's cached authentication.
+MemCode does not terminate external workspace daemons. The worker guard applies
+to direct starts and automatic queued follow-ups for all three adapters.
+
+MemCode records only a non-secret explicit signed-out flag in its local profile,
+so refreshing or reopening the app cannot turn a cached owner's old `Valid` status
+back into an adopted account. It never reads or copies the Memtrace credential file.
+An unreadable local policy is preserved and blocks new worker starts until repaired.
+
+If authentication is managed by `MEMTRACE_LICENSE_KEY`, `MEMTRACE_DEV` or
+`MEMTRACE_OFFLINE`, the panel shows the variable names without their values.
+In-app switching is disabled because deleting a credential file cannot remove a
+launch-environment override. Remove the override from the environment that starts
+the app, then restart before using the normal browser sign-in flow.
+
+The Team Sync preview can be tested on two machines signed into the same Memtrace
+account. Each machine must join using a fresh invitation and its own local profile;
+do not copy the private `team/connections.json` file between machines. This tests
+device synchronization and claims, not verified multi-user account permissions.
+
 ## Identity boundary
 
 The current Memtrace `AuthState` and stored credential shape contain session,
@@ -23,9 +62,17 @@ edition and optional organization/seat principal fields. The current public
 status interface does not expose a general signed-in person's account ID,
 display name or email. A valid license/session must not be labelled as a verified
 person. MemCode shows that distinction in account details, and only supplies a
-Memtrace author principal when the CLI actually reports one. Otherwise comments
-use an honest local author. Future multiplayer needs a supported authenticated
-Memtrace principal interface; local consent receipts are not multiplayer auth.
+Memtrace author principal when the CLI actually reports one. Otherwise local
+comments use an honest local author.
+
+Verified Team membership uses a separate, supported Memtrace web boundary:
+explicit browser approval, a one-time PKCE code and an Ed25519-signed identity
+proof bound to that relay and its single-use nonce. Its stable person ID and
+name come from the actual Memtrace browser account. Targeted email invitations
+require a verified email. CLI credentials, license keys and model accounts are
+never sent to a relay. The web issuer must be deployed and enabled; MemCode
+checks availability before opening its browser and reports an unavailable
+service immediately. Browser cancellation never adopts a new identity.
 
 ## Worker approval
 

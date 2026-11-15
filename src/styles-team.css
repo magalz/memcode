@@ -57,7 +57,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 24px 3px;
+  margin: -7px 0 22px;
   color: var(--muted);
   font-size: 11px;
 }
@@ -76,6 +76,49 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 22px;
+  margin-top: 24px;
+}
+.team-join-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.team-overview + .team-join-panel,
+.team-error + .team-join-panel {
+  max-width: 640px;
+  margin: 22px 0;
+}
+.team-folder-note {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 19px 21px;
+  margin: 20px 0;
+  border: 1px solid #dbe7df;
+  border-radius: 10px;
+  background: #f8fcf9;
+  color: #5e7d6a;
+  font-size: 12px;
+}
+.team-folder-note > svg {
+  flex-shrink: 0;
+}
+.team-folder-note > div {
+  flex: 1;
+  min-width: 0;
+}
+.team-folder-note strong {
+  font-weight: 550;
+  color: var(--ink);
+}
+.team-folder-note p {
+  font-size: 11px;
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+.team-folder-note .button {
+  flex-shrink: 0;
 }
 .team-panel {
   border: 1px solid #dce6dd;
@@ -815,6 +858,15 @@
   }
 }
 @media (max-width: 650px) {
+  .team-folder-note {
+    flex-wrap: wrap;
+  }
+  .team-folder-note > div {
+    flex-basis: calc(100% - 40px);
+  }
+  .team-folder-note .button {
+    margin-left: 35px;
+  }
   .team-setup-grid,
   .team-side-column {
     grid-template-columns: 1fr;

@@ -58,8 +58,9 @@ import {
 } from "./onboarding";
 import type { GuideDestination } from "./guide-content";
 import { WorkerConnections } from "./components/WorkerConnections";
-import { TeamWorkspace } from "./components/TeamWorkspace";
+import { TeamOnboarding } from "./components/TeamOnboarding";
 import "./styles-team.css";
+import "./styles-collaboration.css";
 import { AccountConnections } from "./components/AccountConnections";
 import type { MemtraceAccount } from "./connections";
 import { approvedRuntime } from "./worker-availability";
@@ -165,6 +166,7 @@ export function App() {
     "task" | "project" | "settings" | "search" | null
   >(null);
   const [projectMenu, setProjectMenu] = useState(false);
+  const [joinTeamRequest, setJoinTeamRequest] = useState(0);
   const [docsArticle, setDocsArticle] = useState("start");
   const [createEpicRequest, setCreateEpicRequest] = useState(0);
   const [account, setAccount] = useState<MemtraceAccount>();
@@ -428,6 +430,12 @@ export function App() {
     },
     { id: "docs", label: "Docs", icon: BookOpen },
   ];
+  const projectGroups = new Map<string, typeof state.projects>();
+  for (const item of state.projects) {
+    const shared = state.team?.find((room) => room.projectId === item.id);
+    const label = shared ? shared.teamName ?? "Shared preview projects" : "Personal projects";
+    projectGroups.set(label, [...(projectGroups.get(label) ?? []), item]);
+  }
   return (
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
       <div className="desktop-titlebar" data-tauri-drag-region>
@@ -495,8 +503,9 @@ export function App() {
           </button>
           {projectMenu && (
             <div className="project-menu">
-              <span className="menu-eyebrow">YOUR PROJECTS</span>
-              {state.projects.map((item) => (
+              {[...projectGroups].map(([group, items]) => <div key={group}>
+              <span className="menu-eyebrow">{group}</span>
+              {items.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => {
@@ -514,7 +523,7 @@ export function App() {
                   </span>
                   {project.id === item.id && <Check size={13} />}
                 </button>
-              ))}
+              ))}</div>)}
               <div className="menu-divider" />
               <button
                 onClick={() => {
@@ -524,6 +533,16 @@ export function App() {
               >
                 <Plus size={16} />
                 Add a project
+              </button>
+              <button
+                onClick={() => {
+                  setView("team");
+                  setJoinTeamRequest((value) => value + 1);
+                  setProjectMenu(false);
+                }}
+              >
+                <Users size={16} />
+                Join a team project
               </button>
             </div>
           )}
@@ -635,32 +654,36 @@ export function App() {
           </div>
         )}
         <div className="workspace-scroll">
-          <div className="page-heading">
-            <div>
-              <div className="eyebrow">
-                <span />
-                {pageCopy[view][0]}
+          {view !== "team" && (
+            <div className="page-heading">
+              <div>
+                <div className="eyebrow">
+                  <span />
+                  {pageCopy[view][0]}
+                </div>
+                <h1>{pageCopy[view][1]}</h1>
+                <p>{pageCopy[view][2]}</p>
               </div>
-              <h1>{pageCopy[view][1]}</h1>
-              <p>{pageCopy[view][2]}</p>
+              {view !== "docs" && (
+                <button
+                  className="button primary"
+                  data-guide="new-story"
+                  onClick={() => create()}
+                >
+                  <Plus size={15} />
+                  {view === "roadmap" ? "New story" : "New work item"}
+                  <kbd>C</kbd>
+                </button>
+              )}
             </div>
-            {view !== "docs" && view !== "team" && (
-              <button
-                className="button primary"
-                data-guide="new-story"
-                onClick={() => create()}
-              >
-                <Plus size={15} />
-                {view === "roadmap" ? "New story" : "New work item"}
-                <kbd>C</kbd>
-              </button>
-            )}
-          </div>
+          )}
           {view === "team" && (
-            <TeamWorkspace
-              key={project.id}
+            <TeamOnboarding
               state={state}
               project={project}
+              joinRequested={joinTeamRequest}
+              onJoinHandled={() => setJoinTeamRequest(0)}
+              onWorkers={() => setView("workers")}
               notify={notify}
               open={open}
               openArtifact={(artifact) => {

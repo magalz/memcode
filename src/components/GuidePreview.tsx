@@ -701,6 +701,10 @@ function AccountPreview() {
         <Label>Settings · Your Memtrace account</Label>
         <h4>Your existing Memtrace session.</h4>
         <p>Use the official sign-in flow. Credentials stay with Memtrace.</p>
+        <Row>
+          <Action>Switch account</Action>
+          <Action quiet>Sign out</Action>
+        </Row>
       </div>
       <div className="guide-preview-panel">
         <Row>
@@ -709,6 +713,7 @@ function AccountPreview() {
         </Row>
         <p>Memtrace provides source intelligence and coordination.</p>
         <p>Approve Codex, Claude Code or Cursor separately in Workers.</p>
+        <p>Team preview invitations keep their own member and device identity.</p>
       </div>
     </div>
   );

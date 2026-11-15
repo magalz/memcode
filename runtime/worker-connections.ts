@@ -2,7 +2,7 @@ import { z } from "zod";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { childEnv, findCommand } from "./commands";
-import { MemtraceAccountManager } from "./account";
+import { MemtraceAccountManager, type MemtraceAccountOptions } from "./account";
 import type { NativeHost } from "./host";
 import {
   harnessNames,
@@ -108,8 +108,16 @@ export function registerConnections(
   configuredPath: () => string,
   host: NativeHost,
   commandFor: typeof findCommand = findCommand,
+  accountOptions: MemtraceAccountOptions = {},
 ) {
-  const account = new MemtraceAccountManager(configuredPath, host),
+  const account = new MemtraceAccountManager(configuredPath, host, {
+    ...accountOptions,
+    beforeChange: () => {
+      if (state().tasks.some((task) => !task.example && ["preparing", "running", "stopping"].includes(task.run.state)))
+        throw Error("Stop active workers before changing the Memtrace account.");
+      return accountOptions.beforeChange?.();
+    },
+  }),
     id = z.enum(["codex", "claude", "cursor"]);
   // Reuse the existing Memtrace session for host-owned author attribution.
   // This is a read-only status check, not a worker connection or login action.
@@ -227,5 +235,8 @@ export function registerConnections(
   );
   register("account:status", z.undefined(), () => account.refresh());
   register("account:sign-in", z.undefined(), () => account.signIn());
+  register("account:sign-out", z.undefined(), () => account.signOut());
+  register("account:switch", z.undefined(), () => account.switchAccount());
+  register("account:cancel-sign-in", z.undefined(), () => account.cancelSignIn());
   return { account, close: () => account.close() };
 }

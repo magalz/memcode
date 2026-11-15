@@ -218,6 +218,7 @@ export class WorkerManager {
     private readonly terminals?: TerminalManager,
     private readonly sessionFactory: typeof startHarnessSession = startHarnessSession,
     private readonly teamClaims?: TeamWorkerClaims,
+    private readonly assertAccountSession?: () => void,
   ) {
     this.inputs = new WorkerInputs(state, changed);
     for (const task of state().tasks)
@@ -435,6 +436,19 @@ export class WorkerManager {
       },
     };
     let permissionMode = effectivePermissionMode(task, permissionSettings);
+    // Keep this synchronous with the Preparing transition: account changes
+    // reject active workers, and queued passes use this same entry point.
+    this.assertAccountSession?.();
+    // A personal record and an invitation-created record may reuse the same
+    // checkout. Only one project identity may drive its branch at a time.
+    const checkoutKey = (value: string) => process.platform === "win32"
+      ? resolve(value).toLowerCase() : resolve(value);
+    const alias = this.state().projects.find((candidate) =>
+      candidate.id !== project.id && candidate.path && project.path &&
+      checkoutKey(candidate.path) === checkoutKey(project.path) &&
+      this.state().tasks.some((other) => other.projectId === candidate.id && isActive(other)),
+    );
+    if (alias) throw new Error(`This local folder is already in use by a worker in ${alias.name}. Stop that worker before starting through this project.`);
     task.run = {
       ...task.run,
       state: "preparing",

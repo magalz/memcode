@@ -1,60 +1,87 @@
-# Team Sync preview
+# Build with your team
 
-Team Sync shares a project's board, epics, cycles, story comments, activity and deliberately published results. Each developer keeps a separate local checkout, Memtrace index, model configuration and worker processes. Git exchanges source changes.
+MemCode shares a team’s board, epics, cycles, story comments, activity and published results. Each developer runs their own workers and Memtrace analysis locally. Git carries the code between their computers.
 
-This preview uses private invitation capabilities and display names. These are not verified Memtrace team identities. It does not yet connect a Memtrace organization, offer live collaborative source editing, or coordinate Fleet across different computers.
+You can join, plan and comment before downloading the project’s source.
 
-## Try it with a teammate
+## Start with one project
 
-1. Both developers open their own local clone of the same Git repository in MemCode. Use the same epic branch when exchanging that epic's code.
-2. The first developer selects **Team → Share this project**, enters a display name and chooses how the relay is reachable. The default is a private relay on this computer. For a second computer, explicitly enable local-network sharing or use a reachable private relay.
-3. Copy a fresh invitation and send it privately to the teammate. Invitations grant access to this workspace; keep them out of public issues and screenshots.
-4. The teammate uses **Open existing project** to select their local clone, then selects **Team → Join** and pastes the invitation. Its MemCode board must be empty. The new-project wizard creates a starter story, so opening an existing clone is the direct route. Existing personal project cards are preserved; joining does not merge or export them.
-5. Move a story or add a comment. Check the connection indicator and queued-change count. The Team activity feed shows accepted changes and lets you mark them as read.
-6. Start a story worker. MemCode confirms one claim for that story before launching the local harness. Another developer sees who holds it and cannot start a second official worker for the same story.
-7. Publish a saved report or artifact from Team when it is ready. A teammate can click the published result to download and view that exact saved file locally. The preview limit is 5 MiB per file.
+1. Open the project you already use. In **Team**, choose **Create a team**, give it a name and complete the Memtrace approval in your browser.
+2. Choose **Share with your team**. Check the project and repository shown. Its current planning is shared; your local source folder and private worker sessions stay on your computer.
+3. Choose **Invite teammate**. Optionally restrict the invitation to their verified email, then copy the link and send it privately. Your teammate sees the team and project before accepting.
 
-Receiving a story, comment or result never starts a worker on the receiving computer. Harness connections and approvals remain that developer's choice.
+One team can have several projects. Existing personal projects stay available and separate. Creating a team does not start a worker.
 
-Publishing uploads one selected file. Markdown, PDF, images and self-contained Office documents are useful first tests. Linked website assets and a running development server are not bundled or shared with that file.
+For this pilot, the owner’s installation needs a configured, reachable Team service and Memtrace browser identity support. The Team screen reports when that setup is missing. Teammates receive the service address in their invitation; they do not enter a relay address or setup secret.
 
-## Relay hosting
+## Join the work
 
-The embedded relay runs with the host's MemCode runtime. Keep that application open for live synchronization. Other clients retain queued metadata changes while it is unavailable. New team workers require a reachable relay so ownership can be checked.
+1. Open your existing MemCode installation. Choose **Join with invitation** in Team, or the join action in the project selector.
+2. Paste the link, check its team and project, then choose **Accept and open**. Approve the intended Memtrace account in the browser. Email-restricted invitations must match that account’s verified email.
+3. The shared project opens with its current stories, epics, cycles and discussions. Your personal projects are preserved. There is no empty-project prerequisite.
+4. Move a story, leave a comment or review a published result. None of those actions starts a worker on anyone’s computer.
 
-For an independently running relay, build the runtime and run:
+An invitation grants Team membership. It does not grant GitHub access, connect a coding provider or download source files automatically. Expired, revoked or wrong-account invitations need a new invitation or the intended account.
+
+## Work on the code locally
+
+In the shared project, choose **Work on this computer** when you are ready to run a worker.
+
+- **Already have the code?** Use the matching checkout MemCode finds, or choose its existing folder. MemCode checks the repository identity and preserves its current branch and uncommitted changes. A folder belonging to another repository stays unbound.
+- **Need the code?** Choose **Clone the repository**, check access, pick a destination and name a new folder. MemCode first checks the computer’s existing Git credentials, including authorized SSH setups. GitHub sign-in is offered only when needed and requires an explicit action. Progress and cancellation are visible; failed or cancelled clone folders are preserved.
+- Memtrace then analyzes that local checkout. Open **Workers** to connect your own installed coding provider with explicit approval. Start a story worker when you are ready; it first confirms the shared story claim.
+
+Team identity, Git repository access and coding-provider authentication are separate connections:
+
+| Connection | What it grants |
+| --- | --- |
+| Memtrace browser identity | Membership of a named MemCode team |
+| Git / GitHub credentials | Access to clone, fetch and push the source repository |
+| Codex, Claude Code or Cursor connection | Permission for MemCode to run that developer’s local coding tool |
+
+A shared checkout already used by another active local project cannot be rebound or run through a second project alias at the same time. This prevents two sets of workers switching the same local branch underneath one another.
+
+## Share results deliberately
+
+Publish a saved report or artifact from Team when it is ready. This uploads the selected file, up to **5 MiB**. Teammates can download and view that exact saved output. Markdown, PDF, images and self-contained Office documents are useful first tests.
+
+A published HTML file does not bundle its linked assets or share its running development server. Browser sessions, terminal processes, model credentials, local analysis and full agent conversations stay local. Descriptions and comments are shared text, so include only information intended for the team.
+
+## Stay in sync
+
+The connection indicator, queued-change count and unread activity describe different things. Accepted planning changes are journaled, retried operations are deduplicated, and reconnecting clients catch up from their last received event.
+
+Metadata edits can wait in the local outbox while offline. New shared workers need a reachable service to confirm ownership. A registered device or cached claim is not evidence that a worker is currently running.
+
+**A synchronized board does not mean synchronized source.** Fetch, review and integrate code through Git, using your team’s epic-branch workflow. A story claim prevents a second official worker on the same story; different stories can still change the same files. Local Memtrace Fleet coordinates workers on each computer. This pilot does not provide live shared-file editing or cross-computer Fleet coordination.
+
+Routine completion and explicit Stop release a story claim. After a crash, the owning device must check that its worker stopped before releasing the saved claim.
+
+Owners can remove a teammate’s access. Revocation blocks subsequent Team requests, including pending long polls; it cannot erase already downloaded files, change GitHub repository permissions or stop another computer’s local process. Account changes require reconnecting verified Team membership rather than silently reusing another person’s access.
+
+## Updating MemCode is separate from joining a project
+
+A teammate who already installed MemCode uses that installation. They do not clone the MemCode application repository again just to accept an invitation.
+
+If an application update is needed, update the existing MemCode checkout using the installation instructions. Choosing or cloning the team project’s source is a separate step under **Work on this computer**.
+
+## Advanced: pilot service operation
+
+The pilot uses a small authoritative HTTP relay with a durable journal, published-file storage and per-client outboxes. It does not require a managed database, host a Memtrace analysis engine or replicate source folders. It is not a peer-to-peer filesystem or a DeltaDB integration.
+
+An operator can run the standalone relay after building the runtime:
 
 ```powershell
 npm run build
 npm run team:relay -- --data-dir C:\private\memcode-team --port 9331
 ```
 
-The command prints the endpoint and the location of its private setup capability file. In **Advanced connection**, the workspace creator supplies the relay address and setup capability. Teammates use invitations instead of the setup capability.
+For remote participants, configure a reachable HTTPS endpoint and the required scoped Memtrace identity issuer/verifier. The owner’s private Team service configuration selects that endpoint and setup capability. Keep setup capabilities and service credentials out of invitations, public issues and screenshots. No public service or tunnel is deployed automatically.
 
-An explicitly shared local-network relay can bind to all interfaces and advertise a reachable address:
+The service must stay running for live synchronization. An embedded service depends on its host application; a separately hosted service can run independently. A temporary HTTPS tunnel provides transport only. It is not membership, repository authorization or project hosting.
 
-```powershell
-npm run team:relay -- --data-dir C:\private\memcode-team --port 9331 --host 0.0.0.0 --advertise-url http://YOUR-PRIVATE-IP:9331
-```
+### Legacy standalone workspace previews
 
-Use this HTTP option only on a trusted private network or private tunnel. For a remote pilot, put the loopback relay behind HTTPS and configure its advertised URL. The relay must accept that configured host. No public relay is deployed automatically.
+Older builds exposed raw workspace invitation objects, display names and **Advanced connection** relay settings. Those standalone preview memberships are not verified named-team membership. They remain a compatibility path for older pilots, rather than the normal onboarding flow.
 
-## Ownership and reconnects
-
-- Claims belong to one member, device and attempt. Disconnecting does not silently hand them to another worker.
-- Routine completion and explicit Stop release the local claim. If an application crashes, its owning device can release the saved claim after checking that its worker has stopped.
-- An accepted mutation is journaled before it is acknowledged. Retried operations use their operation IDs to avoid duplicate changes.
-- Connection state, pending changes and unread activity are separate concepts. “Registered device” does not mean “currently online.”
-- Two different stories can still change the same source files. Review and integrate those changes through Git. A story claim is not a cross-computer source lock or a proof of semantic agreement.
-
-## What is shared
-
-Shared fields are explicitly selected: planning text and fields, relative scope hints, authored story comments, accepted activity, claim metadata and published file contents. Publish only outputs intended for the team; descriptions and comments are shared text too.
-
-Device-local credentials, absolute repository bindings, CLI approvals, permission defaults, Memtrace graph IDs and analysis state, terminal sessions, browser cookies, conversation drafts and worker process state stay local. Full agent conversations and uncommitted source files are outside this preview.
-
-## Architecture
-
-The prototype has one small authoritative relay per shared workspace service. Clients keep a private durable outbox and catch up from ordered events using a received cursor. Read activity uses a separate cursor. The relay stores a durable journal and content-addressed published files; it does not host a Memtrace engine or require a managed database.
-
-This implementation uses typed HTTP commands and long polling. It is not DeltaDB, an Automerge integration or a peer-to-peer replicated filesystem. Richer collaborative text, verified Memtrace membership, revocation and cross-device execution handoffs remain follow-up work.
+Use **Create a team → Share project → Invite teammate** for new collaboration. Joining a named team never requires an unrelated empty local project, manual JSON editing or another clone of the MemCode application.

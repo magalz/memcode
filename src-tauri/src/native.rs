@@ -101,6 +101,19 @@ pub async fn host_call(app: AppHandle, method: &str, input: Value) -> Result<Val
                 .map_err(|e| e.to_string())??;
             Ok(Value::Null)
         }
+        "open_memcode_identity" => {
+            let url = memcode_identity_url(input["url"].as_str().ok_or("Missing team sign-in URL")?)?;
+            tauri::async_runtime::spawn_blocking(move || open_claim(&url))
+                .await
+                .map_err(|e| e.to_string())??;
+            Ok(Value::Null)
+        }
+        "open_github_device" => {
+            tauri::async_runtime::spawn_blocking(|| open_claim("https://github.com/login/device"))
+                .await
+                .map_err(|e| e.to_string())??;
+            Ok(Value::Null)
+        }
         "open_path" => {
             let path = input["path"]
                 .as_str()
@@ -269,9 +282,44 @@ fn memtrace_claim_url(value: &str) -> Result<String, String> {
     Ok(url.to_string())
 }
 
+fn memcode_identity_url(value: &str) -> Result<String, String> {
+    let invalid = || "Only the official Memtrace team authorization can open here".to_string();
+    let url = Url::parse(value).map_err(|_| invalid())?;
+    if value.len() > 4096 || url.scheme() != "https" || url.host_str() != Some("memtrace.io")
+        || url.path() != "/api/memcode/authorize" || !url.username().is_empty() || url.password().is_some()
+        || url.port_or_known_default() != Some(443) || url.fragment().is_some()
+    { return Err(invalid()); }
+    let pairs: Vec<_> = url.query_pairs().collect();
+    let names = ["audience", "nonce", "expires_at", "redirect_uri", "state", "code_challenge", "code_challenge_method"];
+    if pairs.len() != names.len() || names.iter().any(|name| pairs.iter().filter(|(key, _)| key == name).count() != 1) {
+        return Err(invalid());
+    }
+    let get = |name: &str| pairs.iter().find(|(key, _)| key == name).map(|(_, value)| value.as_ref()).unwrap_or("");
+    let opaque = |value: &str| (32..=200).contains(&value.len()) && value.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !opaque(get("nonce")) || !opaque(get("state")) || !opaque(get("code_challenge"))
+        || get("code_challenge").len() != 43 || get("code_challenge_method") != "S256"
+    { return Err(invalid()); }
+    let expires = get("expires_at").as_bytes();
+    if expires.len() != 24 || expires.iter().enumerate().any(|(i, c)| match i {
+        4 | 7 => *c != b'-', 10 => *c != b'T', 13 | 16 => *c != b':', 19 => *c != b'.', 23 => *c != b'Z', _ => !c.is_ascii_digit(),
+    }) { return Err(invalid()); }
+    let audience = Url::parse(get("audience")).map_err(|_| invalid())?;
+    let local = matches!(audience.host_str(), Some("127.0.0.1" | "[::1]" | "localhost"));
+    if !audience.username().is_empty() || audience.password().is_some() || audience.query().is_some() || audience.fragment().is_some()
+        || audience.path() != "/" || audience.origin().ascii_serialization() != get("audience")
+        || !(audience.scheme() == "https" || (audience.scheme() == "http" && local))
+    { return Err(invalid()); }
+    let callback = Url::parse(get("redirect_uri")).map_err(|_| invalid())?;
+    if callback.scheme() != "http" || callback.host_str() != Some("127.0.0.1") || callback.port().unwrap_or(0) < 1024
+        || !callback.username().is_empty() || callback.password().is_some() || callback.query().is_some() || callback.fragment().is_some()
+        || callback.path() != format!("/memcode-identity/{}", get("state"))
+    { return Err(invalid()); }
+    Ok(url.to_string())
+}
+
 #[cfg(test)]
 mod claim_url_tests {
-    use super::memtrace_claim_url;
+    use super::{memcode_identity_url, memtrace_claim_url};
     #[test]
     fn claim_url_accepts_only_the_official_device_claim() {
         assert!(memtrace_claim_url("https://memtrace.io/claim?code=ABCD-1234").is_ok());
@@ -285,6 +333,38 @@ mod claim_url_tests {
             "file:///claim?code=ABCD-1234",
         ] {
             assert!(memtrace_claim_url(value).is_err(), "accepted {value}");
+        }
+    }
+    #[test]
+    fn team_identity_opener_is_scoped_to_official_pkce_flow() {
+        let state = "s".repeat(43);
+        let mut url = tauri::Url::parse("https://memtrace.io/api/memcode/authorize").unwrap();
+        url.query_pairs_mut().extend_pairs([
+            ("audience", "https://team.example.test".to_string()), ("nonce", "n".repeat(43)),
+            ("expires_at", "2026-11-15T22:50:00.000Z".to_string()), ("state", state.clone()),
+            ("redirect_uri", format!("http://127.0.0.1:54321/memcode-identity/{state}")),
+            ("code_challenge", "c".repeat(43)), ("code_challenge_method", "S256".to_string()),
+        ]);
+        assert!(memcode_identity_url(url.as_str()).is_ok());
+        for (key, value) in [
+            ("audience", "http://remote.test"), ("audience", "https://user:pass@team.test"),
+            ("audience", "https://team.test/path"), ("redirect_uri", "https://remote.test/callback"),
+            ("redirect_uri", "http://localhost:54321/memcode-identity/x"), ("redirect_uri", "http://127.0.0.1:80/memcode-identity/x"),
+            ("state", "bad"), ("code_challenge_method", "plain"), ("expires_at", "forever"),
+        ] {
+            let mut bad = url.clone();
+            let pairs: Vec<_> = url.query_pairs().map(|(k, v)| (k.to_string(), if k == key { value.to_string() } else { v.to_string() })).collect();
+            bad.set_query(None); bad.query_pairs_mut().extend_pairs(pairs);
+            assert!(memcode_identity_url(bad.as_str()).is_err(), "accepted {key}={value}");
+        }
+        for (key, value) in [("redirect", "https://attacker.test"), ("nonce", "duplicate")] {
+            let mut bad = url.clone(); bad.query_pairs_mut().append_pair(key, value);
+            assert!(memcode_identity_url(bad.as_str()).is_err());
+        }
+        for bad in [url.to_string().replace("https://memtrace.io", "http://memtrace.io"),
+            url.to_string().replace("memtrace.io", "memtrace.io.evil.test"),
+            url.to_string().replace("/api/memcode/authorize", "/claim"), format!("{}#token", url)] {
+            assert!(memcode_identity_url(&bad).is_err());
         }
     }
 }
