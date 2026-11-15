@@ -78,13 +78,15 @@ export class MemtraceEngine {
   private watches = new Map<string, MemtraceWatch>();
   private watchChecked = new Map<string, number>();
   private watching = new Map<string, Promise<MemtraceWatch>>();
+  private watchingPaths = new Map<string, string>();
   private closing = false;
   private opening = new Map<string, Promise<Client>>();
+  private bindingPaths = new Map<string, string>();
   private connectionProgress = new Map<string, Set<(note: string) => void>>();
   private scopes = new Map<string, MemtraceScopeBinding>();
   private clients = new Map<
     string,
-    { client: Client; transport: StdioClientTransport }
+    { client: Client; transport: StdioClientTransport; projectPath: string }
   >();
   constructor(private readonly configuredPath: () => string) {}
   scopeFor(projectId: string): MemtraceScopeBinding | null {
@@ -149,12 +151,21 @@ export class MemtraceEngine {
       Date.now() - (this.watchChecked.get(project.id) ?? 0) < WATCH_VERIFY_MS
     )
       return { ...claim };
-    let pending = this.watching.get(project.id);
+    const snapshot = { ...project },
+      key = pathKey(project.path);
+    let pending =
+      this.watchingPaths.get(project.id) === key
+        ? this.watching.get(project.id)
+        : undefined;
     if (!pending) {
-      pending = this.bindWatch(project, repoId).finally(() =>
-        this.watching.delete(project.id),
-      );
+      pending = this.bindWatch(snapshot, repoId).finally(() => {
+        if (this.watching.get(project.id) === pending) {
+          this.watching.delete(project.id);
+          this.watchingPaths.delete(project.id);
+        }
+      });
       this.watching.set(project.id, pending);
+      this.watchingPaths.set(project.id, key);
     }
     return pending;
   }
@@ -164,6 +175,21 @@ export class MemtraceEngine {
   ): Promise<MemtraceWatch> {
     const path = project.path!,
       previous = this.watches.get(project.id);
+    const current = () =>
+      !this.bindingPaths.has(project.id) ||
+      this.bindingPaths.get(project.id) === pathKey(path);
+    const call = async (name: string, args: Json) => {
+      if (!current())
+        throw Error(
+          "The project's local folder changed while its watch was being checked.",
+        );
+      const value = await this.call(project, name, args);
+      if (!current())
+        throw Error(
+          "The project's local folder changed while its watch was being checked.",
+        );
+      return value;
+    };
     // Ownership is "this session created the watch on this folder". It
     // survives a failed verification and an engine restart that restores it.
     let origin: MemtraceWatch["origin"] = previous?.origin ?? "existing",
@@ -179,14 +205,16 @@ export class MemtraceEngine {
         ...(startedAt ? { startedAt } : {}),
         verifiedAt: now(),
       };
-      this.watches.set(project.id, claim);
-      this.watchChecked.set(project.id, Date.now());
+      if (current()) {
+        this.watches.set(project.id, claim);
+        this.watchChecked.set(project.id, Date.now());
+      }
       return { ...claim };
     };
     const listed = async (): Promise<Json | undefined> =>
-      (
-        (await this.call(project, "list_watched_paths", {}))?.watches ?? []
-      ).find((row: Json) => pathKey(row.path ?? "") === pathKey(path));
+      ((await call("list_watched_paths", {}))?.watches ?? []).find(
+        (row: Json) => pathKey(row.path ?? "") === pathKey(path),
+      );
     try {
       let row = await listed();
       if (row && row.repo_id !== repoId) {
@@ -194,12 +222,12 @@ export class MemtraceEngine {
           throw Error(
             `Memtrace already watches this folder as ${row.repo_id}.`,
           );
-        await this.call(project, "unwatch_directory", { path });
+        await call("unwatch_directory", { path });
         row = undefined;
       }
       if (!row) {
         try {
-          await this.call(project, "watch_directory", {
+          await call("watch_directory", {
             path,
             repo_id: repoId,
             branch: project.branch,
@@ -244,8 +272,41 @@ export class MemtraceEngine {
     update?: (note: string) => void,
   ): Promise<Client> {
     if (this.closing) throw Error("The Memtrace connection is closing.");
+    if (!project.path) throw Error("Choose a local project folder first.");
+    const key = pathKey(project.path);
+    const opening = this.opening.get(project.id);
+    if (opening) {
+      if (this.bindingPaths.get(project.id) === key) return opening;
+      await opening.catch(() => {});
+      return this.connect(project, update);
+    }
     const existing = this.clients.get(project.id);
-    if (existing) return existing.client;
+    if (existing && pathKey(existing.projectPath) === key)
+      return existing.client;
+    const oldWatch = existing && this.watching.get(project.id);
+    if (oldWatch) {
+      // Let its already-issued operation settle before removing the old client,
+      // so a successful watch creation is owned and can be stopped correctly.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const settled = await Promise.race([
+          oldWatch.then(
+            () => true,
+            () => true,
+          ),
+          new Promise<boolean>((resolve) => {
+            timer = setTimeout(() => resolve(false), 5000);
+          }),
+        ]);
+        if (!settled)
+          throw Error(
+            "The previous folder's watch is still being checked. Wait for it to finish before reconnecting this project.",
+          );
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+      return this.connect(project, update);
+    }
     if (update) {
       let listeners = this.connectionProgress.get(project.id);
       if (!listeners)
@@ -253,12 +314,26 @@ export class MemtraceEngine {
       listeners.add(update);
     }
     try {
-      const pending = this.opening.get(project.id);
-      if (pending) return await pending;
-      const connection = this.open(
-        project,
-        this.scopes.get(project.id)?.mode === "project",
-      ).finally(() => this.opening.delete(project.id));
+      const changed =
+        this.bindingPaths.has(project.id) &&
+        this.bindingPaths.get(project.id) !== key;
+      const privateProject =
+        !changed && this.scopes.get(project.id)?.mode === "project";
+      this.bindingPaths.set(project.id, key);
+      const snapshot = { ...project };
+      const connection = (async () => {
+        if (existing || changed)
+          await this.releaseBinding(project.id, existing);
+        const client = await this.open(snapshot, privateProject);
+        if (!project.path || pathKey(project.path) !== key)
+          throw Error(
+            "The project's local folder changed during connection. Retry on its current folder.",
+          );
+        return client;
+      })().finally(() => {
+        if (this.opening.get(project.id) === connection)
+          this.opening.delete(project.id);
+      });
       this.opening.set(project.id, connection);
       return await connection;
     } finally {
@@ -267,6 +342,47 @@ export class MemtraceEngine {
         listeners?.delete(update);
         if (!listeners?.size) this.connectionProgress.delete(project.id);
       }
+    }
+  }
+  private async releaseBinding(
+    projectId: string,
+    connection = this.clients.get(projectId),
+  ): Promise<void> {
+    const watch = this.watches.get(projectId);
+    if (watch?.origin === "memcode") {
+      const store = this.scopes.get(projectId)?.dataDirectory;
+      const alias = [...this.clients].find(
+        ([id, other]) =>
+          id !== projectId &&
+          pathKey(other.projectPath) === pathKey(watch.path) &&
+          !!store &&
+          pathKey(this.scopes.get(id)?.dataDirectory ?? "") === pathKey(store),
+      );
+      if (alias) {
+        const peer = this.watches.get(alias[0]);
+        this.watches.set(
+          alias[0],
+          peer ? { ...peer, origin: "memcode" } : { ...watch },
+        );
+      } else if (connection) {
+        const result = await connection.client.callTool(
+          { name: "unwatch_directory", arguments: { path: watch.path } },
+          undefined,
+          { timeout: 5000 },
+        );
+        if (
+          (result as Json).isError &&
+          !/not watching/i.test(JSON.stringify(result))
+        )
+          unwrap(result);
+      }
+    }
+    this.watches.delete(projectId);
+    this.watchChecked.delete(projectId);
+    this.scopes.delete(projectId);
+    if (connection && this.clients.get(projectId) === connection) {
+      this.clients.delete(projectId);
+      await connection.client.close().catch(() => {});
     }
   }
   private async open(
@@ -440,7 +556,7 @@ export class MemtraceEngine {
     );
     const connection = active!;
     this.connecting.delete(connection.client);
-    this.clients.set(project.id, connection);
+    this.clients.set(project.id, { ...connection, projectPath: project.path });
     return connection.client;
   }
   async call(project: Project, name: string, args: Json): Promise<any> {
@@ -628,5 +744,7 @@ export class MemtraceEngine {
     );
     this.clients.clear();
     this.scopes.clear();
+    this.bindingPaths.clear();
+    this.watchingPaths.clear();
   }
 }
