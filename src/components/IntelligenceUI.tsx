@@ -154,6 +154,30 @@ export function SnapshotEvidence({ snapshot }: { snapshot: QualitySnapshot }) {
             <dd>{snapshot.source.revision?.slice(0, 20) ?? "Unavailable"}</dd>
           </div>
           <div>
+            <dt>Live file watch</dt>
+            <dd>
+              {snapshot.graph.watch?.state === "watching"
+                ? `Verified on ${snapshot.graph.watch.branch}`
+                : snapshot.graph.watch
+                  ? "Unavailable at capture"
+                  : "Not recorded in this checkpoint"}
+              {snapshot.graph.watch?.reason && (
+                <>
+                  <br />
+                  <span>{snapshot.graph.watch.reason}</span>
+                </>
+              )}
+              {snapshot.graph.watch?.verifiedAt && (
+                <>
+                  <br />
+                  <small>
+                    Checked {checkpointLabel(snapshot.graph.watch.verifiedAt)}
+                  </small>
+                </>
+              )}
+            </dd>
+          </div>
+          <div>
             <dt>Graph publication</dt>
             <dd>{snapshot.graph.revision?.slice(0, 25) ?? "Unavailable"}</dd>
           </div>

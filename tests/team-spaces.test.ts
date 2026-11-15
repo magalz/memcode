@@ -1246,6 +1246,10 @@ test("real signed Team identities publish exact report/artifact bytes, race clai
     const team = await owner.createTeamWorkspace({
       name: "Signed results and claims",
     });
+    const ownerDirectory = await owner.teamsList();
+    assert.equal(ownerDirectory.configured, true);
+    assert.equal(ownerDirectory.canCreate, true);
+    assert.ok(!JSON.stringify(ownerDirectory).includes(f.relay.adminCapability));
     const shared = await owner.shareProject({
       teamId: team.id,
       projectId: "owner-project",
@@ -1259,6 +1263,9 @@ test("real signed Team identities publish exact report/artifact bytes, race clai
       invite: invitation.url,
     });
     const projectId = joined.project!.projectId;
+    const memberDirectory = await member.teamsList();
+    assert.equal(memberDirectory.configured, true, "Joining configures access to the Team service");
+    assert.equal(memberDirectory.canCreate, false, "An invitation does not grant private service setup authority");
     const ownerTask = ownerState.tasks[0],
       memberTask = memberState.tasks.find(
         (task) => task.projectId === projectId,

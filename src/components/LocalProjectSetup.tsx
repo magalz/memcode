@@ -47,7 +47,11 @@ export function LocalProjectSetup({
   const [parent, setParent] = useState("");
   const [name, setName] = useState(repository?.name ?? project.name);
   const [busy, setBusy] = useState("");
+  const [recovering, setRecovering] = useState(true);
+  const [cloneActive, setCloneActive] = useState(false);
   const [error, setError] = useState("");
+  const cloning = busy === "clone" || cloneActive;
+  const blocked = !!busy || recovering || cloneActive;
   const connected = !!project.path || !!inspection;
   const analyzing = ["connecting", "indexing"].includes(project.analysis);
   const source = repository ?? inspection?.repository;
@@ -77,7 +81,39 @@ export function LocalProjectSetup({
     setParent("");
     setName(repository?.name ?? project.name);
     setCloneOpen(false);
+    setCloneActive(false);
+    setRecovering(true);
     setError("");
+    // Cloning belongs to the runtime, not this mounted view. Leaving Team or
+    // closing this panel must not lose the running job or its Cancel action.
+    void window.memcode
+      .repositorySetupStatus(project.id)
+      .then((value) => {
+        if (!live) return;
+        setRecovering(false);
+        if (!value) return;
+        if (
+          ["checking", "cloning"].includes(value.phase) ||
+          (value.phase === "ready" && !project.path)
+        ) {
+          setProgress(value);
+          setCloneActive(true);
+          setCloneOpen(true);
+        } else if (
+          !project.path &&
+          ["failed", "cancelled"].includes(value.phase)
+        ) {
+          setProgress(value);
+          setCloneOpen(true);
+          setError(value.message);
+        }
+      })
+      .catch(() => {
+        if (live)
+          setError(
+            "Could not check existing repository setup. Reopen local setup to retry before cloning.",
+          );
+      });
     if (project.path)
       void window.memcode
         .inspectProjectRepository(project.id)
@@ -107,7 +143,7 @@ export function LocalProjectSetup({
   }, [project.id, project.path, repository?.identity]);
 
   useEffect(() => {
-    if (busy !== "clone") return;
+    if (!cloning) return;
     let live = true,
       pending = false;
     const poll = async () => {
@@ -115,9 +151,26 @@ export function LocalProjectSetup({
       pending = true;
       try {
         const value = await window.memcode.repositorySetupStatus(project.id);
-        if (live && value) setProgress(value);
+        if (!live || !value) return;
+        setProgress(value);
+        if (["checking", "cloning"].includes(value.phase)) setCloneActive(true);
+        else if (value.phase === "failed" || value.phase === "cancelled") {
+          setCloneActive(false);
+          setError(value.message);
+        } else if (value.phase === "ready") {
+          // The clone can finish before its local project binding is saved.
+          // Keep watching that existing job until the checkout is accessible.
+          const inspected = await window.memcode.inspectProjectRepository(
+            project.id,
+          );
+          if (live) {
+            setInspection(inspected);
+            setCloneActive(false);
+            setCloneOpen(false);
+          }
+        }
       } catch {
-        /* The original clone request reports terminal failures. */
+        /* A brief binding transition is retried without starting a new clone. */
       } finally {
         pending = false;
       }
@@ -128,7 +181,7 @@ export function LocalProjectSetup({
       live = false;
       clearInterval(timer);
     };
-  }, [busy, project.id]);
+  }, [cloning, project.id]);
 
   useEffect(() => {
     if (signin?.state !== "waiting") return;
@@ -194,6 +247,7 @@ export function LocalProjectSetup({
     );
   const clone = () =>
     source &&
+    !blocked &&
     void perform("clone", async () => {
       setProgress({
         phase: "checking",
@@ -312,7 +366,7 @@ export function LocalProjectSetup({
           <div className="repo-actions">
             <button
               className="button secondary"
-              disabled={!!busy || analyzing}
+              disabled={blocked || analyzing}
               onClick={() =>
                 void perform("analysis", () =>
                   window.memcode.analyzeProject(project.id),
@@ -356,7 +410,7 @@ export function LocalProjectSetup({
                   </div>
                   <button
                     className="button secondary"
-                    disabled={!!busy}
+                    disabled={blocked}
                     onClick={() => bind(checkout.path)}
                   >
                     Use this folder
@@ -370,7 +424,7 @@ export function LocalProjectSetup({
             <div className="repo-options">
               <button
                 className="repo-option"
-                disabled={!!busy}
+                disabled={blocked}
                 onClick={pickExisting}
               >
                 <FolderOpen size={21} />
@@ -385,7 +439,7 @@ export function LocalProjectSetup({
               {source && (
                 <button
                   className="repo-option"
-                  disabled={!!busy}
+                  disabled={blocked}
                   onClick={() => setCloneOpen(true)}
                 >
                   <GitBranch size={21} />
@@ -404,7 +458,7 @@ export function LocalProjectSetup({
                 <button
                   className="icon-button"
                   aria-label="Close clone setup"
-                  disabled={!!busy}
+                  disabled={blocked}
                   onClick={() => setCloneOpen(false)}
                 >
                   <X size={15} />
@@ -445,7 +499,7 @@ export function LocalProjectSetup({
                 </div>
                 <button
                   className="button secondary"
-                  disabled={!!busy || signin?.state === "waiting"}
+                  disabled={blocked || signin?.state === "waiting"}
                   onClick={checkAccess}
                 >
                   {busy === "access" ? (
@@ -537,7 +591,7 @@ export function LocalProjectSetup({
                         </div>
                         <button
                           className="button secondary"
-                          disabled={!!busy}
+                          disabled={blocked}
                           onClick={() =>
                             void perform("signin", async () =>
                               setSignin(
@@ -561,7 +615,7 @@ export function LocalProjectSetup({
                   <button
                     className="repo-folder-picker"
                     aria-label="Choose clone destination"
-                    disabled={!!busy}
+                    disabled={blocked}
                     onClick={() =>
                       void perform("destination", async () => {
                         const selected = await window.memcode.selectFolder();
@@ -580,7 +634,7 @@ export function LocalProjectSetup({
                   <input
                     value={name}
                     onChange={(event) => setName(event.target.value)}
-                    disabled={!!busy}
+                    disabled={blocked}
                     maxLength={100}
                     spellCheck={false}
                   />
@@ -594,7 +648,7 @@ export function LocalProjectSetup({
                     <CheckCircle2 size={15} />
                   )}
                   <span>{progress.message}</span>
-                  {busy === "clone" && (
+                  {cloning && (
                     <button
                       className="repo-text-button"
                       onClick={() =>
@@ -619,14 +673,14 @@ export function LocalProjectSetup({
                 <button
                   className="button primary"
                   disabled={
-                    !!busy ||
+                    blocked ||
                     access?.state !== "ready" ||
                     !parent ||
                     !name.trim()
                   }
                   onClick={clone}
                 >
-                  {busy === "clone" ? (
+                  {cloning ? (
                     <LoaderCircle size={14} className="repo-spin" />
                   ) : (
                     <GitBranch size={14} />

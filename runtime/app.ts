@@ -23,7 +23,7 @@ import { registerPlanningControls } from "./planning-controls";
 import { ensureTaskEpic } from "./epic-workspace";
 import { createExampleArtifacts } from "./examples";
 import { taskPlanningShape, applyTaskPatch } from "./task-planning";
-import { registerIntelligence } from "./intelligence";
+import { registerIntelligence, ensureProjectWatch } from "./intelligence";
 import type { NativeHost, Emit } from "./host";
 import { contextAssistantDefaults } from "../src/context-settings";
 import { browserRequestSchema } from "../src/browser";
@@ -104,6 +104,7 @@ export async function createRuntime(
   const engine = new MemtraceEngine(() => store.state.settings.memtracePath),
     state = () => store.state;
   let dispatchQueued = () => {};
+  let closed = false;
   let team: TeamSyncClient | undefined;
   let persistenceFailed = false;
   const changed = () => {
@@ -403,6 +404,52 @@ export async function createRuntime(
     analyses.set(id, pending);
     return pending;
   };
+  const resumedWatches = new Map<string, Promise<void>>();
+  const resumeProjectWatch = (id: string): Promise<void> => {
+    const item = store.state.projects.find((candidate) => candidate.id === id);
+    if (
+      closed ||
+      !item ||
+      item.example ||
+      !item.path ||
+      !item.repoId ||
+      item.analysis !== "ready"
+    )
+      return Promise.resolve();
+    const pending = resumedWatches.get(id);
+    if (pending) return pending;
+    const path = item.path,
+      repoId = item.repoId;
+    const reconnect = (async () => {
+      const branch = await git(path, ["branch", "--show-current"]).catch(
+        () => "",
+      );
+      if (closed || item.path !== path || item.repoId !== repoId) return;
+      if (branch) item.branch = branch;
+      const watch = await ensureProjectWatch(engine, item);
+      if (
+        closed ||
+        item.path !== path ||
+        item.repoId !== repoId ||
+        item.analysis !== "ready"
+      )
+        return;
+      item.analysisNote =
+        watch.state === "watching"
+          ? "Code context connected. Local changes are watched."
+          : `Code context saved; live watch needs attention. ${watch.reason ?? "Refresh analysis to reconnect."}`;
+      await changed();
+    })()
+      .catch((error) => {
+        console.error(
+          "Local code watch could not reconnect:",
+          error instanceof Error ? error.message : "Unknown error",
+        );
+      })
+      .finally(() => resumedWatches.delete(id));
+    resumedWatches.set(id, reconnect);
+    return reconnect;
+  };
   const repositories = registerRepositoryRoutes(
     register,
     state,
@@ -463,6 +510,7 @@ export async function createRuntime(
     project(id);
     store.state.activeProjectId = id;
     await changed();
+    void resumeProjectWatch(id);
   });
   register(
     "project:create",
@@ -1044,7 +1092,8 @@ export async function createRuntime(
     );
   }, 30000);
   artifactMaintenance.unref();
-  let closed = false;
+  if (store.state.activeProjectId)
+    void resumeProjectWatch(store.state.activeProjectId);
   return {
     store,
     async openProject(path: string, name?: string, description = "") {

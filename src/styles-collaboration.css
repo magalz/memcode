@@ -301,6 +301,15 @@
 .collab-members {
   border-top: 1px solid var(--line);
 }
+.collab-invitations {
+  margin-top: 24px;
+}
+.collab-invitations h4 {
+  margin: 0 0 7px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
 .collab-member {
   display: flex;
   gap: 12px;

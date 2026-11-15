@@ -116,6 +116,12 @@ export function TeamOnboarding({
     }
   };
   const showShare = () => {
+    const owner = directory?.teams.find((entry) => entry.role === "owner");
+    if (directory?.teams.length && !owner) {
+      setError("Ask a team owner to share this project with the team.");
+      return;
+    }
+    if (owner) setSelected(owner.id);
     setPanel(directory?.teams.length ? "share" : "create");
     setRepository(undefined);
     if (project.path)
@@ -449,7 +455,9 @@ export function TeamOnboarding({
             <button
               className="button primary"
               disabled={
-                !!busy || !directory.configured || !directory.identityAvailable
+                !!busy ||
+                !(directory.canCreate ?? directory.configured) ||
+                !directory.identityAvailable
               }
               onClick={showShare}
             >
@@ -812,13 +820,15 @@ export function TeamOnboarding({
                 </small>
               </button>
             ))}
-            <button
-              disabled={!!busy || !directory.configured}
-              onClick={() => setPanel("create")}
-            >
-              <Plus size={14} />
-              New team
-            </button>
+            {directory.canCreate !== false && (
+              <button
+                disabled={!!busy || !directory.configured}
+                onClick={() => setPanel("create")}
+              >
+                <Plus size={14} />
+                New team
+              </button>
+            )}
           </aside>
           {team && renderTeam(team)}
         </div>
@@ -832,17 +842,21 @@ export function TeamOnboarding({
             <div>
               <strong>{project.name} is a personal project.</strong>
               <p>
-                Share its current work with your team whenever you’re ready.
+                {directory.teams.some((entry) => entry.role === "owner")
+                  ? "Share its current work with your team whenever you’re ready."
+                  : "A team owner can add this project to the shared workspace."}
               </p>
             </div>
-            <button
-              className="button primary"
-              disabled={!!busy}
-              onClick={showShare}
-            >
-              <Users size={14} />
-              Share project
-            </button>
+            {directory.teams.some((entry) => entry.role === "owner") && (
+              <button
+                className="button primary"
+                disabled={!!busy}
+                onClick={showShare}
+              >
+                <Users size={14} />
+                Share project
+              </button>
+            )}
           </div>
         )}
       {linked && (

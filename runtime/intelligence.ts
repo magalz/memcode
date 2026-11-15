@@ -32,6 +32,44 @@ interface CaptureInput {
   results: Record<string, Json | undefined>;
   failures: string[];
   scope?: { mode: "workspace" | "project"; dataDirectory: string } | null;
+  watch?: QualitySnapshot["graph"]["watch"];
+}
+/** Reattach the selected project's native watch after a restart, without reindexing. */
+export async function ensureProjectWatch(
+  engine: Pick<MemtraceEngine, "watch">,
+  project: Project,
+): Promise<NonNullable<QualitySnapshot["graph"]["watch"]>> {
+  const unavailable = (reason: string) => ({
+    state: "unavailable" as const,
+    branch: project.branch,
+    reason,
+  });
+  if (!project.path || !project.repoId || project.analysis !== "ready")
+    return unavailable(
+      "Connect the local checkout and finish analysis before verifying its live watch.",
+    );
+  if (typeof engine.watch !== "function")
+    return unavailable(
+      "This engine connection could not verify a live file watch.",
+    );
+  try {
+    const watch = await engine.watch(project);
+    if (!watch)
+      return unavailable("The engine did not confirm a live file watch.");
+    return {
+      state: watch.state,
+      branch: watch.branch,
+      ...(watch.verifiedAt ? { verifiedAt: watch.verifiedAt } : {}),
+      ...(watch.reason ? { reason: watch.reason } : {}),
+    };
+  } catch (error) {
+    return unavailable(
+      (error instanceof Error
+        ? error.message
+        : "The engine did not confirm a live file watch."
+      ).slice(0, 400),
+    );
+  }
 }
 function n(value: unknown) {
   const valueNumber = numberOrNull(value);
@@ -206,6 +244,7 @@ export function normalizeQualitySnapshot(input: CaptureInput): QualitySnapshot {
       indexedAt: text(stats?.last_indexed) || null,
       dataDirectory: input.scope?.dataDirectory ?? null,
       scope: input.scope?.mode ?? "unknown",
+      ...(input.watch ? { watch: input.watch } : {}),
     },
     metrics: {
       nodes: n(stats?.total_nodes ?? stats?.queryable_node_count),
@@ -351,6 +390,18 @@ async function captureSnapshot(
   requireProject(project);
   const results: Record<string, Json | undefined> = {},
     failures: string[] = [];
+  // Saved projects may still be Ready after restart while their process-local
+  // watcher has stopped. Repair that lifecycle before binding this query group.
+  const watch = await ensureProjectWatch(engine, project);
+  if (watch.state === "unavailable")
+    failures.push(
+      `Live watch unavailable: ${watch.reason ?? "The engine did not confirm it."}`,
+    );
+  else if (watch.branch !== project.branch)
+    failures.push(
+      watch.reason ??
+        `The live watch follows ${watch.branch}, rather than the recorded project branch ${project.branch}.`,
+    );
   const call = async (key: string, name: string, args: Json) => {
     try {
       const value = await engine.call(project, name, args);
@@ -432,6 +483,7 @@ async function captureSnapshot(
     dirty,
     results,
     failures,
+    watch,
     scope:
       typeof engine.scopeFor === "function"
         ? engine.scopeFor(project.id)

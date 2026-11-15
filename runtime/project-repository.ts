@@ -1,7 +1,55 @@
-import { readdir, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import {
+  appendFile,
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Project } from "../src/shared";
 import { git } from "./local";
+
+const exclusions = ["/.memcode/", "/.memdb/", "/.memtrace/"];
+const exclusionWrites = new Map<string, Promise<void>>();
+
+/** Git-local metadata only; call before creating any project runtime stores. */
+export async function ensureLocalRuntimeIgnored(root: string): Promise<void> {
+  // Git resolves the common metadata directory for linked worktrees too.
+  const gitPath = await git(root, ["rev-parse", "--git-path", "info/exclude"]);
+  const path = isAbsolute(gitPath) ? gitPath : resolve(root, gitPath);
+  const key = process.platform === "win32" ? path.toLowerCase() : path;
+  const previous = exclusionWrites.get(key);
+  if (previous) return previous;
+  const pending = (async () => {
+    let existing = "";
+    try {
+      const entry = await lstat(path);
+      if (!entry.isFile() || entry.isSymbolicLink())
+        throw Error(
+          "Git’s local exclusion file must be a regular file before MemCode can prepare runtime storage.",
+        );
+      existing = await readFile(path, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const lines = new Set(existing.split(/\r?\n/));
+    const missing = exclusions.filter((entry) => !lines.has(entry));
+    if (!missing.length) return;
+    await mkdir(dirname(path), { recursive: true });
+    await appendFile(
+      path,
+      `${existing.endsWith("\n") || !existing ? "" : "\n"}# MemCode local runtime stores and worker output\n${missing.join("\n")}\n`,
+      { encoding: "utf8", mode: 0o600 },
+    );
+  })();
+  exclusionWrites.set(key, pending);
+  try {
+    await pending;
+  } finally {
+    if (exclusionWrites.get(key) === pending) exclusionWrites.delete(key);
+  }
+}
 
 /** Empty folders opened as projects need the same foundation as a new project. */
 export async function ensureProjectRepository(project: Project): Promise<void> {
@@ -18,6 +66,7 @@ export async function ensureProjectRepository(project: Project): Promise<void> {
       throw Error(
         `Select the Git repository root (${root}) to connect this project.`,
       );
+    await ensureLocalRuntimeIgnored(path);
     return;
   }
   if ((await readdir(path)).length)

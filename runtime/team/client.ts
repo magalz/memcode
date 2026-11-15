@@ -490,7 +490,7 @@ export class TeamSyncClient implements TeamWorkerClaims {
       catch (error) { return this.decoratedTeam(saved, (error as Error & { code?: string }).code === "TEAM_REVOKED" ? "revoked" : "offline", message(error)); }
     }));
     await this.persist();
-    return { teams, configured: !!service || !!this.profile.teams?.length, identityAvailable, ...(!identityAvailable ? {detail:"Verified Team sign-in is not available yet. Your local projects and existing preview rooms remain available."} : !service && !this.profile.teams?.length ? { detail: "The Team service has not been configured for this installation. Invitation links can still connect to their Team service." } : {}) };
+    return { teams, configured: !!service || !!this.profile.teams?.length, canCreate: !!service?.bootstrapSecret, identityAvailable, ...(!identityAvailable ? {detail:"Verified Team sign-in is not available yet. Your local projects and existing preview rooms remain available."} : !service && !this.profile.teams?.length ? { detail: "The Team service has not been configured for this installation. Invitation links can still connect to their Team service." } : {}) };
   }
   async createTeamWorkspace(input: { name: string }): Promise<WorkspaceTeam> {
     if (this.creatingTeam) throw Error("A Team is already being created. Finish its Memtrace sign-in first.");

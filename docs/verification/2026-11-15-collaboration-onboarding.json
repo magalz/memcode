@@ -2,9 +2,9 @@
   "date": "2026-11-15",
   "scope": "Named teams, invitation-first project opening, local repository setup and account lifecycle",
   "sourceTests": {
-    "passed": 346,
+    "passed": 353,
     "failed": 0,
-    "log": ".memcode/verification/collaboration-release-complete.log"
+    "log": ".memcode/verification/local-watch-release-tests.log"
   },
   "additionalRecoveryTests": {
     "passed": 19,
@@ -13,7 +13,7 @@
   },
   "renderer": {
     "synthetic": true,
-    "onboardingFlows": 13,
+    "onboardingFlows": 18,
     "accountFlows": 11,
     "consoleErrors": 0,
     "onboardingCommand": "node scripts/team-onboarding-smoke.mjs",
@@ -74,7 +74,7 @@
     ]
   },
   "limitations": [
-    "Physical macOS and two-computer acceptance remains a separate test",
+    "Physical Mac joining and bidirectional comments passed; local Mac source/analysis, worker execution and physical claim/result review remain separately tracked",
     "Source changes use Git; uncommitted files and cross-computer Fleet are not replicated",
     "Remote pilot uses an invitation-protected temporary HTTPS relay which requires its host to keep running",
     "Owner service configuration is operator-managed in this pilot; invitees receive it through their invitation",
@@ -89,5 +89,48 @@
     "claimRaceSingleWinner": true,
     "handoffAfterAcknowledgedRelease": true,
     "revokedMemberDenied": true
+  },
+  "remoteAcceptance": {
+    "userReported": "Mac joined; story comments work instantly in both directions",
+    "physicalPlatforms": [
+      "Windows",
+      "macOS"
+    ],
+    "observed": {
+      "teamIdentity": "memtrace",
+      "activeMembers": 1,
+      "devices": [
+        "Windows",
+        "Windows",
+        "Mac"
+      ],
+      "sharedComments": 4,
+      "sharedActivityEvents": 9,
+      "connection": "online"
+    },
+    "verifiedAt": "2026-11-15T22:35:49.744Z",
+    "notClaimed": [
+      "macOS local worker execution",
+      "two-computer source checkout setup",
+      "physical cross-computer claim race and published-file review"
+    ]
+  },
+  "localIntelligenceValidation": {
+    "status": "in progress",
+    "windowsBefore": {
+      "indexReady": false,
+      "graphStable": false,
+      "reason": "branch_publication_incomplete",
+      "liveWatchPresent": true,
+      "correctProjectLocalStore": true
+    },
+    "fixes": [
+      "Reattach selected local project watch after restart/reselect",
+      "Verify watch before fresh checkpoint captures",
+      "Display verified/unavailable watch in Evidence and coverage",
+      "Exclude local runtime stores before connecting/analyzing an existing Git repo"
+    ],
+    "guide": "docs/local-code-validation.md",
+    "mac": "Local analysis/checkpoint requested; team and comment sync already passed"
   }
 }

@@ -11,8 +11,9 @@ import {
 import {
   normalizeQualitySnapshot,
   registerIntelligence,
+  ensureProjectWatch,
 } from "../runtime/intelligence.ts";
-import type { MemtraceEngine } from "../runtime/memtrace.ts";
+import { MemtraceEngine } from "../runtime/memtrace.ts";
 
 // These are isolated protocol fixtures, never imported into a user's workspace state.
 const project: Project = {
@@ -26,6 +27,14 @@ const project: Project = {
 };
 const metadata = () => ({
   graph_revision: { token: "graph-1", publication_unchanged_during_call: true },
+});
+const readyWatch = async () => ({
+  state: "watching" as const,
+  path: project.path!,
+  repoId: project.repoId!,
+  branch: project.branch,
+  origin: "existing" as const,
+  verifiedAt: "2026-11-15T00:00:00Z",
 });
 const finding = (name = "work", cognitive = 31) => ({
   node_id: name,
@@ -320,6 +329,7 @@ test("a settling publication is read again before opening the dependent capture 
   delete input.results.before.source_commit;
   delete input.results.after.source_commit;
   const engine = {
+    watch: readyWatch,
     call: async (
       _project: Project,
       name: string,
@@ -373,6 +383,7 @@ test("concurrent checkpoint captures coalesce and examples cannot produce qualit
   delete data.results.after.source_commit;
   let reads = 0;
   const engine = {
+    watch: readyWatch,
     call: async (_project: Project, name: string) => {
       reads++;
       await new Promise((resolve) => setImmediate(resolve));
@@ -419,4 +430,157 @@ test("concurrent checkpoint captures coalesce and examples cannot produce qualit
     }),
     /Unrecognized key/,
   );
+});
+
+test("a ready project after restart reattaches its native watch before checkpoint queries without reindexing", async (t) => {
+  const selected = { ...project, path: process.cwd() },
+    state = initialState(),
+    data = fixture();
+  state.projects = [selected];
+  state.qualitySnapshots = [];
+  delete data.results.before.source_commit;
+  delete data.results.after.source_commit;
+  const engine = new MemtraceEngine(() => "unused-protocol-fixture"),
+    calls: string[] = [];
+  let watching = false;
+  engine.call = async (_project, name) => {
+    calls.push(name);
+    if (name === "list_watched_paths")
+      return {
+        watches: watching
+          ? [
+              {
+                path: selected.path,
+                repo_id: selected.repoId,
+                branch: selected.branch,
+              },
+            ]
+          : [],
+      };
+    if (name === "watch_directory") {
+      watching = true;
+      return { ok: true };
+    }
+    assert.equal(
+      watching,
+      true,
+      "The native watch must be confirmed before the query group starts",
+    );
+    assert.notEqual(
+      name,
+      "index_directory",
+      "A ready project's checkpoint does not force a full index",
+    );
+    return structuredClone(
+      name === "get_query_revision"
+        ? data.results.after
+        : name === "get_repository_stats"
+          ? data.results.stats
+          : name === "find_most_complex_functions"
+            ? data.results.complex
+            : name === "find_dead_code"
+              ? data.results.dead
+              : data.results.cycles,
+    );
+  };
+  engine.analyze = async () => {
+    throw Error("Do not reindex a ready project to restore its watcher");
+  };
+  t.after(() => engine.close());
+  const handlers = new Map<string, (input: unknown) => Promise<any>>();
+  registerIntelligence(
+    (name, schema, handler) =>
+      handlers.set(name, async (input) => handler(schema.parse(input))),
+    () => state,
+    () => selected,
+    async () => {},
+    engine,
+  );
+  const capture = handlers.get("intelligence:refresh")!;
+  const snapshot = await capture({
+    projectId: selected.id,
+    refreshIndex: false,
+  });
+  assert.equal(snapshot.status, "current");
+  assert.equal(snapshot.source.indexReady, true);
+  assert.equal(snapshot.graph.stable, true);
+  assert.equal(snapshot.graph.watch.state, "watching");
+  assert.equal(snapshot.graph.watch.branch, "main");
+  assert.ok(
+    calls.indexOf("watch_directory") < calls.indexOf("get_query_revision"),
+  );
+  await capture({ projectId: selected.id, refreshIndex: false });
+  assert.equal(
+    calls.filter((name) => name === "watch_directory").length,
+    1,
+    "Existing native watches are reused",
+  );
+  assert.equal(calls.includes("index_directory"), false);
+});
+
+test("an unavailable native watcher remains visible while independently aligned source stays measured", async (t) => {
+  const selected = { ...project, path: process.cwd() },
+    state = initialState(),
+    data = fixture();
+  state.projects = [selected];
+  state.qualitySnapshots = [];
+  delete data.results.before.source_commit;
+  delete data.results.after.source_commit;
+  const engine = new MemtraceEngine(() => "unused-protocol-fixture");
+  engine.call = async (_project, name) => {
+    if (name === "list_watched_paths") return { watches: [] };
+    if (name === "watch_directory")
+      throw Error("This volume cannot provide file notifications");
+    return structuredClone(
+      name === "get_query_revision"
+        ? data.results.after
+        : name === "get_repository_stats"
+          ? data.results.stats
+          : name === "find_most_complex_functions"
+            ? data.results.complex
+            : name === "find_dead_code"
+              ? data.results.dead
+              : data.results.cycles,
+    );
+  };
+  t.after(() => engine.close());
+  const handlers = new Map<string, (input: unknown) => Promise<any>>();
+  registerIntelligence(
+    (name, schema, handler) =>
+      handlers.set(name, async (input) => handler(schema.parse(input))),
+    () => state,
+    () => selected,
+    async () => {},
+    engine,
+  );
+  const snapshot = await handlers.get("intelligence:refresh")!({
+    projectId: selected.id,
+  });
+  assert.equal(snapshot.graph.watch.state, "unavailable");
+  assert.match(snapshot.graph.watch.reason, /file notifications/);
+  assert.equal(snapshot.source.indexReady, true);
+  assert.equal(snapshot.graph.stable, true);
+  assert.equal(snapshot.status, "partial");
+  assert.ok(
+    snapshot.limitations.some((note: string) =>
+      note.includes("Live watch unavailable"),
+    ),
+  );
+});
+
+test("watch diagnostics preserve branch and old checkpoints do not invent a verified watcher", async () => {
+  const observed = await ensureProjectWatch(
+    {
+      watch: async () => ({
+        ...(await readyWatch()),
+        branch: "epic/other",
+        reason: "The checkout changed branches.",
+      }),
+    },
+    project,
+  );
+  assert.equal(observed.branch, "epic/other");
+  assert.match(observed.reason!, /changed branches/);
+  const old = normalizeQualitySnapshot(fixture());
+  assert.equal(old.graph.watch, undefined);
 });

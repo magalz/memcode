@@ -49,8 +49,8 @@ window.memcode={
  bindProjectFolder:async(id,path)=>{window.calls.push(['bind',id,path]);if(mode==='wrong')throw Error('This folder belongs to a different repository. Choose the project’s existing checkout, or clone its repository.');const value=source.projects.find(p=>p.id===id);Object.assign(value,{path,branch:'epic/observatory',analysis:'ready'});publish();return {...value}},
  repositoryAccess:async(repo)=>{window.calls.push(['access',repo.identity]);return {repository:repo,state:window.providerSignedIn?'ready':'needs-sign-in',method:window.providerSignedIn?'github-cli':'git',accountLabel:window.providerSignedIn?'synthetic-teammate':undefined,message:window.providerSignedIn?'Repository read access is ready as synthetic-teammate.':'Git access needs an account with repository access.'}},
  githubRepositorySignIn:async(action)=>{window.calls.push(['github',action]);if(action==='start')auth={state:'waiting',message:'Use the official browser sign-in.',verificationUrl:'https://github.com/login/device',userCode:'TEST-1234'};if(action==='cancel')auth={state:'cancelled',message:'Sign-in cancelled'};return window.providerSignedIn?{state:'signed-in',message:'GitHub connected'}:auth},
- cloneProjectRepository:async(input)=>{window.calls.push(['clone',input]);window.progress={phase:'cloning',message:'Receiving repository files…'};return await new Promise((resolve,reject)=>{window.finishClone=()=>{const value=source.projects.find(p=>p.id===input.projectId);Object.assign(value,{path:input.parent+'/'+input.name,analysis:'ready'});publish();resolve({...value})};window.rejectClone=reject;})},
- repositorySetupStatus:async()=>window.progress,
+ cloneProjectRepository:async(input)=>{window.calls.push(['clone',input]);window.progress={phase:'cloning',message:'Receiving repository files…'};return await new Promise((resolve,reject)=>{window.finishClone=()=>{const value=source.projects.find(p=>p.id===input.projectId);Object.assign(value,{path:input.parent+'/'+input.name,analysis:'ready'});window.progress={phase:'ready',message:'Local repository ready.'};publish();resolve({...value})};window.rejectClone=reject;})},
+ repositorySetupStatus:async()=>{window.calls.push(['setup-status',window.progress?.phase]);return window.progress},
  cancelRepositorySetup:async(id)=>{window.calls.push(['cancel-clone',id]);window.progress={phase:'cancelled',message:'Clone cancelled. Its partial folder was preserved.'};window.rejectClone?.(Error('Repository setup was cancelled. The partial folder is preserved.'));},
  analyzeProject:async(id)=>{window.calls.push(['analyze',id]);source.projects.find(p=>p.id===id).analysis='ready';publish()},
  startWorker:async()=>{window.calls.push(['UNEXPECTED-WORKER-START'])},
@@ -295,6 +295,47 @@ try {
     path: join(output, "06-clone-progress.png"),
     fullPage: true,
   });
+  // Hide and remount the actual LocalProjectSetup component while its original
+  // clone request stays pending in the runtime fixture. Do not reload the page.
+  await page
+    .getByRole("button", { name: "Work on this computer", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Connect local code" }),
+  ).toHaveCount(0);
+  await page.evaluate(() => {
+    window.progress = {
+      phase: "checking",
+      message: "Checking repository access…",
+    };
+  });
+  await page
+    .getByRole("button", { name: "Work on this computer", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "Checking repository access",
+  );
+  await expect(
+    page.getByRole("button", { name: "Clone and connect", exact: true }),
+  ).toBeDisabled();
+  expect(
+    await page.evaluate(
+      () => window.calls.filter((call) => call[0] === "clone").length,
+    ),
+  ).toBe(1);
+  await page.evaluate(() => {
+    window.progress = {
+      phase: "cloning",
+      message: "Receiving repository files…",
+    };
+  });
+  await expect(page.getByRole("status")).toContainText(
+    "Receiving repository files",
+  );
+  await page.screenshot({
+    path: join(output, "08-restored-background-clone.png"),
+    fullPage: true,
+  });
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("cancelled");
   expect(
@@ -307,11 +348,91 @@ try {
       window.calls.some((call) => call[0] === "UNEXPECTED-WORKER-START"),
     ),
   ).toBe(false);
+  expect(
+    await page.evaluate(
+      () => window.calls.filter((call) => call[0] === "clone").length,
+    ),
+  ).toBe(1);
+  await page.waitForTimeout(100);
+  const stoppedPollCount = await page.evaluate(
+    () => window.calls.filter((call) => call[0] === "setup-status").length,
+  );
+  await page.waitForTimeout(900);
+  expect(
+    await page.evaluate(
+      () => window.calls.filter((call) => call[0] === "setup-status").length,
+    ),
+  ).toBe(stoppedPollCount);
   flows.push(
     "Git credentials checked before explicit GitHub connection",
     "device approval and access retry",
     "chosen clone destination",
     "visible progress and cancellation",
+    "background clone survives unmount/remount with restored checking and cloning progress",
+    "recovered clone cannot start a duplicate and cancels the original request",
+    "terminal cancellation stops status polling",
+  );
+  await page.getByRole("button", { name: "Check access", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Choose clone destination", exact: true })
+    .click();
+  await page
+    .getByLabel("New folder name", { exact: true })
+    .fill("completed-in-background");
+  await page
+    .getByRole("button", { name: "Clone and connect", exact: true })
+    .click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => window.calls.filter((call) => call[0] === "clone").length,
+      ),
+    )
+    .toBe(2);
+  await page
+    .getByRole("button", { name: "Work on this computer", exact: true })
+    .click();
+  await page.evaluate(() => window.finishClone());
+  await page.getByRole("button", { name: "Local setup", exact: true }).click();
+  await expect(
+    page.getByText("Local code connected", { exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => window.sharedState.projects.find((p) => p.id === "shared").path,
+    ),
+  ).toBe("C:/Synthetic/projects/completed-in-background");
+  expect(
+    await page.evaluate(
+      () => window.calls.filter((call) => call[0] === "clone").length,
+    ),
+  ).toBe(2);
+  await expect(
+    page.getByRole("button", { name: "Cancel", exact: true }),
+  ).toHaveCount(0);
+  flows.push(
+    "clone completed while panel is hidden reopens as the connected checkout",
+  );
+  await page.goto(url + "/?mode=clone");
+  await page.evaluate(() => {
+    window.progress = {
+      phase: "failed",
+      message: "Repository setup failed. Its partial folder is preserved.",
+    };
+  });
+  await page
+    .getByRole("button", { name: "Work on this computer", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "partial folder is preserved",
+  );
+  expect(
+    await page.evaluate(
+      () => window.calls.filter((call) => call[0] === "clone").length,
+    ),
+  ).toBe(0);
+  flows.push(
+    "failed background setup remains visible on return without retrying automatically",
   );
   await page.setViewportSize({ width: 640, height: 900 });
   await page.goto(url + "/?mode=reuse");

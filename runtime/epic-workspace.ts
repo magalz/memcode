@@ -1,8 +1,7 @@
 import type { AppState, Epic, Project, WorkItem } from "../src/shared";
 import { isActive } from "../src/domain";
 import { git, now } from "./local";
-import { appendFile, readFile, mkdir } from "node:fs/promises";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { ensureLocalRuntimeIgnored } from "./project-repository";
 
 export function ensureTaskEpic(state: AppState, task: WorkItem): Epic {
   const assigned = state.epics.find(
@@ -84,28 +83,7 @@ export class EpicWorkspace {
       );
     // Local runtime stores are not source changes. Install these exclusions
     // before checking whether it is safe to switch an otherwise clean project.
-    const ignorePath = await git(project.path, [
-      "rev-parse",
-      "--git-path",
-      "info/exclude",
-    ]);
-    const target = isAbsolute(ignorePath)
-      ? ignorePath
-      : resolve(project.path, ignorePath);
-    const ignored = await readFile(target, "utf8").catch(() => "");
-    const missing = ["/.memcode/", "/.memdb/", "/.memtrace/"].filter(
-      (entry) => !ignored.split(/\r?\n/).includes(entry),
-    );
-    if (missing.length) {
-      await mkdir(dirname(target), { recursive: true });
-      await appendFile(
-        target,
-        "\n# MemCode local runtime stores and worker output\n" +
-          missing.join("\n") +
-          "\n",
-        "utf8",
-      );
-    }
+    await ensureLocalRuntimeIgnored(project.path);
     const actual = await git(project.path, ["branch", "--show-current"]);
     if (!actual)
       throw new Error(

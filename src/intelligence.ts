@@ -56,6 +56,13 @@ export interface QualitySnapshot {
     indexedAt: string | null;
     dataDirectory: string | null;
     scope: "workspace" | "project" | "unknown";
+    /** An observed local watcher; separate from source/index alignment. */
+    watch?: {
+      state: "watching" | "unavailable";
+      branch: string;
+      verifiedAt?: string;
+      reason?: string;
+    };
   };
   metrics: QualityMetrics;
   hotspots: CodeFinding[];

@@ -41,6 +41,7 @@ export interface WorkspaceTeam {
 export interface TeamDirectory {
   teams: WorkspaceTeam[];
   configured: boolean;
+  canCreate: boolean;
   identityAvailable: boolean;
   detail?: string;
 }

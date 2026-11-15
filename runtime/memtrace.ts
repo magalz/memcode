@@ -15,6 +15,7 @@ import {
   type MemtraceScopeBinding,
 } from "./memtrace-workspace";
 import { join } from "node:path";
+import { ensureLocalRuntimeIgnored } from "./project-repository";
 import {
   ManagedMemtraceOwners,
   pendingMemtraceOwner,
@@ -273,6 +274,7 @@ export class MemtraceEngine {
       throw new Error(
         "Memtrace was not found. Install it or choose its executable in Settings.",
       );
+    await ensureLocalRuntimeIgnored(project.path);
     const scope = await resolveMcpWorkspace(project.path);
     const local = privateProject
       ? await projectMcpWorkspace(project.path)

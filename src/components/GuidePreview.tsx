@@ -713,7 +713,10 @@ function AccountPreview() {
         </Row>
         <p>Memtrace provides source intelligence and coordination.</p>
         <p>Approve Codex, Claude Code or Cursor separately in Workers.</p>
-        <p>Team preview invitations keep their own member and device identity.</p>
+        <p>
+          Confirm your Memtrace browser account to join a team. Account changes
+          require reconnecting its membership.
+        </p>
       </div>
     </div>
   );
@@ -766,9 +769,9 @@ function TeamPreview() {
       <Row className="guide-preview-section-heading">
         <Row>
           <Users size={17} />
-          <strong>Team workspace</strong>
+          <strong>Studio team · MemCode project</strong>
         </Row>
-        <Label>Private invite preview</Label>
+        <Label>Memtrace members</Label>
       </Row>
       <div className="guide-preview-team">
         <div className="guide-preview-team-plan">
@@ -815,7 +818,8 @@ function TeamPreview() {
       <Row className="guide-preview-footnote">
         <Link2 size={12} />
         <span>
-          Share an invitation privately. Publish finished outputs deliberately.
+          Join the current shared plan first. Connect local code when you’re
+          ready.
         </span>
       </Row>
     </>
