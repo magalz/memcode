@@ -21,6 +21,7 @@ import {
   pendingMemtraceOwner,
   disconnectedMemtraceClient,
 } from "./memtrace-owner";
+import { waitForPeerIndex } from "./memtrace-peer-index";
 
 type Json = Record<string, any>;
 function unwrap(value: unknown): any {
@@ -89,6 +90,10 @@ export class MemtraceEngine {
   scopeFor(projectId: string): MemtraceScopeBinding | null {
     const scope = this.scopes.get(projectId);
     return scope ? { ...scope } : null;
+  }
+  certificateDiagnosticsFor(projectId: string): string[] {
+    const scope = this.scopes.get(projectId);
+    return scope ? this.owners.certificateDiagnostics(scope.dataDirectory) : [];
   }
   watcherFor(projectId: string): MemtraceWatch | null {
     const watch = this.watches.get(projectId);
@@ -485,7 +490,9 @@ export class MemtraceEngine {
     update("Connecting to the local Memtrace engine…");
     await this.connect(project, update);
     const result = await this.call(project, "list_indexed_repositories", {});
-    const repos: Json[] = Array.isArray(result) ? result : (result.repos ?? []);
+    const repos: Json[] = Array.isArray(result)
+      ? result
+      : (result.repos ?? result.repositories ?? []);
     const match = repos.find(
       (repo) =>
         pathKey(repo.repo_path ?? repo.path ?? "") === pathKey(project.path!),
@@ -498,28 +505,20 @@ export class MemtraceEngine {
         repo_id: match?.repo_id ?? project.repoId,
         incremental: !!match,
         skip_embed: false,
+        branch: project.branch,
       });
-    let job = await queueIndex();
-    // A cold standalone MCP may be admitting its first index under the same
-    // process's peer lease. Keep that client alive and let it publish readiness.
-    for (
-      let attempt = 0;
-      job.skipped && job.reason === "peer_indexing" && attempt < 6;
-      attempt++
-    ) {
-      update("Memtrace is preparing this project's code index…");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      const binding = await this.call(project, "get_query_revision", {
-        repo_id: match?.repo_id ?? project.repoId,
-      }).catch(() => null);
-      if (
-        binding?.ready === true &&
-        binding.branch === project.branch &&
-        typeof (match?.repo_id ?? project.repoId) === "string"
-      )
-        return match?.repo_id ?? project.repoId!;
-      job = await queueIndex();
-    }
+    const job = await queueIndex();
+    if (
+      (job.skipped && job.reason === "peer_indexing") ||
+      job.reason === "repository_busy"
+    )
+      return waitForPeerIndex(
+        this,
+        project,
+        job,
+        match?.repo_id ?? project.repoId,
+        update,
+      );
     if (job.skipped)
       throw new Error(
         "Another Memtrace index is running for this project. Reconnect when it completes.",
@@ -544,7 +543,7 @@ export class MemtraceEngine {
         );
         const current: Json[] = Array.isArray(indexed)
           ? indexed
-          : (indexed.repos ?? []);
+          : (indexed.repos ?? indexed.repositories ?? []);
         const admitted = current.find(
           (repo) =>
             pathKey(repo.repo_path ?? repo.path ?? "") ===
@@ -559,7 +558,19 @@ export class MemtraceEngine {
           throw new Error(
             "The index completed without a verified repository identity. Reconnect before planning workers.",
           );
-        return repoId;
+        let revision: Json | undefined;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          revision = await this.call(project, "get_query_revision", {
+            repo_id: repoId,
+          });
+          if (revision?.ready === true && revision.branch === project.branch)
+            return repoId;
+          if (attempt < 2)
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+        throw new Error(
+          `Memtrace job ${job.job_id} completed, but source on branch ${project.branch} is not verified${revision?.reason ? ` (${revision.reason})` : ""}. Check local engine diagnostics before starting a worker.`,
+        );
       }
     }
     throw new Error(

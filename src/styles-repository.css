@@ -243,6 +243,61 @@
   font-size: 11px;
   margin-top: 5px;
 }
+.repo-analysis.needs-attention {
+  background: #fff9ef;
+  border-color: #eadfc7;
+}
+.repo-analysis.needs-attention strong,
+.repo-analysis.needs-attention > span {
+  color: #98743f;
+}
+.repo-health-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin: 15px 0;
+}
+.repo-health {
+  border: 1px solid #e1e8df;
+  border-radius: 8px;
+  background: #fafcf9;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+.repo-health dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0 0 12px;
+}
+.repo-health dt {
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.repo-health dd {
+  font-size: 11px;
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.repo-health p {
+  font-size: 11px;
+  color: #8b724d;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.repo-health small {
+  font-size: 9px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+@media (max-width: 650px) {
+  .repo-health dl {
+    grid-template-columns: 1fr;
+    gap: 13px;
+  }
+}
 .repo-actions {
   display: flex;
   align-items: center;

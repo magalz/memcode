@@ -333,6 +333,7 @@ export interface PreviewInput {
   bounds: { x: number; y: number; width: number; height: number };
 }
 export interface MemCodeAPI {
+  localAnalysisDiagnostics(projectId: string): Promise<import("./local-analysis").LocalAnalysisDiagnostics>;
   teamsList(): Promise<import("./team-space").TeamDirectory>;
   createTeamWorkspace(input: {
     name: string;

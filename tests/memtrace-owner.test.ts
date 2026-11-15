@@ -60,6 +60,37 @@ test("a reachable owner is borrowed without a process or shutdown ownership", as
   assert.equal(f.stopped.length, 0);
 });
 
+test("certificate diagnostics are scoped, bounded and redacted without ordinary process output", async () => {
+  const f = fixture();
+  let queries = 0;
+  await f.owners.ready(scope, command, {}, async () => {
+    if (++queries < 2) throw pending();
+  });
+  f.child.stderr!.emit(
+    "data",
+    Buffer.from(
+      "ordinary source output must stay private\n\u001b[31mWARN owned branch index could not be certified token=private-value password=private-password Bearer private-bearer\u001b[0m\n",
+    ),
+  );
+  const lines = f.owners.certificateDiagnostics(scope.dataDirectory);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /could not be certified/);
+  assert.doesNotMatch(
+    lines[0],
+    /private-value|private-password|private-bearer|ordinary source|\u001b/,
+  );
+  assert.deepEqual(f.owners.certificateDiagnostics("another-store"), []);
+  for (let i = 0; i < 30; i++)
+    f.child.stderr!.emit(
+      "data",
+      Buffer.from(`certificate ${i} ${"x".repeat(600)}\n`),
+    );
+  const tail = f.owners.certificateDiagnostics(scope.dataDirectory);
+  assert.equal(tail.length, 8);
+  assert.ok(tail.every((line) => line.length <= 500));
+  await f.owners.close();
+});
+
 test("cold project starts exact one-member headless scope, waits for queries, closes only its child", async () => {
   const f = fixture();
   let queries = 0;

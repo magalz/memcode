@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import type { Project } from "../shared";
+import type { LocalAnalysisDiagnostics } from "../local-analysis";
 import type {
   RepositoryAccess,
   RepositoryDescriptor,
@@ -50,6 +51,34 @@ export function LocalProjectSetup({
   const [recovering, setRecovering] = useState(true);
   const [cloneActive, setCloneActive] = useState(false);
   const [error, setError] = useState("");
+  const [diagnostics, setDiagnostics] =
+    useState<LocalAnalysisDiagnostics | null>(null);
+  const diagnosticScope = `${project.id}\0${project.path ?? ""}\0${project.branch}`;
+  const currentDiagnosticScope = useRef(diagnosticScope);
+  currentDiagnosticScope.current = diagnosticScope;
+  const revision = diagnostics?.indexRevision;
+  const publication = revision?.graph_revision;
+  const publicationChanged =
+    !!publication &&
+    typeof publication === "object" &&
+    !Array.isArray(publication) &&
+    publication.publication_unchanged_during_call === false;
+  const sourceLabel = diagnostics?.failures.some(
+    (failure) => failure.operation === "get_query_revision",
+  )
+    ? "Unknown"
+    : typeof revision?.branch === "string" &&
+        revision.branch !== diagnostics?.project.branch
+      ? "Branch mismatch"
+      : revision?.ready === true &&
+          revision.branch === diagnostics?.project.branch &&
+          !publicationChanged &&
+          revision.retry_query_group !== true &&
+          revision.source_unchanged_during_observation !== false
+        ? "Aligned"
+        : revision
+          ? "Not yet verified"
+          : "Unknown";
   const cloning = busy === "clone" || cloneActive;
   const blocked = !!busy || recovering || cloneActive;
   const connected = !!project.path || !!inspection;
@@ -84,6 +113,8 @@ export function LocalProjectSetup({
     setCloneActive(false);
     setRecovering(true);
     setError("");
+    setDiagnostics(null);
+    setBusy((value) => (value === "diagnostics" ? "" : value));
     // Cloning belongs to the runtime, not this mounted view. Leaving Team or
     // closing this panel must not lose the running job or its Cancel action.
     void window.memcode
@@ -140,7 +171,7 @@ export function LocalProjectSetup({
     return () => {
       live = false;
     };
-  }, [project.id, project.path, repository?.identity]);
+  }, [project.id, project.path, project.branch, repository?.identity]);
 
   useEffect(() => {
     if (!cloning) return;
@@ -225,6 +256,24 @@ export function LocalProjectSetup({
     setProgress(null);
     setInspection(await window.memcode.inspectProjectRepository(value.id));
     notify("Local code connected to this shared project");
+  };
+  const checkDiagnostics = async () => {
+    const scope = diagnosticScope;
+    setBusy("diagnostics");
+    setError("");
+    try {
+      const value = await window.memcode.localAnalysisDiagnostics(project.id);
+      if (currentDiagnosticScope.current === scope) setDiagnostics(value);
+    } catch (reason) {
+      if (currentDiagnosticScope.current === scope)
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Local engine diagnostics could not be read.",
+        );
+    } finally {
+      if (currentDiagnosticScope.current === scope) setBusy("");
+    }
   };
   const bind = (path: string) =>
     void perform("folder", async () =>
@@ -341,7 +390,9 @@ export function LocalProjectSetup({
               </span>
             </div>
           )}
-          <div className="repo-analysis">
+          <div
+            className={`repo-analysis ${project.analysis === "error" ? "needs-attention" : ""}`}
+          >
             <span>
               {analyzing ? (
                 <LoaderCircle size={15} className="repo-spin" />
@@ -355,7 +406,9 @@ export function LocalProjectSetup({
                   ? "Memtrace is understanding your local code…"
                   : project.analysis === "ready"
                     ? "Code context is ready"
-                    : "Prepare the context for your workers"}
+                    : project.analysis === "error"
+                      ? "Code analysis needs attention"
+                      : "Prepare the context for your workers"}
               </strong>
               <p>
                 {project.analysisNote ??
@@ -363,6 +416,91 @@ export function LocalProjectSetup({
               </p>
             </div>
           </div>
+          <div className="repo-health-actions">
+            <button
+              className="repo-text-button"
+              style={{ marginLeft: 0 }}
+              disabled={!!busy}
+              onClick={() => void checkDiagnostics()}
+            >
+              {busy === "diagnostics" ? (
+                <LoaderCircle size={13} className="repo-spin" />
+              ) : (
+                <ShieldCheck size={13} />
+              )}{" "}
+              Check local engine
+            </button>
+            {diagnostics && (
+              <button
+                className="repo-text-button"
+                onClick={() =>
+                  void navigator.clipboard
+                    .writeText(JSON.stringify(diagnostics, null, 2))
+                    .then(() => notify("Local engine diagnostics copied"))
+                    .catch(() =>
+                      setError(
+                        "The report could not be copied. Check clipboard access and retry.",
+                      ),
+                    )
+                }
+              >
+                <Copy size={13} />
+                Copy diagnostics
+              </button>
+            )}
+          </div>
+          {diagnostics && (
+            <section
+              className="repo-health"
+              aria-label="Local engine diagnostics"
+            >
+              <dl>
+                <div>
+                  <dt>Source and index</dt>
+                  <dd>{sourceLabel}</dd>
+                </div>
+                <div>
+                  <dt>Local watch</dt>
+                  <dd>
+                    {diagnostics.failures.some(
+                      (failure) => failure.operation === "list_watched_paths",
+                    )
+                      ? "Unknown"
+                      : diagnostics.watch.length
+                        ? "Observed on this checkout"
+                        : "Not observed"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Matching jobs</dt>
+                  <dd>
+                    {diagnostics.failures.some(
+                      (failure) => failure.operation === "list_jobs",
+                    )
+                      ? "Unknown"
+                      : diagnostics.jobs.length
+                        ? diagnostics.jobs
+                            .map((job) => String(job.status ?? "unknown"))
+                            .join(", ")
+                        : "None reported"}
+                  </dd>
+                </div>
+              </dl>
+              {typeof diagnostics.indexRevision?.reason === "string" && (
+                <p>{diagnostics.indexRevision.reason.replaceAll("_", " ")}</p>
+              )}
+              {diagnostics.failures.map((failure) => (
+                <p key={failure.operation}>
+                  {failure.operation}: {failure.reason}
+                </p>
+              ))}
+              <small>
+                Checked {new Date(diagnostics.capturedAt).toLocaleTimeString()}.
+                Copy includes local paths and engine metadata. Source code and
+                credentials are excluded.
+              </small>
+            </section>
+          )}
           <div className="repo-actions">
             <button
               className="button secondary"

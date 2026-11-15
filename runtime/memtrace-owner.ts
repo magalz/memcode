@@ -109,6 +109,21 @@ export class ManagedMemtraceOwners {
   private readonly abort = new AbortController();
   constructor(private readonly options: OwnerOptions = {}) {}
 
+  /** Explicit diagnostics only: selected owner's bounded, redacted certificate errors. */
+  certificateDiagnostics(dataDirectory: string): string[] {
+    const owned = this.owned.get(dataDirectory);
+    if (!owned) return [];
+    return diagnostic(owned.output)
+      .split("\n")
+      .filter((line) =>
+        /owned branch index could not be certified|certificate|input changed|parsed files|stored files|no complete pre-index|hashing budget/i.test(
+          line,
+        ),
+      )
+      .slice(-8)
+      .map((line) => line.slice(0, 500));
+  }
+
   async ready(
     scope: ProjectScope,
     command: Command,

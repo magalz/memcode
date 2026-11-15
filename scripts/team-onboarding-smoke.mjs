@@ -5,10 +5,144 @@ import { createServer } from "node:http";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve, join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const output = join(root, ".memcode", "verification", "team-onboarding");
 await mkdir(output, { recursive: true });
+// Exercise the real diagnostic whitelist/redaction before crossing the mocked
+// renderer boundary. Raw fixture credentials/source never enter window.memcode.
+await build({
+  entryPoints: [join(root, "runtime/local-analysis.ts")],
+  bundle: true,
+  platform: "node",
+  format: "cjs",
+  outfile: join(output, "diagnostics-fixture.cjs"),
+});
+const { localAnalysisDiagnostics } = createRequire(import.meta.url)(
+  join(output, "diagnostics-fixture.cjs"),
+);
+const diagnosticReports = {};
+for (const variant of [
+  "blocked",
+  "aligned",
+  "mismatch",
+  "unstable",
+  "unknown",
+]) {
+  const project = {
+    id: "personal",
+    name: "Personal Observatory",
+    description: "Synthetic diagnostics",
+    path: "C:/Synthetic/observatory",
+    branch: "main",
+    analysis: "error",
+    repoId: "fixture",
+    analysisNote: "Source index could not be qualified",
+    createdAt: "2026-11-16",
+  };
+  const rawPrivate = {
+    api_key: "SYNTHETIC_RAW_AUTH_SECRET",
+    source_code: "SOURCE_CODE_MUST_NOT_LEAVE_ENGINE",
+  };
+  diagnosticReports[variant] = await localAnalysisDiagnostics(
+    project,
+    {
+      call: async (_project, name) => {
+        if (
+          variant === "unknown" &&
+          ["list_watched_paths", "list_jobs"].includes(name)
+        )
+          throw Error(
+            "Authorization: Bearer SYNTHETIC_RAW_AUTH_SECRET; api_key=SYNTHETIC_RAW_AUTH_SECRET",
+          );
+        if (name === "list_indexed_repositories")
+          return {
+            repositories: [
+              {
+                repo_id: "fixture",
+                repo_path: project.path,
+                branch: "main",
+                index_state: "stale",
+                ...rawPrivate,
+              },
+            ],
+          };
+        if (name === "list_watched_paths")
+          return {
+            watches:
+              variant === "aligned"
+                ? [
+                    {
+                      path: project.path,
+                      repo_id: "fixture",
+                      branch: "main",
+                      origin: "memcode",
+                      ...rawPrivate,
+                    },
+                  ]
+                : [],
+          };
+        if (name === "list_jobs")
+          return {
+            jobs:
+              variant === "aligned"
+                ? []
+                : [
+                    {
+                      id: "synthetic-peer-job",
+                      repo_id: "fixture",
+                      status: "running",
+                      stage: "parse",
+                      message: "Parsing source files",
+                      progress: { completed: 2, total: 8, unit: "files" },
+                      runtime_context: {
+                        requested_path: project.path,
+                        store_path:
+                          "C:/Synthetic/observatory/.memcode/memtrace/.memdb",
+                        ...rawPrivate,
+                      },
+                      ...rawPrivate,
+                    },
+                  ],
+          };
+        if (name === "get_query_revision")
+          return {
+            repo_id: "fixture",
+            ready: ["aligned", "mismatch", "unstable"].includes(variant),
+            branch: variant === "mismatch" ? "epic/different" : "main",
+            source_revision: "synthetic-source-revision",
+            mismatched_files: variant === "aligned" ? 0 : 2,
+            reason:
+              variant === "blocked" || variant === "unknown"
+                ? "source_index_not_qualified"
+                : undefined,
+            ...(variant === "unstable"
+              ? {
+                  retry_query_group: true,
+                  _meta: {
+                    graph_revision: {
+                      token: "synthetic-publication",
+                      publication_unchanged_during_call: false,
+                    },
+                  },
+                }
+              : {}),
+            ...rawPrivate,
+          };
+        throw Error("Unexpected diagnostic operation " + name);
+      },
+      scopeFor: () => ({
+        mode: "project",
+        dataDirectory: "C:/Synthetic/observatory/.memcode/memtrace/.memdb",
+      }),
+      certificateDiagnosticsFor: () => [
+        "full owned source could not qualify its independently verified input certificate",
+      ],
+    },
+    { timeoutMs: 1000 },
+  );
+}
 await build({
   stdin: {
     loader: "tsx",
@@ -18,18 +152,21 @@ await build({
 import React,{useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {TeamOnboarding} from './src/components/TeamOnboarding';
+import {LocalProjectSetup} from './src/components/LocalProjectSetup';
 import {initialState} from './src/seed';
 import './src/styles.css';import './src/styles-team.css';import './src/styles-collaboration.css';
 const mode=new URLSearchParams(location.search).get('mode')??'owner';
 const repository={url:'https://github.com/synthetic-fixture/observatory.git',identity:'github.com/synthetic-fixture/observatory',provider:'github',name:'observatory'};
 const personal={id:'personal',name:'Personal Observatory',description:'Synthetic fixture',path:'C:/Synthetic/observatory',branch:'main',analysis:'ready',createdAt:'2026-11-15',example:false};
 const shared={...personal,id:'shared',name:'Shared Observatory',path:null,analysis:'idle'};
+if(mode==='diagnostics'){personal.analysis='error';personal.analysisNote='Source index could not be qualified';shared.path='C:/Synthetic/second-observatory';shared.analysis='ready';}
 const member={id:'synthetic-owner',name:'Alex Example',email:'owner@example.invalid',role:'owner',status:'active',devices:[{id:'fixture-pc',name:'Synthetic PC'}],joinedAt:'2026-11-15'};
 const team={id:'synthetic-team',name:'Observatory Team',role:'owner',identity:'memtrace',members:[member],projects:[],createdAt:'2026-11-15',revision:1,connection:'online'};
 let directory={configured:true,identityAvailable:true,teams:mode==='owner'?[]:[{...team,role:'member',projects:[{workspaceId:'synthetic-room',name:shared.name,repository,localProjectId:'shared',createdAt:'2026-11-15'}]}]};
 let source=initialState();source.projects=[personal];source.tasks=[{...source.tasks[0],id:'personal-story',projectId:'personal',example:false,title:'Personal story stays intact'}];source.epics=[{...source.epics[0],projectId:'personal'}];source.team=[];
 if(mode!=='owner'){source.projects.push(shared);source.tasks.push({...source.tasks[0],id:'shared-story',projectId:'shared',title:'Existing shared story from the team'});}
 window.calls=[];window.sharedState=source;window.clipboard='';window.progress=null;window.providerSignedIn=false;
+window.diagnosticReports=${JSON.stringify(diagnosticReports)};window.diagnosticVariant='blocked';window.holdDiagnostics=false;
 Object.defineProperty(navigator,'clipboard',{value:{writeText:async(text)=>{window.clipboard=text;window.calls.push(['clipboard',text]);}},configurable:true});
 const inspection=(path)=>({path,repositoryRoot:path,branch:'epic/observatory',revision:'abcdef0123456789',dirty:true,repository,remotes:[{name:'origin',repository}]});
 let update=()=>{};const publish=()=>{source={...source,projects:[...source.projects]};window.sharedState=source;update(source);};
@@ -55,8 +192,9 @@ window.memcode={
  analyzeProject:async(id)=>{window.calls.push(['analyze',id]);source.projects.find(p=>p.id===id).analysis='ready';publish()},
  startWorker:async()=>{window.calls.push(['UNEXPECTED-WORKER-START'])},
  teamStatus:async()=>null,
+ localAnalysisDiagnostics:async(id)=>{window.calls.push(['diagnostics',id]);const value=structuredClone(window.diagnosticReports[window.diagnosticVariant]);const project=source.projects.find(p=>p.id===id);value.project={...value.project,name:project.name,path:project.path,branch:project.branch};if(window.holdDiagnostics)return await new Promise(resolve=>{window.releaseDiagnostics=()=>resolve(value)});return value;},
 };
-function Fixture(){const[state,setState]=useState(source),[selected,setSelected]=useState(mode==='owner'?'personal':'shared');update=setState;window.selectProject=setSelected;const project=state.projects.find(p=>p.id===selected);return <main style={{maxWidth:1170,padding:30,margin:'0 auto'}}><div style={{fontSize:10,color:'#87968c',marginBottom:20,letterSpacing:1}}>SYNTHETIC ONBOARDING FIXTURE · NO LIVE ACCOUNTS</div><TeamOnboarding state={state} project={project} notify={text=>window.calls.push(['notify',text])} open={()=>{}} openArtifact={()=>{}} onWorkers={()=>window.calls.push(['workers-page'])}/><aside data-testid="current-project" style={{fontSize:11,color:'#7e9183',padding:'20px 0',borderTop:'1px solid #dfe7dd'}}>Current project: {project.name}<div>{state.tasks.filter(t=>t.projectId===selected).map(t=><p key={t.id}>{t.title}</p>)}</div></aside></main>};
+function Fixture(){const[state,setState]=useState(source),[selected,setSelected]=useState(mode==='owner'||mode==='diagnostics'?'personal':'shared');update=setState;window.selectProject=setSelected;const project=state.projects.find(p=>p.id===selected);window.setLocalAnalysis=(analysis,note)=>{Object.assign(project,{analysis,analysisNote:note});publish();};window.changeLocalPath=(path)=>{project.path=path;publish();};return <main style={{maxWidth:1170,padding:30,margin:'0 auto'}}><div style={{fontSize:10,color:'#87968c',marginBottom:20,letterSpacing:1}}>SYNTHETIC ONBOARDING FIXTURE · NO LIVE ACCOUNTS</div>{mode==='diagnostics'?<LocalProjectSetup project={project} repository={repository} notify={text=>window.calls.push(['notify',text])} onWorkers={()=>window.calls.push(['workers-page'])}/>:<TeamOnboarding state={state} project={project} notify={text=>window.calls.push(['notify',text])} open={()=>{}} openArtifact={()=>{}} onWorkers={()=>window.calls.push(['workers-page'])}/>}<aside data-testid="current-project" style={{fontSize:11,color:'#7e9183',padding:'20px 0',borderTop:'1px solid #dfe7dd'}}>Current project: {project.name}<div>{state.tasks.filter(t=>t.projectId===selected).map(t=><p key={t.id}>{t.title}</p>)}</div></aside></main>};
 createRoot(document.getElementById('root')).render(<Fixture/>);
 `,
   },
@@ -433,6 +571,154 @@ try {
   ).toBe(0);
   flows.push(
     "failed background setup remains visible on return without retrying automatically",
+  );
+  await page.goto(url + "/?mode=diagnostics");
+  const diagnosticPanel = page.getByRole("region", {
+    name: "Local engine diagnostics",
+  });
+  await expect(diagnosticPanel).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Check local engine", exact: true })
+    .click();
+  await expect(
+    diagnosticPanel.getByText("Not yet verified", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    diagnosticPanel.getByText("Not observed", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    diagnosticPanel.getByText("running", { exact: true }),
+  ).toBeVisible();
+  await expect(diagnosticPanel).toContainText("source index not qualified");
+  await page
+    .getByRole("button", { name: "Copy diagnostics", exact: true })
+    .click();
+  const copiedDiagnostics = await page.evaluate(() => window.clipboard);
+  const copiedMetadata = JSON.parse(copiedDiagnostics);
+  expect(copiedMetadata.project.path).toBe("C:/Synthetic/observatory");
+  expect(copiedMetadata.indexRevision.source_revision).toBe(
+    "synthetic-source-revision",
+  );
+  expect(copiedMetadata.jobs[0].id).toBe("synthetic-peer-job");
+  expect(copiedDiagnostics).not.toContain("SYNTHETIC_RAW_AUTH_SECRET");
+  expect(copiedDiagnostics).not.toContain("SOURCE_CODE_MUST_NOT_LEAVE_ENGINE");
+  expect(copiedDiagnostics).not.toContain('"api_key"');
+  await page.screenshot({
+    path: join(output, "09-local-engine-blocked-diagnostics.png"),
+    fullPage: true,
+  });
+  await page.evaluate(() =>
+    window.setLocalAnalysis(
+      "indexing",
+      "Following Memtrace job synthetic-peer-job · parse · 2/8 files · Parsing source files",
+    ),
+  );
+  await expect(page.locator(".repo-analysis")).toContainText(
+    "synthetic-peer-job · parse · 2/8 files",
+  );
+  await page.evaluate(() => {
+    window.setLocalAnalysis("error", "Source index could not be qualified");
+    window.diagnosticVariant = "aligned";
+  });
+  await page
+    .getByRole("button", { name: "Check local engine", exact: true })
+    .click();
+  await expect(
+    diagnosticPanel.getByText("Aligned", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    diagnosticPanel.getByText("Observed on this checkout", { exact: true }),
+  ).toBeVisible();
+  await page.evaluate(() => {
+    window.diagnosticVariant = "mismatch";
+  });
+  await page
+    .getByRole("button", { name: "Check local engine", exact: true })
+    .click();
+  await expect(
+    diagnosticPanel.getByText("Branch mismatch", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    diagnosticPanel.getByText("Aligned", { exact: true }),
+  ).toHaveCount(0);
+  await page.evaluate(() => {
+    window.diagnosticVariant = "unstable";
+  });
+  await page
+    .getByRole("button", { name: "Check local engine", exact: true })
+    .click();
+  await expect(
+    diagnosticPanel.getByText("Not yet verified", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    diagnosticPanel.getByText("Aligned", { exact: true }),
+  ).toHaveCount(0);
+  await page.evaluate(() => {
+    window.diagnosticVariant = "unknown";
+  });
+  await page
+    .getByRole("button", { name: "Check local engine", exact: true })
+    .click();
+  await expect(
+    diagnosticPanel.getByText("Unknown", { exact: true }),
+  ).toHaveCount(2);
+  await page
+    .getByRole("button", { name: "Copy diagnostics", exact: true })
+    .click();
+  expect(await page.evaluate(() => window.clipboard)).not.toContain(
+    "SYNTHETIC_RAW_AUTH_SECRET",
+  );
+  await page.evaluate(() =>
+    window.changeLocalPath("C:/Synthetic/moved-observatory"),
+  );
+  await expect(diagnosticPanel).toHaveCount(0);
+  await page.evaluate(() => {
+    window.holdDiagnostics = true;
+    window.diagnosticVariant = "blocked";
+  });
+  await page
+    .getByRole("button", { name: "Check local engine", exact: true })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => typeof window.releaseDiagnostics))
+    .toBe("function");
+  await page.evaluate(() => window.selectProject("shared"));
+  await page.evaluate(() => {
+    window.holdDiagnostics = false;
+    window.releaseDiagnostics();
+  });
+  await page.waitForTimeout(50);
+  await expect(diagnosticPanel).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Check local engine", exact: true })
+    .click();
+  await expect(diagnosticPanel).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => window.calls.filter((call) => call[0] === "diagnostics").at(-1)[1],
+    ),
+  ).toBe("shared");
+  expect(
+    await page.evaluate(() =>
+      window.calls.some(
+        (call) =>
+          call[0] === "clone" ||
+          call[0] === "analyze" ||
+          call[0] === "UNEXPECTED-WORKER-START",
+      ),
+    ),
+  ).toBe(false);
+  await page.screenshot({
+    path: join(output, "10-local-engine-unknown-diagnostics.png"),
+    fullPage: true,
+  });
+  flows.push(
+    "local engine diagnostics render blocked revision, missing watch and matching jobs",
+    "Copy diagnostics uses the real backend whitelist/redaction with synthetic raw credentials and source excluded",
+    "peer indexing progress remains visible in the analysis status",
+    "branch-mismatched revisions are never labelled Aligned",
+    "watch/job failures remain Unknown rather than absent",
+    "diagnostics clear after local path changes and stale responses cannot cross projects",
   );
   await page.setViewportSize({ width: 640, height: 900 });
   await page.goto(url + "/?mode=reuse");

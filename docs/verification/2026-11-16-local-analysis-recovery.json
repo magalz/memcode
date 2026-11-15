@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-16",
+  "scope": "Device-local indexing job tracking, readiness and diagnostics",
+  "sourceTests": { "passed": 378, "failed": 0 },
+  "finalIndexAndPeerTests": { "passed": 15, "failed": 0 },
+  "renderer": {
+    "synthetic": true,
+    "flows": 24,
+    "consoleErrors": 0,
+    "command": "node scripts/team-onboarding-smoke.mjs"
+  },
+  "checks": { "typecheck": true, "productionBuild": true },
+  "behavior": [
+    "Follow the existing matching indexing job instead of blindly enqueueing duplicates",
+    "Require a ready source revision on the expected branch after job completion",
+    "Report unknown diagnostics distinctly from confirmed absence",
+    "Invalidate diagnostic display when the local checkout or branch changes",
+    "Copy bounded local metadata with credential redaction and source payloads excluded"
+  ],
+  "physicalEvidence": {
+    "teamComments": "Mac and Windows bidirectional comments passed previously",
+    "macLocalCode": "User screenshot confirms connected checkout but indexing blocked by peer owner",
+    "windowsLocalGraph": "Correct private store and watch observed; branch publication remains incomplete",
+    "indexFailure": "full owned source could not qualify its independently verified input certificate"
+  },
+  "notClaimed": [
+    "Healthy local graphs on both physical computers",
+    "A proven root cause for the engine certificate failure",
+    "Cross-computer graph or source replication"
+  ]
+}

@@ -18,6 +18,12 @@ A passing fresh capture needs all of:
 
 A saved “connected” badge, an old checkpoint or a successful comment sync is insufficient. If a publication is partial, use **Refresh analysis** and inspect its resulting checkpoint. Do not compare quality across unverified captures.
 
+## If local analysis does not finish
+
+In **Team → Local setup**, select **Check local engine**. This inspects the engine serving this computer's connected folder, including the source/index revision, matching watcher and indexing jobs. **Copy diagnostics** copies local paths and bounded engine metadata for troubleshooting; it does not copy source files or account credentials.
+
+If another index is already running, MemCode follows that matching job rather than repeatedly starting new indexes. A failed job, missing owner, paused job or unverified source revision stays visible as an analysis issue. Completing an indexing job alone does not establish that the graph matches the selected branch.
+
 ## Prove live updates
 
 1. Record a passing checkpoint A.

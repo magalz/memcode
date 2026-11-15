@@ -38,6 +38,7 @@ import { registerCardComments } from "./card-comments";
 import { registerConnections } from "./worker-connections";
 import { TeamSyncClient } from "./team/client";
 import { registerRepositoryRoutes } from "./repository-routes";
+import { registerLocalAnalysis } from "./local-analysis";
 import { createMemtraceIdentityProofProvider } from "./team-identity";
 import { SpeechManager, registerSpeech } from "./speech";
 import { speechSettingsSchema } from "../src/speech";
@@ -873,6 +874,7 @@ export async function createRuntime(
   );
   registerPlanningControls(register, state, project, changed);
   registerIntelligence(register, state, project, changed, engine);
+  registerLocalAnalysis(register, project, engine);
   register("project:select-folder", z.undefined(), async () => {
     await preview.hide();
     const selected = await host.call<string | null>("select_folder", {});

@@ -178,6 +178,7 @@ export async function installNativeBridge(): Promise<void> {
     (event) => previews.forEach((listener) => listener(event.payload)),
   );
   const api: MemCodeAPI = {
+    localAnalysisDiagnostics: (projectId) => call("project:local-diagnostics", {projectId}),
     teamsList: () => call("team:list"),
     createTeamWorkspace: (input) => call("team:create-workspace", input),
     shareTeamProject: (input) => call("team:share-project", input),
