@@ -1,0 +1,53 @@
+{
+  "date": "2026-11-16",
+  "memcodeImplementationCommit": "f806bcfd411a3d5f0d89541e82811f26b7298c08",
+  "engineFixCommit": "3432ebdbe079dbcb0d99c545347bfaa8dd3dbf19",
+  "engineFixBranch": "fix/memcode-runtime-cert-inputs",
+  "engineFixPublishedToStable": false,
+  "sourceChecks": { "testsPassed": 384, "testsFailed": 0, "typecheck": true, "productionBuild": true },
+  "desktop": { "windowsReleaseBuild": true, "nativeSmoke": true, "gracefulShutdown": true, "rendererOnboardingFlows": 24 },
+  "engineRegression": {
+    "platform": "Linux Rust 1.97.1",
+    "fixed": { "passed": 4, "failed": 0 },
+    "controlledRollback": { "passed": 1, "failed": 3 },
+    "restoredFix": { "passed": 4, "failed": 0 },
+    "case": "Generated Cursor profile symlinks and runtime outputs under .memcode must not enter source certification; real source/configuration safeguards remain effective"
+  },
+  "mac": {
+    "physicalComputer": true,
+    "project": "Team sync test",
+    "privateLocalStoreConfirmed": true,
+    "initialDiagnostic": { "sourceFiles": 437, "indexedFiles": 437, "mismatchedFiles": 0 },
+    "laterUserConfirmed": { "sourceAndIndex": "Aligned", "localWatch": "Observed" },
+    "automatedSaveRemoveProbe": false
+  },
+  "windows": {
+    "physicalComputer": true,
+    "privatePatchedEngineBundle": true,
+    "globalInstallationChanged": false,
+    "oldPrivateIndexRetainedAsBackup": true,
+    "activePrivateIndexRebuiltWithEarlierUserApproval": true,
+    "oldSaveRecoveryMarkerPredatedTest": true,
+    "optionalEmbeddingAndHistoryReplayDeferredDuringAcceptance": true,
+    "baseline": { "ready": true, "sourceFiles": 438, "indexedFiles": 438, "mismatchedFiles": 0 },
+    "afterSave": { "ready": true, "sourceFiles": 439, "indexedFiles": 439, "mismatchedFiles": 0, "newSymbolRetrieved": true },
+    "afterRemoval": { "ready": true, "sourceFiles": 438, "indexedFiles": 438, "mismatchedFiles": 0, "removedSymbolAbsent": true, "originalSourceFingerprintRestored": true },
+    "forcedReindexBetweenSaveAndRemoval": false,
+    "nativeMemcodeSnapshot": { "status": "current", "indexReady": true, "graphStable": true, "watch": "watching", "scope": "project" },
+    "sharedProjectLocalBinding": { "project": "Team sync test", "sourceReady": true, "watchObserved": true, "diagnosticFailures": 0 },
+    "demoServerHttpStatus": { "3000": 200, "57195": 200, "58415": 200, "57201": 200 }
+  },
+  "collaboration": {
+    "macWindowsAuthenticatedComments": "passed",
+    "physicalAccountCount": 1,
+    "physicalPlatforms": ["Windows", "macOS"],
+    "differentPersonAuthorizationAndClaims": "tested with signed synthetic identities; physical second-person test remains open",
+    "physicalWorkerClaimAndPublishedResultReview": "pending"
+  },
+  "limitations": [
+    "Windows acceptance and the current development session defer embeddings/history replay; semantic-search quality was not validated by this source/watch test",
+    "The private patched engine bundle is an MCP development build with a dashboard stub, not a complete Memtrace installer or stable CLI release",
+    "Mac graph alignment and watch registration were user-confirmed; a live Mac edit/pull probe remains a separate check",
+    "Team synchronization carries planning and explicitly published outputs; Git transfers source and each computer maintains its own graph"
+  ]
+}

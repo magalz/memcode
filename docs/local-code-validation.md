@@ -42,3 +42,7 @@ The watcher tracks supported, included source files in the local checkout. It ca
 Team story claims coordinate who may start the shared story. Semantic Fleet coordination remains within each local engine and checkout in this pilot. Runtime stores are excluded through Git-local metadata before MemCode creates them, including when connecting an existing repository.
 
 Official background: [Memtrace indexing and watcher tools](https://memtrace.io/docs/mcp/tools).
+
+## Recorded pilot result
+
+The [November 16 acceptance record](verification/2026-11-16-local-graph-acceptance.json) distinguishes the physical Mac checks, Windows live save/remove proof, and remaining team-worker checks. Windows currently uses a private patched engine in a development session with embeddings/history replay deferred. This verifies source graphs and watchers; it is not a semantic-search benchmark or a stable Memtrace release.
