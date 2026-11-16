@@ -7,6 +7,7 @@ import {
   readFile,
   writeFile,
   copyFile,
+  access,
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -15,6 +16,23 @@ import { initialState } from "../src/seed.ts";
 import { WorkerChangeJournal } from "../runtime/changes.ts";
 import { git } from "../runtime/local.ts";
 import { nativeEnv, nativeBinary } from "./tauri-env.mjs";
+
+const fixtureDirectory = resolve(
+  process.env.MEMCODE_REVIEW_FIXTURE_DIR ?? "tmp/verification-fixtures",
+);
+const requiredFixtures = [
+  "codex-mission-planner.xlsx",
+  "claude-creative-brief.docx",
+  "cursor-field-notes.pptx",
+  "review-guide.pdf",
+  "review-tone.wav",
+];
+for (const name of requiredFixtures)
+  await access(join(fixtureDirectory, name)).catch(() => {
+    throw Error(
+      `Missing ${name}. Prepare your own viewer fixtures in tmp/verification-fixtures or set MEMCODE_REVIEW_FIXTURE_DIR; see docs/review-and-previews.md.`,
+    );
+  });
 
 const profile = await mkdtemp(join(tmpdir(), "memcode-review-smoke-")),
   root = join(profile, "project"),
@@ -87,26 +105,8 @@ await writeFile(
 );
 const outputs = join(root, ".memcode", "workers", taskId, "artifacts");
 await mkdir(outputs, { recursive: true });
-const original = JSON.parse(
-  await readFile(
-    "C:/Users/AlexT/AppData/Roaming/MemCode/workspace.json",
-    "utf8",
-  ),
-);
-for (const name of [
-  "codex-mission-planner.xlsx",
-  "claude-creative-brief.docx",
-  "cursor-field-notes.pptx",
-]) {
-  const source = original.artifacts.find((a) => a.name === name);
-  assert.ok(source, "Missing real Office fixture " + name);
-  await copyFile(source.path, join(outputs, name));
-}
-for (const name of ["review-guide.pdf", "review-tone.wav"])
-  await copyFile(
-    resolve("../tmp/memcode-review/fixtures", name),
-    join(outputs, name),
-  );
+for (const name of requiredFixtures)
+  await copyFile(join(fixtureDirectory, name), join(outputs, name));
 await copyFile(join(root, "notes.md"), join(outputs, "review-notes.md"));
 await writeFile(
   join(outputs, "review-page.html"),

@@ -1,13 +1,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod bridge;
+mod beta_store;
 mod browser;
 #[cfg(windows)]
 mod browser_capture;
 mod native;
-mod terminal;
-mod workspace;
 mod state_patch;
+mod terminal;
+mod updates;
+mod workspace;
 
 use bridge::RuntimeBridge;
 use serde_json::Value;
@@ -67,10 +69,17 @@ fn main() {
         .manage(native::PreviewState::default())
         .manage(browser)
         .manage(terminal::TerminalState::default())
+        .manage(updates::UpdateState::default())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             rpc,
             workspace_connect,
-            workspace_ack
+            workspace_ack,
+            updates::app_update_info,
+            updates::app_update_context,
+            updates::app_update_history,
+            updates::app_update_check,
+            updates::app_update_install
         ])
         .setup(|app| {
             let handle = app.handle().clone();

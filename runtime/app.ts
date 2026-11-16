@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { AppState, Project, WorkItem } from "../src/shared";
 import { isActive } from "../src/domain";
-import { LocalStore, exists, git, now, within } from "./local";
+import { LocalStore, exists, findCommand, git, now, within } from "./local";
 import { observePersistence } from "./persistence";
 import { MemtraceEngine } from "./memtrace";
 import { ensureProjectRepository } from "./project-repository";
@@ -39,7 +39,12 @@ import { registerConnections } from "./worker-connections";
 import { TeamSyncClient } from "./team/client";
 import { registerRepositoryRoutes } from "./repository-routes";
 import { registerLocalAnalysis } from "./local-analysis";
+import { AppUpdateGate, registerAppUpdates } from "./app-updates";
 import { createMemtraceIdentityProofProvider } from "./team-identity";
+import { discoverOfficialTeamService } from "./team/discovery";
+import { createBetaAuthorization } from "./beta-auth";
+import { MemCodeBeta, nativeBetaStorage } from "./beta";
+import { ManagedMemcodeEngine } from "./managed-engine";
 import { SpeechManager, registerSpeech } from "./speech";
 import { speechSettingsSchema } from "../src/speech";
 import {
@@ -102,8 +107,25 @@ export async function createRuntime(
   await store.load();
   if (await exists(join(appPath, ".git")))
     attachDogfoodProject(store.state, appPath);
-  const engine = new MemtraceEngine(() => store.state.settings.memtracePath),
-    state = () => store.state;
+  const state = () => store.state;
+  let beta: MemCodeBeta | undefined;
+  let betaNeedsAnalysis = false;
+  let betaReady = false;
+  let requireFreshWorkerContext = false;
+  const managedEngine = new ManagedMemcodeEngine(store.dir, {
+    progress: (note) => beta?.reportEngineProgress(note),
+  });
+  const engine = new MemtraceEngine(
+    () =>
+      beta?.usesBeta()
+        ? managedEngine.executable()
+        : store.state.settings.memtracePath,
+    {
+      environment: () => beta?.environment() ?? Promise.resolve({}),
+      privateProject: () => beta?.usesBeta() === true,
+    },
+  );
+  const appUpdateGate = new AppUpdateGate(state);
   let dispatchQueued = () => {};
   let closed = false;
   let team: TeamSyncClient | undefined;
@@ -164,7 +186,18 @@ export async function createRuntime(
         release: (taskId, projectId) =>
           team?.release(taskId, projectId) ?? Promise.resolve(),
       },
-      () => connections.account.assertMayStart(),
+      () => {
+        appUpdateGate.assertMayStart();
+        beta?.assertMayStart();
+        if (!beta?.usesBeta()) connections.account.assertMayStart();
+      },
+      (project) =>
+        betaReady &&
+        !appUpdateGate.preparing &&
+        !beta?.isChanging() &&
+        (!project ||
+          !requireFreshWorkerContext ||
+          (project.analysis === "ready" && !!project.repoId)),
     ),
     preview = new PreviewManager(
       host,
@@ -200,6 +233,7 @@ export async function createRuntime(
   team = new TeamSyncClient(state, store.dir, changed, {
     identityProof: teamIdentity,
     identityAvailable: teamIdentity.available,
+    serviceDiscovery: () => discoverOfficialTeamService(),
   });
   const teamProject = z.object({ projectId: identifier }).strict();
   register("team:list", z.undefined(), () => team!.teamsList());
@@ -378,6 +412,17 @@ export async function createRuntime(
     const item = project(id);
     if (item.example || !item.path)
       throw new Error("Choose a local project folder first.");
+    await beta?.initialize();
+    if (
+      !beta?.usesBeta() &&
+      !(await findCommand("memtrace", store.state.settings.memtracePath))
+    ) {
+      item.analysis = "idle";
+      item.analysisNote =
+        "Connect Memtrace beta from your account or project setup to prepare the local engine. You can keep planning while it connects.";
+      await changed();
+      return;
+    }
     item.analysis = "connecting";
     item.analysisNote = "Connecting to local Memtrace…";
     await changed();
@@ -461,6 +506,88 @@ export async function createRuntime(
     (id) => team?.repositoryForProject(id),
     () => host.call("open_github_device", {}),
   );
+  beta = new MemCodeBeta({
+    storage: nativeBetaStorage(host),
+    authorization: createBetaAuthorization({
+      openExternal: (url) => host.call("open_memcode_beta", { url }),
+    }),
+    assertMayChange: () => {
+      if (closed || appUpdateGate.preparing)
+        throw Error("Finish the app update before changing beta access.");
+      if (store.state.tasks.some((item) => !item.example && isActive(item)))
+        throw Error(
+          "Finish or stop running workers before changing the beta account.",
+        );
+    },
+    beforeIdentityChange: async () => {
+      requireFreshWorkerContext = true;
+      teamIdentity.cancel();
+      await team?.suspendAccount();
+      await engine.reconnect();
+      await Promise.allSettled([...analyses.values()]);
+      for (const item of store.state.projects)
+        if (!item.example && item.path) {
+          item.analysis = "idle";
+          item.repoId = undefined;
+          item.analysisNote =
+            "The engine account changed. Refresh local code context.";
+        }
+      betaNeedsAnalysis = true;
+      await changed();
+    },
+    afterConnected: async () => {
+      await managedEngine.prepare();
+    },
+    beforeEngineUse: async () => {
+      await managedEngine.prepare();
+    },
+    changed: (status) => {
+      emit("beta:status", status);
+      if (!status.loginPending && !closed) {
+        if (
+          betaNeedsAnalysis &&
+          (!beta?.usesBeta() || status.state === "connected")
+        ) {
+          betaNeedsAnalysis = false;
+          const pendingProjects = new Set([
+            store.state.activeProjectId,
+            ...store.state.tasks
+              .filter((item) =>
+                item.messages.some(
+                  (message) => message.followupState === "queued",
+                ),
+              )
+              .map((item) => item.projectId),
+          ]);
+          void (async () => {
+            for (const id of pendingProjects) {
+              const item = store.state.projects.find(
+                (project) => project.id === id,
+              );
+              if (item?.path && !item.example)
+                await analyze(id).catch(() => {});
+            }
+          })();
+        }
+        workers.dispatchQueued();
+      }
+    },
+  });
+  register("beta:status", z.undefined(), () => beta!.status());
+  register("beta:connect", z.undefined(), () => beta!.connect());
+  register("beta:cancel", z.undefined(), () => beta!.cancel());
+  register("beta:sign-out", z.undefined(), () => beta!.signOut());
+  register("beta:refresh", z.undefined(), () => beta!.refresh());
+  register("beta:resume", z.undefined(), () => beta!.resume());
+  register(
+    "beta:use-cli",
+    z.object({ confirmed: z.literal(true) }).strict(),
+    () => beta!.useExistingCLI(),
+  );
+  void beta.initialize().then(() => {
+    betaReady = true;
+    workers.dispatchQueued();
+  });
   const assigning = new Map<string, Promise<void>>();
   const activeRouteError =
     "This worker is active. Its current route stays bound to the running attempt.";
@@ -512,6 +639,8 @@ export async function createRuntime(
     store.state.activeProjectId = id;
     await changed();
     void resumeProjectWatch(id);
+    if (beta?.usesBeta() && project(id).path && project(id).analysis === "idle")
+      void analyze(id).catch(() => {});
   });
   register(
     "project:create",
@@ -875,6 +1004,9 @@ export async function createRuntime(
   registerPlanningControls(register, state, project, changed);
   registerIntelligence(register, state, project, changed, engine);
   registerLocalAnalysis(register, project, engine);
+  registerAppUpdates(register, appUpdateGate, changed, () =>
+    workers.dispatchQueued(),
+  );
   register("project:select-folder", z.undefined(), async () => {
     await preview.hide();
     const selected = await host.call<string | null>("select_folder", {});
@@ -1140,6 +1272,7 @@ export async function createRuntime(
     async close() {
       if (closed) return;
       closed = true;
+      beta?.close();
       clearInterval(artifactMaintenance);
       await reconcilingArtifacts?.catch((error) =>
         console.error("Artifact catalog check failed:", error),

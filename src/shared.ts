@@ -333,7 +333,19 @@ export interface PreviewInput {
   bounds: { x: number; y: number; width: number; height: number };
 }
 export interface MemCodeAPI {
-  localAnalysisDiagnostics(projectId: string): Promise<import("./local-analysis").LocalAnalysisDiagnostics>;
+  betaStatus(): Promise<import("./beta").MemCodeBetaStatus>;
+  connectBeta(): Promise<import("./beta").MemCodeBetaStatus>;
+  cancelBeta(): Promise<import("./beta").MemCodeBetaStatus>;
+  signOutBeta(): Promise<import("./beta").MemCodeBetaStatus>;
+  refreshBeta(): Promise<import("./beta").MemCodeBetaStatus>;
+  resumeBeta(): Promise<import("./beta").MemCodeBetaStatus>;
+  onBetaStatus(
+    listener: (status: import("./beta").MemCodeBetaStatus) => void,
+  ): () => void;
+  useExistingMemtraceCLI(): Promise<import("./beta").MemCodeBetaStatus>;
+  localAnalysisDiagnostics(
+    projectId: string,
+  ): Promise<import("./local-analysis").LocalAnalysisDiagnostics>;
   teamsList(): Promise<import("./team-space").TeamDirectory>;
   createTeamWorkspace(input: {
     name: string;

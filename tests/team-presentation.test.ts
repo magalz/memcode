@@ -151,19 +151,19 @@ test("Team guide explains named teams, current-state joining and separate local-
   const text = [...article.steps, article.note].join(" ");
   for (const detail of [
     "Create a team",
-    "Memtrace approval in your browser",
+    "approve your Memtrace account in the browser",
     "verified email",
-    "existing shared work opens immediately",
-    "No empty project",
+    "Current work opens immediately",
+    "no empty project",
     "Work on this computer",
     "Existing local changes are preserved",
-    "GitHub access is checked separately",
-    "explicit approval",
-    "confirmed story claim",
+    "Git repository access is a separate connection",
+    "approve your own coding tool in Workers",
+    "confirms its story claim before starting",
     "5 MiB",
-    "Git carries source changes",
-    "receiving an update never starts work automatically",
-    "Planning changes queue while offline",
+    "Use Git to exchange code",
+    "team updates never start a worker automatically",
+    "Planning can queue offline",
     "Removing Team access blocks future requests",
   ])
     assert.ok(text.includes(detail), detail);

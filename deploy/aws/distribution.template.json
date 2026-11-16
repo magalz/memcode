@@ -1,0 +1,57 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "MemCode beta release downloads only. No project planning, source, account credentials or private team results belong in this bucket.",
+  "Resources": {
+    "ReleaseBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketEncryption": { "ServerSideEncryptionConfiguration": [{ "ServerSideEncryptionByDefault": { "SSEAlgorithm": "AES256" } }] },
+        "OwnershipControls": { "Rules": [{ "ObjectOwnership": "BucketOwnerEnforced" }] },
+        "PublicAccessBlockConfiguration": { "BlockPublicAcls": true, "IgnorePublicAcls": true, "BlockPublicPolicy": true, "RestrictPublicBuckets": true },
+        "VersioningConfiguration": { "Status": "Enabled" },
+        "LifecycleConfiguration": { "Rules": [{ "Id": "AbortUnfinishedUploads", "Status": "Enabled", "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 } }] },
+        "Tags": [{ "Key": "Product", "Value": "MemCode" }, { "Key": "Purpose", "Value": "Public beta installer distribution" }]
+      }
+    },
+    "OriginAccess": {
+      "Type": "AWS::CloudFront::OriginAccessControl",
+      "Properties": { "OriginAccessControlConfig": { "Name": { "Fn::Sub": "${AWS::StackName}-downloads" }, "Description": "Signed, read-only access to MemCode release objects", "OriginAccessControlOriginType": "s3", "SigningBehavior": "always", "SigningProtocol": "sigv4" } }
+    },
+    "Distribution": {
+      "Type": "AWS::CloudFront::Distribution",
+      "Properties": {
+        "DistributionConfig": {
+          "Enabled": true,
+          "Comment": "MemCode beta desktop release assets",
+          "HttpVersion": "http2and3",
+          "IPV6Enabled": true,
+          "PriceClass": "PriceClass_100",
+          "ViewerCertificate": { "CloudFrontDefaultCertificate": true },
+          "Origins": [{ "Id": "release-assets", "DomainName": { "Fn::GetAtt": ["ReleaseBucket", "RegionalDomainName"] }, "OriginAccessControlId": { "Ref": "OriginAccess" }, "S3OriginConfig": { "OriginAccessIdentity": "" } }],
+          "DefaultCacheBehavior": { "TargetOriginId": "release-assets", "ViewerProtocolPolicy": "https-only", "AllowedMethods": ["GET", "HEAD"], "CachedMethods": ["GET", "HEAD"], "Compress": true, "ForwardedValues": { "QueryString": false, "Cookies": { "Forward": "none" } }, "MinTTL": 0, "DefaultTTL": 86400, "MaxTTL": 31536000 }
+        },
+        "Tags": [{ "Key": "Product", "Value": "MemCode" }]
+      }
+    },
+    "BucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": { "Ref": "ReleaseBucket" },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            { "Sid": "CloudFrontReleaseReadsOnly", "Effect": "Allow", "Principal": { "Service": "cloudfront.amazonaws.com" }, "Action": "s3:GetObject", "Resource": { "Fn::Sub": "${ReleaseBucket.Arn}/releases/*" }, "Condition": { "StringEquals": { "AWS:SourceArn": { "Fn::Sub": "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}" } } } },
+            { "Sid": "DenyInsecureTransport", "Effect": "Deny", "Principal": "*", "Action": "s3:*", "Resource": [{ "Fn::GetAtt": ["ReleaseBucket", "Arn"] }, { "Fn::Sub": "${ReleaseBucket.Arn}/*" }], "Condition": { "Bool": { "aws:SecureTransport": "false" } } }
+          ]
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "ReleaseBucketName": { "Description": "Private origin for reviewed public release files under releases/ only", "Value": { "Ref": "ReleaseBucket" } },
+    "DistributionId": { "Description": "CloudFront distribution for immutable versioned installer assets", "Value": { "Ref": "Distribution" } },
+    "DownloadBaseUrl": { "Description": "Public HTTPS CDN base; source remains private in Git until its separate audit", "Value": { "Fn::Sub": "https://${Distribution.DomainName}/releases" } }
+  }
+}

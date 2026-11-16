@@ -5,6 +5,11 @@ planning work, talking to coding agents, and reviewing what they produce.
 Memtrace supplies code intelligence and coordination through its installed MCP
 server. Its backend is not copied into this repository.
 
+MemCode is **source-available for noncommercial use** under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). Commercial use, including
+internal company development, requires a separate license. See
+[licensing](docs/licensing.md) and [third-party notices](THIRD_PARTY_NOTICES.md).
+
 ## Run
 
 Requires Node.js 22.12+ and Git. Native development/builds also require Rust and
@@ -15,10 +20,16 @@ npm install
 npm run dev
 ```
 
-On macOS, install Xcode Command Line Tools and Rust 1.88+ first. Use the
+On macOS, install Xcode Command Line Tools and Rust 1.90+ first. Use the
 [macOS developer quickstart](docs/macos-development.md) for the current source
 preview, Memtrace sign-in and platform limits. This checkout has no signed Mac
 installer; the shared live agent browser currently requires Windows WebView2.
+Private [Windows](docs/windows-desktop-candidate.md) and
+[macOS](docs/macos-desktop-candidate.md) candidate packaging keeps updater
+signatures separate from OS trust: the current Windows candidate has no
+Authenticode publisher signature; the Mac workflow uses ad-hoc signing and no
+Apple notarization. macOS candidate preparation does not establish full live
+browser parity.
 
 To develop MemCode using MemCode, close the compiled app after its active workers
 finish, then run `npm run dev` from this repository in an external terminal. It builds the local runtime

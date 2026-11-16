@@ -1,0 +1,10 @@
+{
+  "version": "24.22.3",
+  "source": "https://nodejs.org/dist/v24.22.3/SHASUMS256.txt",
+  "archives": {
+    "win32-x64": { "file": "node-v24.22.3-win-x64.zip", "sha256": "e612af99f626ab415ea225af6bce5c971feb448cb5cae250bb1c3fa50c5f7d9f" },
+    "darwin-arm64": { "file": "node-v24.22.3-darwin-arm64.tar.gz", "sha256": "ff6e17d4874b76d272212b908cc020d6e815fba5a6c7eaaa06add725840307fd" },
+    "darwin-x64": { "file": "node-v24.22.3-darwin-x64.tar.gz", "sha256": "977614af0504c81045e7fd85596dbca0e5f951b96681516dadafedcca8c447f7" },
+    "linux-x64": { "file": "node-v24.22.3-linux-x64.tar.gz", "sha256": "061ec3e3062115705b56b51fa9cc330ab50d34b6969387d4e4b1a50c6809acc2" }
+  }
+}

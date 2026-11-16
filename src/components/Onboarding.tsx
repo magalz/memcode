@@ -17,6 +17,7 @@ import type {
 } from "../onboarding";
 import { Modal } from "./Dialogs";
 import { GuideFlow } from "./GuideFlow";
+import { BetaAccess } from "./BetaAccess";
 import "../styles-onboarding.css";
 const copy = {
   project: {
@@ -65,6 +66,8 @@ export function Onboarding({
   onUpdate,
   onAction,
   onDocs,
+  needsEngine = false,
+  notify,
 }: {
   progress: OnboardingProgress;
   state: AppState;
@@ -75,6 +78,8 @@ export function Onboarding({
   onUpdate: (patch: OnboardingPatch) => void;
   onAction: (action: GuideAction) => void;
   onDocs: () => void;
+  needsEngine?: boolean;
+  notify: (message: string) => void;
 }) {
   const step = progress.step;
   const [bounds, setBounds] = useState<DOMRect>();
@@ -108,6 +113,7 @@ export function Onboarding({
       >
         <div className="onboarding-welcome">
           <GuideFlow />
+          {needsEngine && <BetaAccess notify={notify} existingCLI />}
           <div className="guide-welcome-notes">
             <span>
               <FolderPlus size={15} />
@@ -193,6 +199,9 @@ export function Onboarding({
           </small>
           <h2>{item.title}</h2>
           <p>{item.body}</p>
+          {step === "project" && needsEngine && (
+            <BetaAccess notify={notify} existingCLI />
+          )}
           <button
             className="button primary"
             onClick={() => onAction(step === "ready" ? "open-story" : step)}

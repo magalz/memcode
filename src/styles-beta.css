@@ -1,0 +1,148 @@
+.beta-access {
+  padding: 20px;
+  border: 1px solid #dce7dc;
+  border-radius: 12px;
+  background: #fbfdf9;
+  color: #294135;
+  min-width: 0;
+  text-align: left;
+}
+.beta-access header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.beta-access header > div {
+  flex: 1;
+  min-width: 0;
+}
+.beta-access strong {
+  display: block;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.beta-access small {
+  display: block;
+  color: #819186;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.beta-access-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #dce7dc;
+  border-radius: 9px;
+  background: #eef5eb;
+  color: #598061;
+  flex-shrink: 0;
+}
+.beta-access-state {
+  font-size: 10px;
+  color: #819186;
+  white-space: nowrap;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.beta-access-state.connected {
+  color: #298264;
+}
+.beta-access p {
+  margin: 15px 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #6b8072;
+  overflow-wrap: anywhere;
+}
+.beta-access .beta-access-note {
+  font-size: 11px;
+  color: #8b9b90;
+  margin-top: -5px;
+}
+.beta-access-actions,
+.beta-access-confirm > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.beta-access .button {
+  font-size: 11px;
+  min-height: 34px;
+}
+.beta-access-pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #6b8072;
+  flex: 1;
+}
+.beta-access .beta-access-error {
+  color: #a35e3b;
+}
+.beta-cli-details {
+  margin-top: 17px;
+  padding-top: 14px;
+  border-top: 1px solid #e5ece1;
+  font-size: 11px;
+  color: #7c8e80;
+}
+.beta-cli-details summary {
+  cursor: pointer;
+  list-style-position: inside;
+}
+.beta-cli-details .account-connection {
+  margin: 12px 0 0;
+}
+.beta-access-confirm {
+  border-top: 1px solid #e5ece1;
+  margin-top: 14px;
+}
+.beta-account-menu {
+  position: relative;
+}
+.beta-account-dismiss {
+  position: fixed;
+  inset: 0;
+  border: 0;
+  background: transparent;
+  z-index: 105;
+}
+.beta-account-popover {
+  position: absolute;
+  right: 0;
+  top: 36px;
+  width: min(410px, calc(100vw - 28px));
+  z-index: 106;
+  box-shadow: 0 14px 55px #18332420;
+  border-radius: 12px;
+}
+.onboarding-welcome > .beta-access {
+  width: 100%;
+  margin: 14px 0 0;
+}
+.onboarding-guide .beta-access {
+  padding: 14px;
+  margin: 0 0 14px;
+}
+.onboarding-guide .beta-access-state {
+  display: none;
+}
+.onboarding-guide .beta-access header {
+  gap: 8px;
+}
+.onboarding-guide .beta-access strong {
+  font-size: 12px;
+}
+.onboarding-guide .beta-access p {
+  font-size: 11px;
+  margin: 11px 0;
+}
+.project-beta-setup {
+  margin-bottom: 20px;
+}

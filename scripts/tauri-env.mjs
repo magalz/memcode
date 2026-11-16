@@ -51,6 +51,14 @@ export function nativeBuildEnv(extra = {}) {
   return env;
 }
 export function nativeBinary() {
+  if (process.env.MEMCODE_NATIVE_BINARY) {
+    const candidate = process.env.MEMCODE_NATIVE_BINARY;
+    if (!/^(?:[a-zA-Z]:[\\/]|\/)/.test(candidate) || !existsSync(candidate))
+      throw Error(
+        "MEMCODE_NATIVE_BINARY must name an existing absolute executable",
+      );
+    return candidate;
+  }
   const executable = process.platform === "win32" ? "memcode.exe" : "memcode";
   const profile =
     process.env.MEMCODE_NATIVE_PROFILE ??

@@ -84,6 +84,12 @@ export async function installNativeBridge(): Promise<void> {
     throw new Error("Open MemCode through its Tauri desktop app.");
   traceNativeFetch();
   const states = new Set<(state: AppState) => void>();
+  const betaListeners = new Set<
+    (status: import("./beta").MemCodeBetaStatus) => void
+  >();
+  await listen<import("./beta").MemCodeBetaStatus>("beta:status", (event) =>
+    betaListeners.forEach((listener) => listener(event.payload)),
+  );
   const previews = new Set<Parameters<MemCodeAPI["onPreview"]>[0]>();
   const terminals = new Set<Parameters<MemCodeAPI["onTerminal"]>[0]>();
   const reviews = new Set<Parameters<MemCodeAPI["onReview"]>[0]>();
@@ -178,7 +184,21 @@ export async function installNativeBridge(): Promise<void> {
     (event) => previews.forEach((listener) => listener(event.payload)),
   );
   const api: MemCodeAPI = {
-    localAnalysisDiagnostics: (projectId) => call("project:local-diagnostics", {projectId}),
+    betaStatus: () => call("beta:status"),
+    connectBeta: () => call("beta:connect"),
+    cancelBeta: () => call("beta:cancel"),
+    signOutBeta: () => call("beta:sign-out"),
+    refreshBeta: () => call("beta:refresh"),
+    resumeBeta: () => call("beta:resume"),
+    useExistingMemtraceCLI: () => call("beta:use-cli", { confirmed: true }),
+    onBetaStatus: (listener) => {
+      betaListeners.add(listener);
+      return () => {
+        betaListeners.delete(listener);
+      };
+    },
+    localAnalysisDiagnostics: (projectId) =>
+      call("project:local-diagnostics", { projectId }),
     teamsList: () => call("team:list"),
     createTeamWorkspace: (input) => call("team:create-workspace", input),
     shareTeamProject: (input) => call("team:share-project", input),

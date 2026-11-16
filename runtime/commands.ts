@@ -25,6 +25,10 @@ export function childEnv(): NodeJS.ProcessEnv {
   // Keeping these hints makes Codex reject shell launches and sandboxed writes.
   delete env.CODEX_WINDOWS_REGISTERED_CORE;
   delete env.CODEX_WINDOWS_SANDBOX_PACKAGE_FAMILY;
+  // Beta engine proofs belong only to MemCode's explicitly scoped engine.
+  // Provider workers, terminals and tools never inherit these file/binding hints.
+  for (const key of Object.keys(env))
+    if (/^MEMCODE_ENGINE_/i.test(key)) delete env[key];
   const key =
     Object.keys(env).find((k) => k.toLowerCase() === "path") ?? "PATH";
   const parts = [

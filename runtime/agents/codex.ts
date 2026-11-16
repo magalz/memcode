@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { appVersion } from "../../src/version";
 import { createInterface } from "node:readline";
 import type { AgentSession, AgentSessionOptions } from "./types";
 import { withoutPermissionArgs } from "./permissions";
@@ -505,7 +506,7 @@ export function startCodexSession(options: AgentSessionOptions): AgentSession {
   void (async () => {
     try {
       await request("initialize", {
-        clientInfo: { name: "memcode", title: "MemCode", version: "0.3.0" },
+        clientInfo: { name: "memcode", title: "MemCode", version: appVersion },
         capabilities: {
           experimentalApi: true,
           requiredHumanApproval: true,

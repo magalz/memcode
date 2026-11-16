@@ -1,6 +1,6 @@
 {
   "at": "2026-11-14T02:49:53.161Z",
-  "fixture": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm",
+  "fixture": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm",
   "readOnly": true,
   "limitations": [
     "Protocol interoperability only; no complete coding-task comparison for Codex or Cursor.",
@@ -32,7 +32,7 @@
         "- **Source:** `total` is defined in `src/pricing.mjs`. It currently accepts `lines` and an optional `discountRate = 0`, validates the rate, and rounds the discounted total with `roundCents`.\n- **Observed callers:** `makeReceipt` in `src/receipt.mjs` passes both `lines` and `discountRate`; `checkout` in `src/checkout.mjs` calls `makeReceipt(lines)` with one argument. The index also shows `pricing.test.mjs` as a caller, but caller coverage is explicitly inconclusive.\n- **Project constraint:** Keep currency in DKK, round totals with `roundCents`, and preserve existing one-argument calls. The rules also restrict edits to `src/pricing.mjs` and `src/receipt.mjs`, prohibit Git-state changes, and specify `node --test`.\n- **Coverage:** Partial. `find` reported graph/source alignment unverified and possible stale or missing relationships; `understand` and `assess` likewise say indexed relationships are not complete reachability or runtime traces. The assessment found five affected nodes and marked risk medium, based on observed static dependencies."
       ],
       "stderr": "ansport<rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_client_adapter::StreamableHttpClientAdapter>>>>] error: Client error: HTTP request failed: http/request failed: error sending request for url (http://127.0.0.1:4853/mcp-v2), when send initialize request\n2026-11-14T02:50:11.438980Z  WARN codex_mcp::rmcp_client: failed to initialize MCP client during shutdown: MCP startup failed: handshaking with MCP server failed: Send message error Transport [codex_rmcp_client::tool_list_changes::ToolListChanges<codex_rmcp_client::event_notification_transport::EventNotificationTransport<rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_client_adapter::StreamableHttpClientAdapter>>>>] error: Client error: HTTP request failed: http/request failed: error sending request for url (http://127.0.0.1:4853/mcp-v2), when send initialize request: Send message error Transport [codex_rmcp_client::tool_list_changes::ToolListChanges<codex_rmcp_client::event_notification_transport::EventNotificationTransport<rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_client_adapter::StreamableHttpClientAdapter>>>>] error: Client error: HTTP request failed: http/request failed: error sending request for url (http://127.0.0.1:4853/mcp-v2), when send initialize request\n",
-      "streamPath": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\.memcode\\conformance-codex\\stream.jsonl"
+      "streamPath": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\.memcode\\conformance-codex\\stream.jsonl"
     },
     {
       "id": "cursor",
@@ -69,7 +69,7 @@
         }
       },
       "stderr": "",
-      "streamPath": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\.memcode\\conformance-cursor\\stream.jsonl"
+      "streamPath": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\.memcode\\conformance-cursor\\stream.jsonl"
     }
   ],
   "trackedDiffUnchanged": true

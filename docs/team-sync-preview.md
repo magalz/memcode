@@ -4,6 +4,8 @@ MemCode shares a team’s board, epics, cycles, story comments, activity and pub
 
 You can join, plan and comment before downloading the project’s source.
 
+Start with the [team quickstart](team-quickstart.md) for the shortest path from invitation to your first local worker.
+
 ## Start with one project
 
 1. Open the project you already use. In **Team**, choose **Create a team**, give it a name and complete the Memtrace approval in your browser.

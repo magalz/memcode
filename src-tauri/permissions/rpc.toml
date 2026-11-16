@@ -7,3 +7,8 @@ commands.allow = ["rpc"]
 identifier = "allow-workspace-updates"
 description = "Allow the MemCode application to receive and acknowledge its workspace channel."
 commands.allow = ["workspace_connect", "workspace_ack"]
+
+[[permission]]
+identifier = "allow-app-updates"
+description = "Allow only the MemCode application view to check and explicitly install signed desktop releases."
+commands.allow = ["app_update_info", "app_update_context", "app_update_history", "app_update_check", "app_update_install"]

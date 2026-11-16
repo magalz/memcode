@@ -4,6 +4,8 @@ dist-electron/
 dist-runtime/
 dist-artifact-viewer/
 dist-artifact-annotations/
+dist-desktop-runtime/
+dist-website-demo/
 src-tauri/target/
 src-tauri/gen/
 release/

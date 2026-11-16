@@ -305,10 +305,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg82swa\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg82swa\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg82swa\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg82swa\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg82swa\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg82swa\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg82swa\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg82swa\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -541,10 +541,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg842kp\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg842kp\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg842kp\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg842kp\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg842kp\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg842kp\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg842kp\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg842kp\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -760,10 +760,10 @@
           "otherMcpCalls": [],
           "nativeSearches": [],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-broker-mwg87u3o\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-broker-mwg87u3o\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-broker-mwg87u3o\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-broker-mwg87u3o\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-broker-mwg87u3o\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-broker-mwg87u3o\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-broker-mwg87u3o\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-broker-mwg87u3o\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -962,10 +962,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-baseline-mwg892ua\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-baseline-mwg892ua\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-baseline-mwg892ua\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-baseline-mwg892ua\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-baseline-mwg892ua\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-baseline-mwg892ua\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-baseline-mwg892ua\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-2-baseline-mwg892ua\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -1196,10 +1196,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-baseline-mwg8ac2x\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-baseline-mwg8ac2x\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-baseline-mwg8ac2x\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-baseline-mwg8ac2x\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-baseline-mwg8ac2x\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-baseline-mwg8ac2x\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-baseline-mwg8ac2x\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-baseline-mwg8ac2x\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -1433,10 +1433,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-broker-mwg8bwvd\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-broker-mwg8bwvd\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-broker-mwg8bwvd\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-broker-mwg8bwvd\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-broker-mwg8bwvd\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-broker-mwg8bwvd\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-broker-mwg8bwvd\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-3-broker-mwg8bwvd\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -1605,10 +1605,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-baseline-mwg8d54q\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-baseline-mwg8d54q\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-baseline-mwg8d54q\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-baseline-mwg8d54q\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-baseline-mwg8d54q\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-baseline-mwg8d54q\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-baseline-mwg8d54q\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-baseline-mwg8d54q\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -1790,10 +1790,10 @@
           "otherMcpCalls": [],
           "nativeSearches": [],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-broker-mwg8e74v\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-broker-mwg8e74v\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-broker-mwg8e74v\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-broker-mwg8e74v\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-broker-mwg8e74v\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-broker-mwg8e74v\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-broker-mwg8e74v\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-1-broker-mwg8e74v\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -1974,10 +1974,10 @@
           "otherMcpCalls": [],
           "nativeSearches": [],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-broker-mwg8fcrz\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-broker-mwg8fcrz\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-broker-mwg8fcrz\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-broker-mwg8fcrz\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-broker-mwg8fcrz\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-broker-mwg8fcrz\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-broker-mwg8fcrz\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-broker-mwg8fcrz\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -2144,10 +2144,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-baseline-mwg8ge8y\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-baseline-mwg8ge8y\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-baseline-mwg8ge8y\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-baseline-mwg8ge8y\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-baseline-mwg8ge8y\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-baseline-mwg8ge8y\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-baseline-mwg8ge8y\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-2-baseline-mwg8ge8y\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -2328,10 +2328,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-baseline-mwg8hka5\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-baseline-mwg8hka5\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-baseline-mwg8hka5\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-baseline-mwg8hka5\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-baseline-mwg8hka5\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-baseline-mwg8hka5\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-baseline-mwg8hka5\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-baseline-mwg8hka5\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -2516,10 +2516,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-broker-mwg8iyf5\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-broker-mwg8iyf5\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-broker-mwg8iyf5\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-broker-mwg8iyf5\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-broker-mwg8iyf5\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-broker-mwg8iyf5\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-broker-mwg8iyf5\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-bug-3-broker-mwg8iyf5\\.memcode\\worker\\mcp-audit.jsonl"
           }
         }
       ],
@@ -2529,10 +2529,10 @@
           "reason": "CLI config rejected before model launch: incomplete disabled MCP transport.",
           "usage": null,
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -2540,10 +2540,10 @@
           "reason": "CLI config rejected before model launch: incomplete disabled MCP transport.",
           "usage": null,
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -2551,10 +2551,10 @@
           "reason": "CLI config rejected before model launch: disabled per-key override still lacked a parsed transport.",
           "usage": null,
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7ril0\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7ril0\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7ril0\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7ril0\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7ril0\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7ril0\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7ril0\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7ril0\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -2562,10 +2562,10 @@
           "reason": "CLI config rejected before model launch: disabled per-key override still lacked a parsed transport.",
           "usage": null,
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7rtaj\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7rtaj\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7rtaj\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7rtaj\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7rtaj\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7rtaj\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7rtaj\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7rtaj\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -2579,10 +2579,10 @@
             "reasoning_output_tokens": 0
           },
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7v4ec\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7v4ec\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7v4ec\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7v4ec\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7v4ec\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7v4ec\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7v4ec\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-baseline-mwg7v4ec\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -2596,10 +2596,10 @@
             "reasoning_output_tokens": 0
           },
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7wm3k\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7wm3k\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7wm3k\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7wm3k\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7wm3k\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7wm3k\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7wm3k\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-codex-1Le4Gx\\codex-signature-1-broker-mwg7wm3k\\.memcode\\worker\\mcp-audit.jsonl"
           }
         }
       ],
@@ -2855,34 +2855,34 @@
                   "total",
                   "makeReceipt"
                 ],
-                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-1-baseline-mwg7ri5y"
+                "repo_id": "<USER_HOME>/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-1-baseline-mwg7ri5y"
               }
             },
             {
               "name": "get_impact",
               "arguments": {
                 "symbol": "total",
-                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-1-baseline-mwg7ri5y"
+                "repo_id": "<USER_HOME>/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-1-baseline-mwg7ri5y"
               }
             },
             {
               "name": "governing_rules",
               "arguments": {
-                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-1-baseline-mwg7ri5y"
+                "repo_id": "<USER_HOME>/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-1-baseline-mwg7ri5y"
               }
             },
             {
               "name": "find_symbol",
               "arguments": {
                 "name": "total",
-                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-1-baseline-mwg7ri5y"
+                "repo_id": "<USER_HOME>/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-1-baseline-mwg7ri5y"
               }
             },
             {
               "name": "find_symbol",
               "arguments": {
                 "name": "makeReceipt",
-                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-1-baseline-mwg7ri5y"
+                "repo_id": "<USER_HOME>/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-1-baseline-mwg7ri5y"
               }
             },
             {
@@ -2947,7 +2947,7 @@
             {
               "kind": "glob",
               "args": {
-                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y",
+                "targetDirectory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y",
                 "globPattern": "**/*.test.*"
               }
             },
@@ -2965,7 +2965,7 @@
             {
               "kind": "glob",
               "args": {
-                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y",
+                "targetDirectory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y",
                 "globPattern": "**/*"
               }
             },
@@ -2982,10 +2982,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline-mwg7ri5y\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -3186,7 +3186,7 @@
             {
               "kind": "glob",
               "args": {
-                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi",
+                "targetDirectory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi",
                 "globPattern": "**/*.test.*"
               }
             },
@@ -3194,7 +3194,7 @@
               "kind": "grep",
               "args": {
                 "pattern": "discount",
-                "path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi",
+                "path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi",
                 "outputMode": "content",
                 "caseInsensitive": false,
                 "multiline": false,
@@ -3205,16 +3205,16 @@
             {
               "kind": "glob",
               "args": {
-                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi",
+                "targetDirectory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi",
                 "globPattern": "**/*"
               }
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker-mwg7sifi\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -3355,21 +3355,21 @@
               "name": "find",
               "arguments": {
                 "query": "total lines discount unit price invoice amount pricing receipt",
-                "repository": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-2-broker-mwg7udhr"
+                "repository": "<USER_HOME>/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-2-broker-mwg7udhr"
               }
             },
             {
               "name": "understand",
               "arguments": {
                 "symbol": "total",
-                "repository": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-2-broker-mwg7udhr"
+                "repository": "<USER_HOME>/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-2-broker-mwg7udhr"
               }
             },
             {
               "name": "understand",
               "arguments": {
                 "symbol": "makeReceipt",
-                "repository": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-2-broker-mwg7udhr"
+                "repository": "<USER_HOME>/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-2-broker-mwg7udhr"
               }
             },
             {
@@ -3447,7 +3447,7 @@
             {
               "kind": "glob",
               "args": {
-                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-broker-mwg7udhr",
+                "targetDirectory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-broker-mwg7udhr",
                 "globPattern": "**/*.test.*"
               }
             },
@@ -3464,10 +3464,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-broker-mwg7udhr\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-broker-mwg7udhr\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-broker-mwg7udhr\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-broker-mwg7udhr\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-broker-mwg7udhr\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-broker-mwg7udhr\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-broker-mwg7udhr\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-broker-mwg7udhr\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -3727,7 +3727,7 @@
               "kind": "grep",
               "args": {
                 "pattern": "discountRate|RangeError",
-                "path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-baseline-mwg7v7rd",
+                "path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-baseline-mwg7v7rd",
                 "outputMode": "content",
                 "caseInsensitive": false,
                 "multiline": false,
@@ -3737,10 +3737,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-baseline-mwg7v7rd\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-baseline-mwg7v7rd\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-baseline-mwg7v7rd\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-baseline-mwg7v7rd\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-baseline-mwg7v7rd\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-baseline-mwg7v7rd\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-baseline-mwg7v7rd\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-2-baseline-mwg7v7rd\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -3999,10 +3999,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-baseline-mwg7w96s\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-baseline-mwg7w96s\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-baseline-mwg7w96s\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-baseline-mwg7w96s\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-baseline-mwg7w96s\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-baseline-mwg7w96s\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-baseline-mwg7w96s\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-baseline-mwg7w96s\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -4143,7 +4143,7 @@
               "name": "find",
               "arguments": {
                 "query": "total(lines) makeReceipt convert quantities unit prices invoice amount roundCents",
-                "repository": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-3-broker-mwg7xbj7"
+                "repository": "<USER_HOME>/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-signature-3-broker-mwg7xbj7"
               }
             },
             {
@@ -4223,7 +4223,7 @@
             {
               "kind": "glob",
               "args": {
-                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7",
+                "targetDirectory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7",
                 "globPattern": "**/*.test.*"
               }
             },
@@ -4252,16 +4252,16 @@
             {
               "kind": "glob",
               "args": {
-                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7",
+                "targetDirectory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7",
                 "globPattern": "**/*"
               }
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-3-broker-mwg7xbj7\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -4485,10 +4485,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-baseline-mwg7yiu5\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-baseline-mwg7yiu5\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-baseline-mwg7yiu5\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-baseline-mwg7yiu5\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-baseline-mwg7yiu5\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-baseline-mwg7yiu5\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-baseline-mwg7yiu5\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-baseline-mwg7yiu5\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -4679,7 +4679,7 @@
             {
               "kind": "glob",
               "args": {
-                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc",
+                "targetDirectory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc",
                 "globPattern": "**/*"
               }
             },
@@ -4697,7 +4697,7 @@
             {
               "kind": "glob",
               "args": {
-                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc",
+                "targetDirectory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc",
                 "globPattern": "**/*.test.mjs"
               }
             },
@@ -4714,10 +4714,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-1-broker-mwg7zboc\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -4912,10 +4912,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-broker-mwg80csd\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-broker-mwg80csd\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-broker-mwg80csd\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-broker-mwg80csd\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-broker-mwg80csd\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-broker-mwg80csd\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-broker-mwg80csd\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-broker-mwg80csd\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -5045,7 +5045,7 @@
               "name": "find_code",
               "arguments": {
                 "query": "quantity unit price line total pricing",
-                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-bug-2-baseline-mwg818fa"
+                "repo_id": "<USER_HOME>/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-bug-2-baseline-mwg818fa"
               }
             },
             {
@@ -5153,10 +5153,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-baseline-mwg818fa\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-baseline-mwg818fa\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-baseline-mwg818fa\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-baseline-mwg818fa\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-baseline-mwg818fa\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-baseline-mwg818fa\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-baseline-mwg818fa\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-2-baseline-mwg818fa\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -5277,14 +5277,14 @@
               "name": "find_symbol",
               "arguments": {
                 "query": "pricing quantity unit price line total",
-                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-bug-3-baseline-mwg822hi"
+                "repo_id": "<USER_HOME>/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-bug-3-baseline-mwg822hi"
               }
             },
             {
               "name": "get_impact",
               "arguments": {
                 "symbol": "pricing",
-                "repo_id": "C:/Users/AlexT/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-bug-3-baseline-mwg822hi"
+                "repo_id": "<USER_HOME>/AppData/Local/Temp/memcode-coding-cursor-BjNbVK/cursor-bug-3-baseline-mwg822hi"
               }
             },
             {
@@ -5354,7 +5354,7 @@
               "kind": "grep",
               "args": {
                 "pattern": "pricing",
-                "path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi",
+                "path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi",
                 "outputMode": "content",
                 "caseInsensitive": false,
                 "multiline": false,
@@ -5365,23 +5365,23 @@
             {
               "kind": "glob",
               "args": {
-                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi",
+                "targetDirectory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi",
                 "globPattern": "**/*.test.mjs"
               }
             },
             {
               "kind": "glob",
               "args": {
-                "targetDirectory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi",
+                "targetDirectory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi",
                 "globPattern": "**/*"
               }
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-baseline-mwg822hi\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -5577,10 +5577,10 @@
             }
           ],
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-broker-mwg832rf\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-broker-mwg832rf\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-broker-mwg832rf\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-broker-mwg832rf\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-broker-mwg832rf\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-broker-mwg832rf\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-broker-mwg832rf\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-bug-3-broker-mwg832rf\\.memcode\\worker\\mcp-audit.jsonl"
           }
         }
       ],
@@ -5595,10 +5595,10 @@
             "cacheWriteTokens": 0
           },
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-baseline\\.memcode\\worker\\mcp-audit.jsonl"
           }
         },
         {
@@ -5611,10 +5611,10 @@
             "cacheWriteTokens": 0
           },
           "artifacts": {
-            "directory": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker\\.memcode\\worker",
-            "stream": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker\\.memcode\\worker\\stream.jsonl",
-            "diff": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker\\.memcode\\worker\\worker.diff",
-            "audit": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker\\.memcode\\worker\\mcp-audit.jsonl"
+            "directory": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker\\.memcode\\worker",
+            "stream": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker\\.memcode\\worker\\stream.jsonl",
+            "diff": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker\\.memcode\\worker\\worker.diff",
+            "audit": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-coding-cursor-BjNbVK\\cursor-signature-1-broker\\.memcode\\worker\\mcp-audit.jsonl"
           }
         }
       ],

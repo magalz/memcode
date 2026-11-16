@@ -1,3 +1,5 @@
+import { shortcutLabel } from "./platform";
+
 export type GuideDestination =
   | "project"
   | "workers"
@@ -193,14 +195,14 @@ export const guideArticles: GuideArticle[] = [
     caption:
       "Open the team’s existing work first. Connect a local checkout and approve a worker when you are ready to code.",
     steps: [
-      "Open your existing project, choose Team → Create a team and give it a name. Complete the Memtrace approval in your browser, then share the project’s current board with that team.",
-      "Choose Invite teammate, optionally restrict the invitation to their verified email, then copy and send the link privately.",
-      "Your teammate chooses Join with invitation, previews the team and project, then accepts with their Memtrace account. The existing shared work opens immediately. No empty project or new MemCode installation is needed; personal projects stay separate.",
-      "Plan, comment and review published results before downloading code. When ready to code, choose Work on this computer: reuse a matching checkout or choose where to clone the repository. Existing local changes are preserved. GitHub access is checked separately from Team membership.",
-      "Memtrace analyzes the local code. Connect your coding tool in Workers with explicit approval, then start a story worker. A confirmed story claim prevents another official worker starting the same story; receiving an update never starts work automatically.",
-      "Publish selected reports and artifacts when ready, up to 5 MiB each. Git carries source changes between computers; browser sessions, terminals, local Fleet, model credentials and full agent conversations stay local.",
+      "Open your project → Team → Create a team. Name it, approve your Memtrace account in the browser, then share the project’s current board.",
+      "Choose Invite teammate, optionally restrict the invitation to their verified email, and send the link privately.",
+      "Your teammate chooses Join with invitation, checks the team and project, then accepts with their Memtrace account. Current work opens immediately: no empty project or second MemCode installation. Personal projects stay separate.",
+      "Plan and comment now. To code, choose Work on this computer: reuse a matching checkout or choose a destination to clone. Existing local changes are preserved; Git repository access is a separate connection.",
+      "After local Memtrace analysis, approve your own coding tool in Workers and start a focused story. MemCode confirms its story claim before starting; team updates never start a worker automatically.",
+      "Review the result, then publish selected reports or artifacts, up to 5 MiB each. Use Git to exchange code. Browser sessions, terminals, credentials and full agent conversations stay local.",
     ],
-    note: "Pilot: the owner needs a configured Team service and Memtrace browser identity support. Invitations include the service address. Planning changes queue while offline; new shared workers require an online claim. A synchronized board does not update your local Git checkout. Removing Team access blocks future requests, not files already downloaded or repository access.",
+    note: "Beta: the owner needs a configured Team service and Memtrace browser identity support. Invitations include its address. Planning can queue offline; new shared workers need an online claim. The board does not sync your checkout, and Fleet coordination remains local to each computer. Removing Team access blocks future requests; it cannot erase downloaded files or revoke Git access.",
     destination: "team",
     related: ["projects", "comments", "artifacts", "fleet"],
   },
@@ -529,7 +531,7 @@ export const guideArticles: GuideArticle[] = [
     steps: [
       "Open Activity to see recent brief, worker, tool and session updates.",
       "Click an event to return to its story.",
-      "Use Search anything or Ctrl/Cmd+K to find work. C opens a new work item outside text fields.",
+      `Use Search anything or ${shortcutLabel("K")} to find work. C opens a new work item outside text fields.`,
       "Use the project selector to change context; search and work views stay focused on the selected project.",
     ],
     destination: "activity",

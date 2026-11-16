@@ -15,6 +15,8 @@ const relay = await startTeamRelay({
   ...(option("--advertise-url")
     ? { advertisedUrl: option("--advertise-url") }
     : {}),
+  ...(args.includes("--self-service-teams") ? { selfServiceTeams: true } : {}),
+  ...(option("--max-teams-per-account") ? { maxTeamsPerAccount: Number(option("--max-teams-per-account")) } : {}),
 });
 console.log(`Private Team Sync preview listening at ${relay.url}`);
 console.log(

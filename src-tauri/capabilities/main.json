@@ -6,6 +6,7 @@
   "permissions": [
     "allow-rpc",
     "allow-workspace-updates",
+    "allow-app-updates",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:window:allow-start-dragging"

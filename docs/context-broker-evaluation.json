@@ -1,7 +1,7 @@
 {
   "version": 1,
   "at": "2026-11-14T02:32:49.609Z",
-  "temporaryRoot": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R",
+  "temporaryRoot": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R",
   "fixtureOnly": true,
   "limitations": [
     "Single small synthetic fixture per variant; not statistical evidence of general task savings.",
@@ -508,7 +508,7 @@
     {
       "harness": "claude",
       "variant": "baseline",
-      "fixture": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm",
+      "fixture": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm",
       "code": 0,
       "latencyMs": 37699,
       "timedOut": false,
@@ -822,13 +822,13 @@
         {
           "name": "Read",
           "input": {
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\src\\pricing.mjs"
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\src\\pricing.mjs"
           }
         },
         {
           "name": "Read",
           "input": {
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\src\\receipt.mjs"
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\src\\receipt.mjs"
           }
         },
         {
@@ -853,32 +853,32 @@
         {
           "name": "Read",
           "input": {
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\src\\money.mjs"
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\src\\money.mjs"
           }
         },
         {
           "name": "Read",
           "input": {
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\src\\checkout.mjs"
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\src\\checkout.mjs"
           }
         },
         {
           "name": "Read",
           "input": {
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\pricing.test.mjs"
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\pricing.test.mjs"
           }
         },
         {
           "name": "Write",
           "input": {
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\src\\pricing.mjs",
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\src\\pricing.mjs",
             "content": "import { roundCents } from './money.mjs';\nexport function total(lines, discountRate = 0) {\n  if (!Number.isFinite(discountRate) || discountRate < 0 || discountRate > 1) {\n    throw new RangeError(`discountRate must be a finite number between 0 and 1, got ${discountRate}`);\n  }\n  const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);\n  return roundCents(subtotal * (1 - discountRate));\n}\n"
           }
         },
         {
           "name": "Write",
           "input": {
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\src\\receipt.mjs",
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\src\\receipt.mjs",
             "content": "import { total } from './pricing.mjs';\nexport function makeReceipt(lines, discountRate = 0) {\n  return { amount: total(lines, discountRate), currency: 'DKK' };\n}\n"
           }
         },
@@ -907,14 +907,14 @@
           "src/pricing.mjs",
           "src/receipt.mjs"
         ],
-        "diffFile": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\.memcode\\engine\\worker.diff"
+        "diffFile": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\.memcode\\engine\\worker.diff"
       },
       "stderr": ""
     },
     {
       "harness": "claude",
       "variant": "broker",
-      "fixture": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r",
+      "fixture": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r",
       "code": 0,
       "latencyMs": 31669,
       "timedOut": false,
@@ -1021,20 +1021,20 @@
         {
           "name": "Read",
           "input": {
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\\src\\pricing.mjs"
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\\src\\pricing.mjs"
           }
         },
         {
           "name": "Read",
           "input": {
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\\src\\receipt.mjs"
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\\src\\receipt.mjs"
           }
         },
         {
           "name": "Edit",
           "input": {
             "replace_all": false,
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\\src\\pricing.mjs",
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\\src\\pricing.mjs",
             "old_string": "export function total(lines) {\n  const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);\n  return roundCents(subtotal);\n}",
             "new_string": "export function total(lines, discountRate = 0) {\n  if (!Number.isFinite(discountRate) || discountRate < 0 || discountRate > 1) {\n    throw new RangeError(`discountRate must be a finite number between 0 and 1, got ${discountRate}`);\n  }\n  const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);\n  return roundCents(subtotal * (1 - discountRate));\n}"
           }
@@ -1043,7 +1043,7 @@
           "name": "Edit",
           "input": {
             "replace_all": false,
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\\src\\receipt.mjs",
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\\src\\receipt.mjs",
             "old_string": "export function makeReceipt(lines) {\n  return { amount: total(lines), currency: 'DKK' };\n}",
             "new_string": "export function makeReceipt(lines, discountRate = 0) {\n  return { amount: total(lines, discountRate), currency: 'DKK' };\n}"
           }
@@ -1051,7 +1051,7 @@
         {
           "name": "Bash",
           "input": {
-            "command": "cd \"C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\" && node --test 2>&1 | tail -n 20; echo \"--- adhoc ---\"; node --input-type=module -e \"\nimport { total } from './src/pricing.mjs';\nimport { makeReceipt } from './src/receipt.mjs';\nconst lines=[{quantity:3,unitPrice:10.01}];\nconsole.log('one-arg', total(lines), makeReceipt(lines));\nconsole.log('0.25', total(lines,0.25), makeReceipt(lines,0.25));\nfor (const r of [-0.1, 1.5, NaN, Infinity, '0.1']) { try { total(lines,r); console.log('no throw', r);} catch(e){ console.log(String(r), e.name); } }\n\"",
+            "command": "cd \"<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\" && node --test 2>&1 | tail -n 20; echo \"--- adhoc ---\"; node --input-type=module -e \"\nimport { total } from './src/pricing.mjs';\nimport { makeReceipt } from './src/receipt.mjs';\nconst lines=[{quantity:3,unitPrice:10.01}];\nconsole.log('one-arg', total(lines), makeReceipt(lines));\nconsole.log('0.25', total(lines,0.25), makeReceipt(lines,0.25));\nfor (const r of [-0.1, 1.5, NaN, Infinity, '0.1']) { try { total(lines,r); console.log('no throw', r);} catch(e){ console.log(String(r), e.name); } }\n\"",
             "description": "Run node test suite and ad hoc checks of new discount behavior"
           }
         }
@@ -1066,14 +1066,14 @@
           "src/pricing.mjs",
           "src/receipt.mjs"
         ],
-        "diffFile": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\\.memcode\\engine\\worker.diff"
+        "diffFile": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\\.memcode\\engine\\worker.diff"
       },
       "stderr": ""
     },
     {
       "harness": "claude",
       "variant": "local",
-      "fixture": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0",
+      "fixture": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0",
       "code": 0,
       "latencyMs": 32878,
       "timedOut": false,
@@ -1187,20 +1187,20 @@
         {
           "name": "Read",
           "input": {
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\\src\\pricing.mjs"
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\\src\\pricing.mjs"
           }
         },
         {
           "name": "Read",
           "input": {
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\\src\\receipt.mjs"
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\\src\\receipt.mjs"
           }
         },
         {
           "name": "Edit",
           "input": {
             "replace_all": false,
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\\src\\pricing.mjs",
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\\src\\pricing.mjs",
             "old_string": "export function total(lines) {\n  const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);\n  return roundCents(subtotal);\n}",
             "new_string": "export function total(lines, discountRate = 0) {\n  if (typeof discountRate !== 'number' || !Number.isFinite(discountRate) || discountRate < 0 || discountRate > 1) {\n    throw new RangeError(`discountRate must be a finite number between 0 and 1, got ${discountRate}`);\n  }\n  const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);\n  return roundCents(subtotal * (1 - discountRate));\n}"
           }
@@ -1209,7 +1209,7 @@
           "name": "Edit",
           "input": {
             "replace_all": false,
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\\src\\receipt.mjs",
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\\src\\receipt.mjs",
             "old_string": "export function makeReceipt(lines) {\n  return { amount: total(lines), currency: 'DKK' };\n}",
             "new_string": "export function makeReceipt(lines, discountRate = 0) {\n  return { amount: total(lines, discountRate), currency: 'DKK' };\n}"
           }
@@ -1217,7 +1217,7 @@
         {
           "name": "Bash",
           "input": {
-            "command": "cd \"C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\" && node --test 2>&1 | tail -n 20; echo \"---\"; node --input-type=module -e \"\nimport { total } from './src/pricing.mjs';\nimport { makeReceipt } from './src/receipt.mjs';\nconst lines=[{quantity:3,unitPrice:19.99},{quantity:1,unitPrice:0.1}];\nconsole.log('one-arg total', total(lines));\nconsole.log('rate 0.25', total(lines, 0.25));\nconsole.log('receipt default', makeReceipt(lines));\nconsole.log('receipt 0.1', makeReceipt(lines, 0.1));\nfor (const bad of [-0.1, 1.01, NaN, Infinity, '0.5', null]) { try { total(lines, bad); console.log('NO THROW', bad); } catch (e) { console.log(String(bad), e.name); } }\n\"",
+            "command": "cd \"<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\" && node --test 2>&1 | tail -n 20; echo \"---\"; node --input-type=module -e \"\nimport { total } from './src/pricing.mjs';\nimport { makeReceipt } from './src/receipt.mjs';\nconst lines=[{quantity:3,unitPrice:19.99},{quantity:1,unitPrice:0.1}];\nconsole.log('one-arg total', total(lines));\nconsole.log('rate 0.25', total(lines, 0.25));\nconsole.log('receipt default', makeReceipt(lines));\nconsole.log('receipt 0.1', makeReceipt(lines, 0.1));\nfor (const bad of [-0.1, 1.01, NaN, Infinity, '0.5', null]) { try { total(lines, bad); console.log('NO THROW', bad); } catch (e) { console.log(String(bad), e.name); } }\n\"",
             "description": "Run node tests and spot-check discount behavior"
           }
         }
@@ -1232,7 +1232,7 @@
           "src/pricing.mjs",
           "src/receipt.mjs"
         ],
-        "diffFile": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\\.memcode\\engine\\worker.diff"
+        "diffFile": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\\.memcode\\engine\\worker.diff"
       },
       "stderr": ""
     }
@@ -1245,16 +1245,16 @@
         "members": [
           {
             "repo_id": "context-baseline-mwfsjcnm",
-            "path": "c:/Users/AlexT/AppData/Local/Temp/memcode-context-eval-VzzK5R/context-baseline-mwfsjcnm"
+            "path": "<USER_HOME>/AppData/Local/Temp/memcode-context-eval-VzzK5R/context-baseline-mwfsjcnm"
           }
         ],
         "scope_source": {
           "kind": "manifest",
-          "manifest_path": "\\\\?\\C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\.memcode\\engine\\workspace.toml"
+          "manifest_path": "\\\\?\\<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\.memcode\\engine\\workspace.toml"
         },
         "published_by": {
           "pid": 41964,
-          "command": "mcp --workspace-file C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\.memcode\\engine\\workspace.toml",
+          "command": "mcp --workspace-file <USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-baseline-mwfsjcnm\\.memcode\\engine\\workspace.toml",
           "at_epoch_ms": 1794623570948
         }
       }
@@ -1266,16 +1266,16 @@
         "members": [
           {
             "repo_id": "context-broker-mwfski3r",
-            "path": "c:/Users/AlexT/AppData/Local/Temp/memcode-context-eval-VzzK5R/context-broker-mwfski3r"
+            "path": "<USER_HOME>/AppData/Local/Temp/memcode-context-eval-VzzK5R/context-broker-mwfski3r"
           }
         ],
         "scope_source": {
           "kind": "manifest",
-          "manifest_path": "\\\\?\\C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\\.memcode\\engine\\workspace.toml"
+          "manifest_path": "\\\\?\\<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\\.memcode\\engine\\workspace.toml"
         },
         "published_by": {
           "pid": 27960,
-          "command": "mcp --workspace-file C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\\.memcode\\engine\\workspace.toml",
+          "command": "mcp --workspace-file <USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-broker-mwfski3r\\.memcode\\engine\\workspace.toml",
           "at_epoch_ms": 1794623624814
         }
       }
@@ -1287,16 +1287,16 @@
         "members": [
           {
             "repo_id": "context-local-mwfsljb0",
-            "path": "c:/Users/AlexT/AppData/Local/Temp/memcode-context-eval-VzzK5R/context-local-mwfsljb0"
+            "path": "<USER_HOME>/AppData/Local/Temp/memcode-context-eval-VzzK5R/context-local-mwfsljb0"
           }
         ],
         "scope_source": {
           "kind": "manifest",
-          "manifest_path": "\\\\?\\C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\\.memcode\\engine\\workspace.toml"
+          "manifest_path": "\\\\?\\<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\\.memcode\\engine\\workspace.toml"
         },
         "published_by": {
           "pid": 84272,
-          "command": "mcp --workspace-file C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\\.memcode\\engine\\workspace.toml",
+          "command": "mcp --workspace-file <USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-VzzK5R\\context-local-mwfsljb0\\.memcode\\engine\\workspace.toml",
           "at_epoch_ms": 1794623672936
         }
       }

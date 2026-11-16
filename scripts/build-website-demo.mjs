@@ -1,0 +1,14 @@
+import { build } from 'vite';
+import react from '@vitejs/plugin-react';
+import { cp, mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+const root = resolve(import.meta.dirname, '..');
+execFileSync(process.execPath, [resolve(root, 'node_modules/typescript/bin/tsc'), '--noEmit', '-p', resolve(root, 'tsconfig.website-demo.json')], { cwd: root, stdio: 'inherit' });
+await build({ configFile: false, root: resolve(root, 'website-demo'), base: './', publicDir: false, plugins: [react(), { name: 'web-only-preview-adapters', enforce: 'pre', resolveId(id, importer) { if (!importer || !importer.replaceAll('\\', '/').includes('/src/components/')) return; if (id === './WorkerBrowser') return resolve(root, 'website-demo/Browser.tsx'); if (id === './ArtifactPreview') return resolve(root, 'website-demo/Preview.tsx'); } }], define: { 'import.meta.env.DEV': 'false' }, build: { outDir: resolve(root, 'dist-website-demo'), emptyOutDir: true, target: 'es2023' } });
+await mkdir(resolve(root, 'dist-website-demo/adapters'), { recursive: true });
+await cp(resolve(root, 'public/adapters'), resolve(root, 'dist-website-demo/adapters'), { recursive: true });
+await cp(resolve(root, 'public/guide'), resolve(root, 'dist-website-demo/guide'), { recursive: true });
+for (const file of ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md']) await cp(resolve(root, file), resolve(root, 'dist-website-demo', file));
+await cp(resolve(root, 'third_party'), resolve(root, 'dist-website-demo/third_party'), { recursive: true });
+console.log('Built actual MemCode renderer with a web-only, in-memory example adapter.');

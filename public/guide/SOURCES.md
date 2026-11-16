@@ -1,6 +1,6 @@
 # Guide image sources
 
-These are unmodified screenshots of MemCode's actual native UI. They were captured from an independent disposable onboarding QA profile, never the user's production profile. Built-in Design preview content is seeded example content. A screenshot of a UI or empty state does not verify a model run, code quality or token-saving claim.
+Most images are unmodified screenshots of MemCode's actual native UI, captured from an independent disposable onboarding QA profile rather than the user's production profile. Built-in Design preview content is seeded example content. The Team and Terminal illustrations use synthetic renderer fixtures, documented below. A screenshot of a UI or empty state does not verify a model run, code quality or token-saving claim.
 
 The capture script does not launch coding models, grant worker access, sign in, record audio, download models or alter project source. It may add an ordinary file-reference message in the temporary QA story and open a local browser tab. It starts and closes only its own illustrative local terminal.
 
@@ -8,6 +8,7 @@ Captured: 2026-11-14T21:10:48.871Z
 
 | Image | Source | What it shows |
 | --- | --- | --- |
+| team.png | Actual TeamOnboarding component; synthetic renderer fixture, captured 2026-11-16 by scripts/team-onboarding-smoke.mjs | Sharing an existing project's current state with a named team. The visible fixture label, fictional team/project and example.invalid account are illustrative. No real identity, repository, relay, provider approval or worker is involved. |
 | workspace.png | Built-in Design preview (seeded examples) | Board and lane layout; cards are built-in example data where Design preview is available. |
 | conversations.png | Built-in Design preview (seeded examples) | Actual conversations overview in the labelled example project. |
 | cycles.png | Built-in Design preview (seeded examples) | Cycles UI and its current seeded or empty state; no delivery result was fabricated. |
@@ -26,7 +27,7 @@ Captured: 2026-11-14T21:10:48.871Z
 | queue.png | Disposable onboarding QA project | Actual follow-up queue after the native smoke test. A prerequisite prevented dispatch and the test cancelled its request; no model ran. |
 | changes.png | Disposable onboarding QA project | Actual Changes state for a story with no coding run. An empty state is intentional; there is no fabricated worker diff. |
 | artifacts.png | Disposable onboarding QA project | Actual saved-output list/empty state for the QA story. No fabricated agent-generated artifacts. |
-| terminal.png | Disposable onboarding QA project | Actual local user terminal in the disposable QA project, displaying a directory listing. It is not a coding worker's tool log or dev server. |
+| terminal.png | Actual WorkerTerminal component; website-demo in-memory Lumen fixture, captured 2026-11-16 | Real terminal renderer showing explicitly simulated output and a fictional example/lumen path. No shell command, source checkout, provider or model was used. |
 | roadmap.png | Disposable onboarding QA project | Real epic created by the onboarding smoke test, with a deliberately unfinished QA prerequisite. |
 | annotations.png | Disposable onboarding QA project | Actual line-number selection from index.ts in the QA project, with its exact quote in the unsent annotation composer. No comment or follow-up is submitted. |
 | browser.png | Disposable onboarding QA project | Actual native guest page of a temporary, explicitly labelled local browser illustration, served only during capture. No coding agent is running and this is not evidence of agent/browser synchronization. Native child WebViews are captured separately because a parent screenshot omits them; this is not a composite or a remote website. |

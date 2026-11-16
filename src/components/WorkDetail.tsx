@@ -21,6 +21,7 @@ import { useRuntimeHealth } from "../useRuntimeHealth";
 import { ConversationMessages } from "./ConversationMessage";
 import { followsConversationTail } from "../conversation-performance";
 import { useConversationDraft } from "../useConversationDraft";
+import { modifierLabel, primaryModifier, shortcutLabel } from "../platform";
 import "../styles-review.css";
 import "../styles-annotations.css";
 import "../styles-card-comments.css";
@@ -730,7 +731,7 @@ export function WorkDetail({
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                        if (e.key === "Enter" && primaryModifier(e)) {
                           e.preventDefault();
                           void send();
                         }
@@ -785,8 +786,8 @@ export function WorkDetail({
                                     !connection.canStart
                                   ? "Connect in Workers before sending this story"
                                   : active
-                                    ? "Queue follow-up · Ctrl+Enter"
-                                    : "Send follow-up · Ctrl+Enter"
+                                    ? `Queue follow-up · ${shortcutLabel("Enter")}`
+                                    : `Send follow-up · ${shortcutLabel("Enter")}`
                           }
                           aria-label={
                             active ? "Queue follow-up" : "Send follow-up"
@@ -810,7 +811,7 @@ export function WorkDetail({
                       Your conversation stays in this workspace.
                     </span>
                     <span>
-                      <kbd>ctrl</kbd>
+                      <kbd>{modifierLabel()}</kbd>
                       <kbd>↵</kbd> to send
                     </span>
                   </div>

@@ -6,6 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 import "../styles-terminal.css";
 import { ArrowUpRight, Plus, Square, Terminal, X } from "lucide-react";
 import { Select } from "./Select";
+import { terminalCopyShortcut } from "../platform";
 import type { WorkItem } from "../shared";
 import type { ReviewReference, ReviewComment } from "../review";
 import { SelectionActions } from "./SelectionActions";
@@ -394,9 +395,7 @@ function TerminalSurface({
     terminal.attachCustomKeyEventHandler((event) => {
       if (
         event.type === "keydown" &&
-        (event.ctrlKey || event.metaKey) &&
-        event.shiftKey &&
-        event.code === "KeyC" &&
+        terminalCopyShortcut(event) &&
         terminal.hasSelection()
       ) {
         void navigator.clipboard.writeText(terminal.getSelection());

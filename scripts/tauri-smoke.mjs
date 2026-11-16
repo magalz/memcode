@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, writeFile, access } from "node:fs/promises";
+import { spawn, execFileSync } from "node:child_process";
+import { mkdtemp, mkdir, writeFile, access, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, expect } from "@playwright/test";
@@ -18,8 +18,23 @@ const environment = nativeEnv({
   MEMCODE_NATIVE_TEST_PROFILE: "1",
   WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
 });
-if (process.env.MEMCODE_TEST_BUNDLED_RUNTIME === "1")
+if (process.env.MEMCODE_TEST_BUNDLED_RUNTIME === "1") {
   delete environment.MEMCODE_SERVICE_PATH;
+  delete environment.MEMCODE_NODE_PATH;
+  delete environment.MEMCODE_APP_PATH;
+  for (const key of Object.keys(environment))
+    if (key.toLowerCase() === "path") {
+      const kept = environment[key]
+        .split(process.platform === "win32" ? ";" : ":")
+        .filter(
+          (part) =>
+            !/nodejs|node-v\d|(?:^|[\\/])node(?:[\\/]|$)|scoop[\\/]shims/i.test(
+              part,
+            ),
+        );
+      environment[key] = kept.join(process.platform === "win32" ? ";" : ":");
+    }
+}
 const child = spawn(nativeBinary(), [], {
   env: environment,
   stdio: ["ignore", "pipe", "pipe"],
@@ -73,7 +88,56 @@ try {
     timeout: 15000,
   });
   const result = await call("workspace:load");
-  assert.equal(result.runtime.appVersion, "0.3.0");
+  if (
+    process.env.MEMCODE_TEST_BUNDLED_RUNTIME === "1" &&
+    process.platform === "win32"
+  ) {
+    const children = JSON.parse(
+      execFileSync(
+        join(
+          process.env.SystemRoot ?? "C:/Windows",
+          "System32/WindowsPowerShell/v1.0/powershell.exe",
+        ),
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          `@(Get-CimInstance Win32_Process -Filter 'ParentProcessId = ${child.pid}' | Select-Object -ExpandProperty ExecutablePath) | ConvertTo-Json -Compress`,
+        ],
+        { encoding: "utf8", windowsHide: true },
+      ),
+    );
+    const expected = resolve(
+      nativeBinary(),
+      "..",
+      "desktop-runtime/node.exe",
+    ).toLowerCase();
+    assert.ok(
+      (Array.isArray(children) ? children : [children]).some(
+        (path) =>
+          typeof path === "string" && resolve(path).toLowerCase() === expected,
+      ),
+      "Packaged app must run its bundled Node, without Node on PATH or MEMCODE_NODE_PATH",
+    );
+  }
+  const expectedVersion = JSON.parse(
+    await readFile(resolve("package.json"), "utf8"),
+  ).version;
+  assert.equal(result.runtime.appVersion, expectedVersion);
+  const updates = await page.evaluate(() =>
+    window.__TAURI_INTERNALS__.invoke("app_update_info"),
+  );
+  assert.equal(updates.currentVersion, expectedVersion);
+  assert.equal(updates.development, true);
+  const updateContext = await page.evaluate(() =>
+    window.__TAURI_INTERNALS__.invoke("app_update_context"),
+  );
+  assert.equal(updateContext.activeWorkers, 0);
+  assert.equal(updateContext.activeTerminals, 0);
+  await assert.rejects(
+    page.evaluate(() => window.__TAURI_INTERNALS__.invoke("app_update_check")),
+    /Development builds update through Git/,
+  );
   assert.ok(Array.isArray(result.state.projects));
   await expect(page.locator(".app-shell")).toBeVisible({ timeout: 20000 });
   if (
@@ -102,7 +166,8 @@ try {
     path: join(out, "tauri-native-main.png"),
     animations: "disabled",
   });
-  await verifyPlanning(page, call, out);
+  if (process.env.MEMCODE_SMOKE_SCOPE !== "packaging")
+    await verifyPlanning(page, call, out);
   const artifact = result.state.artifacts.find(
     (artifact) => artifact.kind === "html",
   );
@@ -194,6 +259,10 @@ try {
   assert.equal(guest.url(), before, "Guest remote navigation must be denied");
   report = {
     result: "passed",
+    scope:
+      process.env.MEMCODE_SMOKE_SCOPE === "packaging"
+        ? "packaged runtime, bridge, local artifacts and isolation"
+        : "full native smoke including planning",
     shell: "Tauri + system WebView2",
     profile,
     projects: result.state.projects.length,

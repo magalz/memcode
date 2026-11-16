@@ -155,7 +155,7 @@ impl RuntimeBridge {
                     .join("MemCode"),
             );
         std::fs::create_dir_all(&data_path).map_err(|e| e.to_string())?;
-        let mut command = Command::new(node_binary());
+        let mut command = Command::new(node_binary(app.path().resource_dir().ok().as_deref()));
         // Windows resource paths can use an extended-length prefix that Node's
         // entrypoint resolver rejects. Preserve UNC semantics while simplifying
         // paths that are safely expressible in the conventional form.
@@ -526,9 +526,15 @@ mod tests {
     }
 }
 
-fn node_binary() -> PathBuf {
+fn node_binary(resources: Option<&std::path::Path>) -> PathBuf {
     if let Some(configured) = std::env::var_os("MEMCODE_NODE_PATH") {
         return configured.into();
+    }
+    if let Some(resources) = resources {
+        let bundled = resources.join("desktop-runtime").join(if cfg!(windows) { "node.exe" } else { "node" });
+        if bundled.is_file() {
+            return bundled;
+        }
     }
     #[cfg(windows)]
     {

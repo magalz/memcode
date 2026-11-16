@@ -1,0 +1,129 @@
+name: Private macOS desktop candidate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - beta/memcode-desktop-candidate
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-desktop-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  macos-arm64:
+    if: github.repository == 'syncable-dev/memcode' && github.event.repository.private == true && github.ref == 'refs/heads/beta/memcode-desktop-candidate'
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      CI: "true"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_INCREMENTAL: "0"
+      CARGO_TERM_COLOR: never
+      RUSTUP_TOOLCHAIN: 1.97.1
+      # This is an explicitly unnotarized testing candidate, not Developer ID signing.
+      APPLE_SIGNING_IDENTITY: "-"
+    steps:
+      - name: Check out the reviewed private candidate
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check candidate prerequisites
+        id: runtime
+        env:
+          UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs';
+          if (process.platform !== 'darwin' || process.arch !== 'arm64') throw Error('This candidate requires a native Apple Silicon runner');
+          if (!process.env.UPDATER_KEY) throw Error('Configure the protected TAURI_SIGNING_PRIVATE_KEY repository secret before building this candidate');
+          const runtime = JSON.parse(readFileSync('scripts/desktop-node.json', 'utf8'));
+          if (!/^24\.\d+\.\d+$/.test(runtime.version) || !runtime.archives['darwin-arm64']) throw Error('The reviewed Apple Silicon Node runtime manifest is missing');
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${runtime.version}\n`);
+          NODE
+
+      - name: Set up the reviewed Node version
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: ${{ steps.runtime.outputs.version }}
+          cache: npm
+
+      - name: Set up the native Rust target
+        run: rustup toolchain install 1.97.1 --profile minimal --target aarch64-apple-darwin
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Check types, behavior and license material
+        run: |
+          npm run typecheck
+          npm test
+          node scripts/verify-third-party-notices.mjs
+
+      - name: Build the private app, disk image and signed updater
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/tauri-package.mjs
+
+      - name: Verify the bundled runtime and ad-hoc application signature
+        run: |
+          APP=src-tauri/target/release/bundle/macos/MemCode.app
+          test -d "$APP"
+          test "$(lipo -archs "$APP/Contents/MacOS/memcode")" = arm64
+          codesign --verify --deep --strict "$APP"
+          codesign --display --verbose=4 "$APP" 2> "$RUNNER_TEMP/memcode-codesign.txt"
+          grep -q 'Signature=adhoc' "$RUNNER_TEMP/memcode-codesign.txt"
+          env -u MEMCODE_NODE_PATH -u NODE_PATH PATH=/usr/bin:/bin "$APP/Contents/Resources/desktop-runtime/node" --version > "$RUNNER_TEMP/memcode-bundled-node.txt"
+          test "$(cat "$RUNNER_TEMP/memcode-bundled-node.txt")" = "v${{ steps.runtime.outputs.version }}"
+
+      - name: Verify the updater and collect bounded candidate files
+        run: |
+          node --input-type=module <<'NODE'
+          import { mkdirSync, readFileSync, readdirSync, copyFileSync, writeFileSync } from 'node:fs';
+          import { basename, join } from 'node:path';
+          import { createHash } from 'node:crypto';
+          import { execFileSync } from 'node:child_process';
+          const bundle = 'src-tauri/target/release/bundle';
+          const updates = readdirSync(join(bundle, 'macos')).filter(name => name.endsWith('.app.tar.gz'));
+          const installers = readdirSync(join(bundle, 'dmg')).filter(name => name.endsWith('.dmg'));
+          if (updates.length !== 1 || installers.length !== 1) throw Error('Expected exactly one macOS updater and one DMG');
+          const updater = join(bundle, 'macos', updates[0]);
+          execFileSync(process.execPath, ['scripts/verify-desktop-candidate.mjs', updater], { stdio: 'inherit' });
+          const paths = [join(bundle, 'dmg', installers[0]), updater, updater + '.sig'];
+          const output = 'release/macos-arm64-candidate';
+          mkdirSync(output, { recursive: true });
+          const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+          const files = paths.map(path => {
+            const bytes = readFileSync(path);
+            copyFileSync(path, join(output, basename(path)));
+            return { name: basename(path), sha256: digest(bytes), bytes: bytes.length };
+          });
+          const provenance = {
+            product: 'MemCode',
+            version: JSON.parse(readFileSync('package.json', 'utf8')).version,
+            source: { repository: process.env.GITHUB_REPOSITORY, commit: process.env.GITHUB_SHA },
+            target: 'aarch64-apple-darwin',
+            published: false,
+            updaterSignatureVerified: true,
+            macOS: { signing: 'ad-hoc', developerIdSigned: false, notarized: false, gatekeeperAcceptance: 'not-established' },
+            packagedRuntime: JSON.parse(readFileSync('dist-desktop-runtime/provenance.json', 'utf8')),
+            files,
+          };
+          const metadata = JSON.stringify(provenance, null, 2) + '\n';
+          writeFileSync(join(output, 'candidate.json'), metadata);
+          writeFileSync(join(output, 'SHA256SUMS'), [...files.map(file => `${file.sha256}  ${file.name}`), `${digest(metadata)}  candidate.json`].join('\n') + '\n');
+          NODE
+          printf '%s\n' 'Private candidate only. The updater is cryptographically signed; the macOS app is ad-hoc signed and NOT notarized. Gatekeeper approval and a cold-install/account/engine test are still required.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the private review candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: MemCode-macos-arm64-candidate-${{ github.sha }}
+          path: release/macos-arm64-candidate/*
+          if-no-files-found: error
+          retention-days: 7

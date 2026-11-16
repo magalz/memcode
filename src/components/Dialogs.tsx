@@ -36,8 +36,9 @@ import { HarnessMark, Mark, PriorityMark, Spinner, StageIcon } from "./UI";
 import { estimateOptions } from "../planning/types";
 import { ContextSettings } from "./ContextSettings";
 import { DictationSettings } from "./DictationSettings";
-import { AccountConnections } from "./AccountConnections";
 import type { MemtraceAccount } from "../connections";
+import { AppUpdates } from "./AppUpdates";
+import { BetaAccess } from "./BetaAccess";
 
 export function Modal({
   title,
@@ -446,10 +447,12 @@ export function NewProjectDialog({
   onClose,
   onCreated,
   notify,
+  needsEngine = false,
 }: {
   onClose: () => void;
   onCreated: () => void;
   notify: (s: string) => void;
+  needsEngine?: boolean;
 }) {
   const [mode, setMode] = useState<"existing" | "new">("existing");
   const [parent, setParent] = useState("");
@@ -498,6 +501,11 @@ export function NewProjectDialog({
     >
       <form onSubmit={submit}>
         <div className="modal-body">
+          {needsEngine && (
+            <div className="project-beta-setup">
+              <BetaAccess notify={notify} existingCLI />
+            </div>
+          )}
           <div className="project-mode">
             <button
               type="button"
@@ -660,14 +668,20 @@ export function SettingsDialog({
     >
       <form onSubmit={save}>
         <div className="modal-body settings-body">
-          <AccountConnections notify={notify} onStatus={onAccountStatus} />
+          <BetaAccess
+            notify={notify}
+            existingCLI
+            onAccountStatus={onAccountStatus}
+          />
+          <AppUpdates currentVersion={runtime.appVersion} />
           <div className="settings-section">
             <div>
               <GitBranch size={17} />
               <span>
                 <strong>Memtrace engine</strong>
                 <small>
-                  Connect to the Memtrace CLI installed on this machine.
+                  Optional existing CLI setup. Beta uses its separately managed
+                  local engine.
                 </small>
               </span>
               <span

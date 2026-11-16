@@ -74,6 +74,9 @@ export interface TeamRelayOptions {
   /** Acceptance-test hook after durable commit and before HTTP acknowledgement. */
   afterCommit?: (event: TeamEvent) => void | Promise<void>;
   verifyIdentity?: TeamIdentityProofVerifier;
+  /** Opt-in hosted mode. Every creation still requires a fresh verified Memtrace identity. */
+  selfServiceTeams?: boolean;
+  maxTeamsPerAccount?: number;
 }
 export interface TeamRelay {
   url: string;
@@ -194,6 +197,9 @@ function roomFrom(record: Extract<RecordEntry, { kind: "create" }>): Room {
 export async function startTeamRelay(
   options: TeamRelayOptions,
 ): Promise<TeamRelay> {
+  const accountTeamLimit = options.maxTeamsPerAccount ?? 3;
+  if (!Number.isSafeInteger(accountTeamLimit) || accountTeamLimit < 1 || accountTeamLimit > 10)
+    throw Error("Use a Team creation limit between 1 and 10 per account.");
   const host = options.host ?? "127.0.0.1";
   if (!["127.0.0.1", "::1", "0.0.0.0"].includes(host))
     throw Error(
@@ -449,6 +455,8 @@ export async function startTeamRelay(
         );
         if (!allowedHosts.has(url.hostname))
           return error("HOST", "Unrecognized relay host.", 403);
+        if (request.method === "GET" && url.pathname === "/v1/service")
+          return reply(response, 200, { version: 1, selfServiceTeams: options.selfServiceTeams === true, accountTeamLimit });
         if (request.method === "GET" && url.pathname === "/v1/team-auth/challenge") {
           for (const [key, value] of challenges) if (Date.parse(value.expiresAt) <= Date.now()) challenges.delete(key);
           if (challenges.size >= 500) return error("LIMIT", "Too many pending identity requests. Try again shortly.", 429);
@@ -458,9 +466,10 @@ export async function startTeamRelay(
         const proof = { proof: z.string().min(1).max(16000), nonce: z.string().min(32).max(200) };
         const teamDevice = { deviceId: teamId, deviceName: label };
         if (request.method === "POST" && url.pathname === "/v1/teams") {
-          if (digest(bearer(request)) !== digest(adminCapability!)) return error("AUTH", "This relay’s private setup capability is required to create a Team.", 403);
+          const operator = !!request.headers.authorization && digest(bearer(request)) === digest(adminCapability!);
+          if (!operator && options.selfServiceTeams !== true) return error("AUTH", "This relay’s private setup capability is required to create a Team.", 403);
           const input = z.object({ name: label, opId:teamId.optional(), ...proof, ...teamDevice }).strict().parse(await json(request));
-          return reply(response, 201, await spaces.create(input.name, await verified(input), { id: input.deviceId, name: input.deviceName },input.opId));
+          return reply(response, 201, await spaces.create(input.name, await verified(input), { id: input.deviceId, name: input.deviceName },input.opId, operator ? undefined : accountTeamLimit));
         }
         if (request.method === "GET" && url.pathname === "/v1/teams") {
           const id = teamId.parse(url.searchParams.get("teamId")); return reply(response, 200, spaces.read(id, bearer(request)));

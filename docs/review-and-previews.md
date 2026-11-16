@@ -91,11 +91,52 @@ profile. It verifies file links, source lines, Word, Excel ranges, PDF selection
 and navigation, native video/audio playback, timestamps, diff and terminal
 comments, HTML element/area selection, field offsets, persistent highlights,
 save-without-send, explicit sharing and same-card web navigation. Local viewer
-fixtures are labelled separately from the Office files created in real harness
-runs. `tests/review-comments.test.ts` also verifies persistence, editing,
+fixtures are labeled separately from real-harness evidence. The smoke script
+reads only the fixture directory you choose; it never reads another person's
+MemCode workspace or copies that person's saved outputs.
+`tests/review-comments.test.ts` also verifies persistence, editing,
 ownership, migration and explicit sharing without worker invocation.
 
 Native browser checks cover real selection, clipboard, input, nested/page
 scrolling, popups, isolated storage, background capture, concurrent startup and
 RPC liveness. The desktop observations in this iteration are Windows checks.
 They do not establish native UI parity on macOS or Linux.
+
+## Prepare your own viewer fixtures
+
+Use the ignored `tmp/verification-fixtures` directory, or set
+`MEMCODE_REVIEW_FIXTURE_DIR` to another directory you control. The native smoke
+checks expect these files:
+
+- `claude-creative-brief.docx`, containing “Atelier creative brief”.
+- `codex-mission-planner.xlsx`, with “ORBIT MISSION PLANNER” on its first
+  sheet and a `Destinations` sheet containing the Mars example at row 3.
+- `cursor-field-notes.pptx`, an ordinary local presentation.
+- `review-guide.pdf` and `review-tone.wav` from the PDF/audio helper below.
+
+The provider names identify the original fixture scenario. Regenerated files
+are local test fixtures and must not be presented as fresh provider results.
+Historical benchmark JSON uses `<USER_HOME>` in place of personal machine
+paths; its measurements and methodology are unchanged by that redaction.
+
+If you have the document tool runtime used by the original optional proof,
+set `MEMCODE_DOCUMENT_RUNTIME` to its installed dependencies directory and
+`MEMCODE_DOCUMENT_SKILL_DIR` to the installed document skill directory for the
+chosen format. Optional `MEMCODE_DOCUMENT_NODE`, `MEMCODE_DOCUMENT_PYTHON` and
+`MEMCODE_DOCUMENT_PACKAGES` select your local executables and packages.
+The runtime must provide the packages imported by
+`scripts/fixtures/office-builder.mjs`; it is not included with MemCode.
+Run `node scripts/fixtures/create-office-fixture.mjs claude` for Word,
+`codex` for Excel and `cursor` for PowerPoint, selecting the appropriate skill
+directory for each. The helper preserves an existing output.
+
+Generate the PDF and WAV with Python and `reportlab` installed:
+
+```sh
+python scripts/fixtures/review-document.py tmp/verification-fixtures
+```
+
+Then build the native app and run
+`node --import tsx scripts/review-smoke.mjs`. Missing prerequisites produce a
+clear error before a native test app starts. No account, worker approval or
+model invocation is part of fixture preparation or the viewer smoke check.

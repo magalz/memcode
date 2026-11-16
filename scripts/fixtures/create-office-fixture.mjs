@@ -1,34 +1,46 @@
 import { spawnSync } from "node:child_process";
 import { mkdir, symlink, copyFile, stat, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const helperDirectory = dirname(fileURLToPath(import.meta.url));
+// This helper is also copied to <lab>/tools for an explicit live-worker proof.
+const root = resolve(
+  helperDirectory,
+  helperDirectory.endsWith("fixtures") ? "../.." : "..",
+);
 const provider = process.argv[2],
   format = { codex: "xlsx", claude: "docx", cursor: "pptx" }[provider];
 if (!format) throw Error("Choose codex, claude or cursor.");
-const outputDir = process.env.MEMCODE_ARTIFACT_DIR;
+const verificationDirectory = join(root, "tmp", "verification-fixtures");
+const outputDir = resolve(
+  process.env.MEMCODE_ARTIFACT_DIR ?? verificationDirectory,
+);
+const workerPath = relative(join(root, ".memcode", "workers"), outputDir);
 if (
-  !outputDir ||
-  !resolve(outputDir).startsWith(join(root, ".memcode", "workers"))
+  outputDir !== verificationDirectory &&
+  (!workerPath ||
+    workerPath.startsWith("..") ||
+    resolve(workerPath) === workerPath)
 )
-  throw Error("Run this helper from its MemCode worker.");
-const base =
-  "C:/Program Files/WindowsApps/OpenAI.CodexPrimaryRuntime.v26-1112-611-0_26.1112.611.0_x64__3k8sg7r9htsxt/dependencies";
-const node = join(base, "node/bin/node.exe"),
-  python = join(base, "python/python.exe"),
-  packages = join(base, "node/node_modules");
-const skills = "C:/Users/AlexT/.codex/plugins/cache/openai-primary-runtime";
-const family = {
-  xlsx: "spreadsheets",
-  docx: "documents",
-  pptx: "presentations",
-}[format];
-const skill = join(skills, family, "26.1112.11011/skills", family);
+  throw Error(
+    "Choose tmp/verification-fixtures or this project's worker artifact directory.",
+  );
+const base = process.env.MEMCODE_DOCUMENT_RUNTIME;
+const skill = process.env.MEMCODE_DOCUMENT_SKILL_DIR;
+if (!base || !skill)
+  throw Error(
+    "Set MEMCODE_DOCUMENT_RUNTIME and MEMCODE_DOCUMENT_SKILL_DIR for your locally installed document tools. See docs/review-and-previews.md.",
+  );
+const node = process.env.MEMCODE_DOCUMENT_NODE ?? process.execPath,
+  python = process.env.MEMCODE_DOCUMENT_PYTHON ?? "python",
+  packages =
+    process.env.MEMCODE_DOCUMENT_PACKAGES ?? join(base, "node", "node_modules");
 const workspace = join(root, ".memcode", "office", provider),
   build = join(workspace, "build"),
   qa = join(workspace, "qa");
 await mkdir(build, { recursive: true });
 await mkdir(qa, { recursive: true });
+await mkdir(outputDir, { recursive: true });
 await symlink(
   packages,
   join(build, "node_modules"),
@@ -60,12 +72,13 @@ const run = (exe, args, cwd = workspace) => {
       RUNTIME_NODE_MODULES: packages,
       RUNTIME_NODE: node,
       RUNTIME_PYTHON: python,
-      PATH:
-        join(base, "bin/override") +
-        ";" +
-        join(base, "bin/fallback") +
-        ";" +
+      PATH: [
+        join(base, "bin/override"),
+        join(base, "bin/fallback"),
         process.env.PATH,
+      ]
+        .filter(Boolean)
+        .join(delimiter),
     },
   });
   if (r.error) throw r.error;
@@ -93,14 +106,14 @@ if (!(await stat(marker).catch(() => null))) {
 }
 if (format === "docx") {
   await copyFile(
-    join(root, "tools", "office-document.py"),
+    join(helperDirectory, "office-document.py"),
     join(build, "document.py"),
   );
   run(python, [join(build, "document.py"), output]);
   run(python, [join(skill, "render_docx.py"), output, "--output_dir", qa]);
 } else {
   await copyFile(
-    join(root, "tools", "office-builder.mjs"),
+    join(helperDirectory, "office-builder.mjs"),
     join(build, "builder.mjs"),
   );
   const built =

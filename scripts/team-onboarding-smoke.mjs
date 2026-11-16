@@ -160,7 +160,7 @@ const repository={url:'https://github.com/synthetic-fixture/observatory.git',ide
 const personal={id:'personal',name:'Personal Observatory',description:'Synthetic fixture',path:'C:/Synthetic/observatory',branch:'main',analysis:'ready',createdAt:'2026-11-15',example:false};
 const shared={...personal,id:'shared',name:'Shared Observatory',path:null,analysis:'idle'};
 if(mode==='diagnostics'){personal.analysis='error';personal.analysisNote='Source index could not be qualified';shared.path='C:/Synthetic/second-observatory';shared.analysis='ready';}
-const member={id:'synthetic-owner',name:'Alex Example',email:'owner@example.invalid',role:'owner',status:'active',devices:[{id:'fixture-pc',name:'Synthetic PC'}],joinedAt:'2026-11-15'};
+const member={id:'synthetic-owner',name:'Robin Example',email:'owner@example.invalid',role:'owner',status:'active',devices:[{id:'fixture-pc',name:'Synthetic PC'}],joinedAt:'2026-11-15'};
 const team={id:'synthetic-team',name:'Observatory Team',role:'owner',identity:'memtrace',members:[member],projects:[],createdAt:'2026-11-15',revision:1,connection:'online'};
 let directory={configured:true,identityAvailable:true,teams:mode==='owner'?[]:[{...team,role:'member',projects:[{workspaceId:'synthetic-room',name:shared.name,repository,localProjectId:'shared',createdAt:'2026-11-15'}]}]};
 let source=initialState();source.projects=[personal];source.tasks=[{...source.tasks[0],id:'personal-story',projectId:'personal',example:false,title:'Personal story stays intact'}];source.epics=[{...source.epics[0],projectId:'personal'}];source.team=[];

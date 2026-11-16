@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { MessageSquarePlus, X } from "lucide-react";
 import { reviewLocation } from "../review-labels";
 import type { ReviewComment, ReviewReference } from "../review";
+import { primaryModifier, shortcutLabel } from "../platform";
 export function ReviewComposer({
   references,
   onRemove,
@@ -95,7 +96,7 @@ export function ReviewComposer({
           sessionStorage.setItem(draftKey, event.target.value);
         }}
         onKeyDown={(event) => {
-          if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          if (event.key === "Enter" && primaryModifier(event)) {
             event.preventDefault();
             void save();
           }
@@ -115,6 +116,7 @@ export function ReviewComposer({
         </button>
         <button
           className="primary-button"
+          title={`Save comment · ${shortcutLabel("Enter")}`}
           disabled={!text.trim() || busy}
           onClick={() => void save()}
         >

@@ -1,4 +1,5 @@
 import { spawn, execFile } from "node:child_process";
+import { appVersion } from "../../src/version";
 import { createInterface } from "node:readline";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
@@ -583,7 +584,7 @@ export function startCursorSession(options: AgentSessionOptions): AgentSession {
           fs: { readTextFile: false, writeTextFile: false },
           terminal: false,
         },
-        clientInfo: { name: "memcode", version: "0.3.0" },
+        clientInfo: { name: "memcode", version: appVersion },
       });
       if (
         array(initialized.authMethods).some(

@@ -206,6 +206,7 @@ export class TeamSpaceStore {
     identity: VerifiedTeamIdentity,
     device: { id: string; name: string },
     opId?: string,
+    accountLimit?: number,
   ): Promise<TeamSpaceSession> {
     return this.serial("directory", async () => {
       const prior =
@@ -233,6 +234,12 @@ export class TeamSpaceStore {
           "This relay has reached its Team limit.",
           409,
         );
+      // This check and the durable save share the directory queue, so concurrent
+      // requests/devices cannot race the signed account's self-service limit.
+      if (accountLimit !== undefined && [...this.teams.values()].filter((team) =>
+          team.creation?.subject === identity.subject || team.members.some((member) => member.subject === identity.subject && member.role === "owner" && member.status === "active")
+        ).length >= accountLimit)
+        return fail("ACCOUNT_TEAM_LIMIT", "Your account has reached its Team creation limit. Join or use an existing Team.", 429);
       const id = randomUUID(),
         memberId = randomUUID(),
         capability = secret(),

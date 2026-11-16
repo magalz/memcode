@@ -2,7 +2,7 @@
   "version": 1,
   "case": "bug",
   "at": "2026-11-14T02:36:56.132Z",
-  "temporaryRoot": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS",
+  "temporaryRoot": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS",
   "fixtureOnly": true,
   "limitations": [
     "One small synthetic fixture per case/variant; not statistical evidence of general task savings.",
@@ -514,7 +514,7 @@
     {
       "harness": "claude",
       "variant": "baseline",
-      "fixture": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-baseline-mwfsomvl",
+      "fixture": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-baseline-mwfsomvl",
       "code": 0,
       "latencyMs": 29809,
       "timedOut": false,
@@ -859,7 +859,7 @@
           "name": "Edit",
           "input": {
             "replace_all": false,
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-baseline-mwfsomvl\\src\\pricing.mjs",
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-baseline-mwfsomvl\\src\\pricing.mjs",
             "old_string": "(line.quantity || 1)",
             "new_string": "(line.quantity ?? 1)"
           }
@@ -881,14 +881,14 @@
         "changedFiles": [
           "src/pricing.mjs"
         ],
-        "diffFile": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-baseline-mwfsomvl\\.memcode\\engine\\worker.diff"
+        "diffFile": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-baseline-mwfsomvl\\.memcode\\engine\\worker.diff"
       },
       "stderr": ""
     },
     {
       "harness": "claude",
       "variant": "broker",
-      "fixture": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim",
+      "fixture": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim",
       "code": 0,
       "latencyMs": 25949,
       "timedOut": false,
@@ -998,14 +998,14 @@
         {
           "name": "Read",
           "input": {
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\\src\\pricing.mjs"
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\\src\\pricing.mjs"
           }
         },
         {
           "name": "Edit",
           "input": {
             "replace_all": false,
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\\src\\pricing.mjs",
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\\src\\pricing.mjs",
             "old_string": "(line.quantity || 1) * line.unitPrice",
             "new_string": "(line.quantity ?? 1) * line.unitPrice"
           }
@@ -1013,7 +1013,7 @@
         {
           "name": "Bash",
           "input": {
-            "command": "cd \"C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\" && node -e \"import('./src/pricing.mjs').then(m=>{console.log('qty0:',m.total([{quantity:0,unitPrice:9}]));console.log('undef:',m.total([{unitPrice:9}]));console.log('null:',m.total([{quantity:null,unitPrice:9}]));console.log('qty2:',m.total([{quantity:2,unitPrice:9}]));console.log('mixed:',m.total([{quantity:0,unitPrice:9},{quantity:3,unitPrice:0.1}]))})\" && node --test",
+            "command": "cd \"<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\" && node -e \"import('./src/pricing.mjs').then(m=>{console.log('qty0:',m.total([{quantity:0,unitPrice:9}]));console.log('undef:',m.total([{unitPrice:9}]));console.log('null:',m.total([{quantity:null,unitPrice:9}]));console.log('qty2:',m.total([{quantity:2,unitPrice:9}]));console.log('mixed:',m.total([{quantity:0,unitPrice:9},{quantity:3,unitPrice:0.1}]))})\" && node --test",
             "description": "Spot-check total() edge cases and run node --test"
           }
         }
@@ -1027,14 +1027,14 @@
         "changedFiles": [
           "src/pricing.mjs"
         ],
-        "diffFile": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\\.memcode\\engine\\worker.diff"
+        "diffFile": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\\.memcode\\engine\\worker.diff"
       },
       "stderr": ""
     },
     {
       "harness": "claude",
       "variant": "local",
-      "fixture": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy",
+      "fixture": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy",
       "code": 0,
       "latencyMs": 27155,
       "timedOut": false,
@@ -1137,14 +1137,14 @@
         {
           "name": "Read",
           "input": {
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy\\src\\pricing.mjs"
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy\\src\\pricing.mjs"
           }
         },
         {
           "name": "Edit",
           "input": {
             "replace_all": false,
-            "file_path": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy\\src\\pricing.mjs",
+            "file_path": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy\\src\\pricing.mjs",
             "old_string": "(line.quantity || 1) * line.unitPrice",
             "new_string": "(line.quantity ?? 1) * line.unitPrice"
           }
@@ -1173,7 +1173,7 @@
         "changedFiles": [
           "src/pricing.mjs"
         ],
-        "diffFile": "C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy\\.memcode\\engine\\worker.diff"
+        "diffFile": "<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy\\.memcode\\engine\\worker.diff"
       },
       "stderr": ""
     }
@@ -1186,16 +1186,16 @@
         "members": [
           {
             "repo_id": "context-bug-baseline-mwfsomvl",
-            "path": "c:/Users/AlexT/AppData/Local/Temp/memcode-context-eval-HgvpfS/context-bug-baseline-mwfsomvl"
+            "path": "<USER_HOME>/AppData/Local/Temp/memcode-context-eval-HgvpfS/context-bug-baseline-mwfsomvl"
           }
         ],
         "scope_source": {
           "kind": "manifest",
-          "manifest_path": "\\\\?\\C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-baseline-mwfsomvl\\.memcode\\engine\\workspace.toml"
+          "manifest_path": "\\\\?\\<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-baseline-mwfsomvl\\.memcode\\engine\\workspace.toml"
         },
         "published_by": {
           "pid": 81848,
-          "command": "mcp --workspace-file C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-baseline-mwfsomvl\\.memcode\\engine\\workspace.toml",
+          "command": "mcp --workspace-file <USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-baseline-mwfsomvl\\.memcode\\engine\\workspace.toml",
           "at_epoch_ms": 1794623817598
         }
       }
@@ -1207,16 +1207,16 @@
         "members": [
           {
             "repo_id": "context-bug-broker-mwfspmim",
-            "path": "c:/Users/AlexT/AppData/Local/Temp/memcode-context-eval-HgvpfS/context-bug-broker-mwfspmim"
+            "path": "<USER_HOME>/AppData/Local/Temp/memcode-context-eval-HgvpfS/context-bug-broker-mwfspmim"
           }
         ],
         "scope_source": {
           "kind": "manifest",
-          "manifest_path": "\\\\?\\C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\\.memcode\\engine\\workspace.toml"
+          "manifest_path": "\\\\?\\<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\\.memcode\\engine\\workspace.toml"
         },
         "published_by": {
           "pid": 98160,
-          "command": "mcp --workspace-file C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\\.memcode\\engine\\workspace.toml",
+          "command": "mcp --workspace-file <USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-broker-mwfspmim\\.memcode\\engine\\workspace.toml",
           "at_epoch_ms": 1794623863753
         }
       }
@@ -1228,16 +1228,16 @@
         "members": [
           {
             "repo_id": "context-bug-local-mwfsqjdy",
-            "path": "c:/Users/AlexT/AppData/Local/Temp/memcode-context-eval-HgvpfS/context-bug-local-mwfsqjdy"
+            "path": "<USER_HOME>/AppData/Local/Temp/memcode-context-eval-HgvpfS/context-bug-local-mwfsqjdy"
           }
         ],
         "scope_source": {
           "kind": "manifest",
-          "manifest_path": "\\\\?\\C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy\\.memcode\\engine\\workspace.toml"
+          "manifest_path": "\\\\?\\<USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy\\.memcode\\engine\\workspace.toml"
         },
         "published_by": {
           "pid": 106100,
-          "command": "mcp --workspace-file C:\\Users\\AlexT\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy\\.memcode\\engine\\workspace.toml",
+          "command": "mcp --workspace-file <USER_HOME>\\AppData\\Local\\Temp\\memcode-context-eval-HgvpfS\\context-bug-local-mwfsqjdy\\.memcode\\engine\\workspace.toml",
           "at_epoch_ms": 1794623906312
         }
       }

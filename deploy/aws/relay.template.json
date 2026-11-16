@@ -1,0 +1,1107 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Dedicated authenticated MemCode beta Team relay with private retained state; isolated from local workers, graphs and public downloads.",
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@3"
+    },
+    "com.aws.cloudformation.Context": {
+      "arch": "Single arm64 pilot host; Caddy TLS -> loopback rootless Node; retained encrypted EBS + daily private S3 backup.",
+      "must": [
+        "Existing application stacks, instances, data and pilot tunnels remain untouched.",
+        "Only board/comments/activity/explicit results are shared; no source or local graph replication.",
+        "Deployment requires reviewed SHA-256 bundle and exact Memtrace JWT audience."
+      ],
+      "ref": [
+        {
+          "at": "deploy/aws/relay.md",
+          "has": "operations, limitations, costs and restore"
+        }
+      ]
+    }
+  },
+  "Parameters": {
+    "RelayHostname": {
+      "Type": "String",
+      "Default": "teams.hosted.memtrace.io",
+      "AllowedPattern": "^[a-z0-9][a-z0-9.-]+[a-z0-9]$"
+    },
+    "HostedZoneId": {
+      "Type": "AWS::Route53::HostedZone::Id",
+      "Description": "Existing public parent zone; only the new RelayHostname record is created."
+    },
+    "UbuntuImage": {
+      "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
+      "Default": "/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id"
+    },
+    "AvailabilityZone": {
+      "Type": "AWS::EC2::AvailabilityZone::Name",
+      "Description": "Pin the retained data volume and host to the same reviewed zone."
+    }
+  },
+  "Resources": {
+    "Vpc": {
+      "Type": "AWS::EC2::VPC",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "A dedicated network prevents changes to existing application VPCs.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "CidrBlock": "10.73.0.0/24",
+        "EnableDnsSupport": true,
+        "EnableDnsHostnames": true
+      }
+    },
+    "Gateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Outbound SSM and HTTPS ACME access without a NAT gateway.",
+          "must": []
+        }
+      },
+      "Properties": {}
+    },
+    "GatewayAttachment": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Attach only the new pilot VPC.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "InternetGatewayId": {
+          "Ref": "Gateway"
+        },
+        "VpcId": {
+          "Ref": "Vpc"
+        }
+      }
+    },
+    "Subnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "One pilot subnet; static EIP supplies the single billable public address.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "CidrBlock": "10.73.0.0/26",
+        "AvailabilityZone": {
+          "Ref": "AvailabilityZone"
+        },
+        "MapPublicIpOnLaunch": false
+      }
+    },
+    "RouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Routes are exclusive to this new subnet.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        }
+      }
+    },
+    "Route": {
+      "Type": "AWS::EC2::Route",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "HTTPS endpoint and outbound management require Internet routing.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "RouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "Gateway"
+        }
+      },
+      "DependsOn": "GatewayAttachment"
+    },
+    "RouteAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Do not modify other subnet associations.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "SubnetId": {
+          "Ref": "Subnet"
+        },
+        "RouteTableId": {
+          "Ref": "RouteTable"
+        }
+      }
+    },
+    "SecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Remote beta clients have changing addresses; public entry is restricted to web ports.",
+          "must": [
+            "Never expose SSH, loopback relay, filesystem, graph or management port."
+          ]
+        }
+      },
+      "Properties": {
+        "GroupDescription": "Public team HTTPS and ACME only; no SSH or direct relay",
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "CidrIp": "0.0.0.0/0",
+            "Description": "HTTP redirects and ACME validation"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0",
+            "Description": "Authenticated desktop team clients over HTTPS"
+          }
+        ],
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "-1",
+            "CidrIp": "0.0.0.0/0",
+            "Description": "OS updates, SSM, public JWKS, ACME and private AWS APIs"
+          }
+        ]
+      }
+    },
+    "DataKey": {
+      "Type": "AWS::KMS::Key",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Separate encryption boundary; retain key while any state or backups survive.",
+          "must": [
+            "Do not schedule deletion while encrypted state remains."
+          ]
+        }
+      },
+      "Properties": {
+        "Description": "Private MemCode beta state, backup and audit encryption",
+        "EnableKeyRotation": true,
+        "KeyPolicy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "AccountIAMAdministration",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+                }
+              },
+              "Action": "kms:*",
+              "Resource": "*"
+            },
+            {
+              "Sid": "ScopedCloudTrailEncryption",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudtrail.amazonaws.com"
+              },
+              "Action": [
+                "kms:GenerateDataKey*",
+                "kms:DescribeKey"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${AWS::StackName}"
+                  }
+                },
+                "StringLike": {
+                  "kms:EncryptionContext:aws:cloudtrail:arn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${AWS::StackName}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "AuditBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Private audit/access logs; default SSE-S3 permits S3 server-access logging and CloudTrail uses the dedicated KMS key.",
+          "must": [
+            "No public logs; bounded retention."
+          ]
+        }
+      },
+      "Properties": {
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "PrivateAudit30Days",
+              "Status": "Enabled",
+              "ExpirationInDays": 30,
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 30
+              },
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 1
+              }
+            }
+          ]
+        }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "ArtifactBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Private software storage is isolated from public release distribution.",
+          "must": [
+            "Never enable public access or reuse the public releases bucket."
+          ]
+        }
+      },
+      "Properties": {
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "aws:kms",
+                "KMSMasterKeyID": {
+                  "Fn::GetAtt": [
+                    "DataKey",
+                    "Arn"
+                  ]
+                }
+              },
+              "BucketKeyEnabled": true
+            }
+          ]
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "LoggingConfiguration": {
+          "DestinationBucketName": {
+            "Ref": "AuditBucket"
+          },
+          "LogFilePrefix": "access/software/"
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "BoundedPrivateRetention",
+              "Status": "Enabled",
+              "ExpirationInDays": 30,
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 30
+              },
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 1
+              }
+            }
+          ]
+        }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "BackupBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Private state storage is isolated from public release distribution.",
+          "must": [
+            "Never enable public access or reuse the public releases bucket."
+          ]
+        }
+      },
+      "Properties": {
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "aws:kms",
+                "KMSMasterKeyID": {
+                  "Fn::GetAtt": [
+                    "DataKey",
+                    "Arn"
+                  ]
+                }
+              },
+              "BucketKeyEnabled": true
+            }
+          ]
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "LoggingConfiguration": {
+          "DestinationBucketName": {
+            "Ref": "AuditBucket"
+          },
+          "LogFilePrefix": "access/state/"
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "BoundedPrivateRetention",
+              "Status": "Enabled",
+              "ExpirationInDays": 30,
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 30
+              },
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 1
+              }
+            }
+          ]
+        }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "AuditPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Allow only this stack trail and bucket access logs, with confused-deputy constraints.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "Bucket": {
+          "Ref": "AuditBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "TLSOnly",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "AuditBucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${AuditBucket.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            },
+            {
+              "Sid": "TrailACL",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudtrail.amazonaws.com"
+              },
+              "Action": "s3:GetBucketAcl",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "AuditBucket",
+                  "Arn"
+                ]
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${AWS::StackName}"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "TrailWrite",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudtrail.amazonaws.com"
+              },
+              "Action": "s3:PutObject",
+              "Resource": {
+                "Fn::Sub": "${AuditBucket.Arn}/trail/AWSLogs/${AWS::AccountId}/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${AWS::StackName}"
+                  },
+                  "s3:x-amz-acl": "bucket-owner-full-control"
+                }
+              }
+            },
+            {
+              "Sid": "AccessLogWrite",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "logging.s3.amazonaws.com"
+              },
+              "Action": "s3:PutObject",
+              "Resource": {
+                "Fn::Sub": "${AuditBucket.Arn}/access/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnEquals": {
+                  "aws:SourceArn": [
+                    {
+                      "Fn::GetAtt": [
+                        "ArtifactBucket",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "BackupBucket",
+                        "Arn"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ArtifactPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Private software bundles never share the public CDN bucket.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "Bucket": {
+          "Ref": "ArtifactBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "ArtifactBucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${ArtifactBucket.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "BackupPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Team state has no public access path.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "Bucket": {
+          "Ref": "BackupBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "BackupBucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${BackupBucket.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "AuditTrail": {
+      "Type": "AWS::CloudTrail::Trail",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Integrity-checked data events only for this stack buckets; unrelated account management writes are excluded.",
+          "must": [
+            "Never log signed identity tokens or private admin capabilities."
+          ]
+        }
+      },
+      "Properties": {
+        "TrailName": {
+          "Ref": "AWS::StackName"
+        },
+        "IsLogging": true,
+        "IsMultiRegionTrail": false,
+        "IncludeGlobalServiceEvents": false,
+        "EnableLogFileValidation": true,
+        "KMSKeyId": {
+          "Fn::GetAtt": [
+            "DataKey",
+            "Arn"
+          ]
+        },
+        "S3BucketName": {
+          "Ref": "AuditBucket"
+        },
+        "S3KeyPrefix": "trail",
+        "AdvancedEventSelectors": [
+          {
+            "Name": "PrivateRelayObjects",
+            "FieldSelectors": [
+              {
+                "Field": "eventCategory",
+                "Equals": [
+                  "Data"
+                ]
+              },
+              {
+                "Field": "resources.type",
+                "Equals": [
+                  "AWS::S3::Object"
+                ]
+              },
+              {
+                "Field": "resources.ARN",
+                "StartsWith": [
+                  {
+                    "Fn::Sub": "${ArtifactBucket.Arn}/"
+                  },
+                  {
+                    "Fn::Sub": "${BackupBucket.Arn}/"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "DependsOn": "AuditPolicy"
+    },
+    "RuntimeRole": {
+      "Type": "AWS::IAM::Role",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Instance role provides temporary storage and SSM access; no permanent keys.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+          }
+        ],
+        "Policies": [
+          {
+            "PolicyName": "PrivateRelayStorage",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "NoParameterStoreReads",
+                  "Effect": "Deny",
+                  "Action": [
+                    "ssm:GetParameter",
+                    "ssm:GetParameters",
+                    "ssm:GetParametersByPath"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:GetObject",
+                  "Resource": {
+                    "Fn::Sub": "${ArtifactBucket.Arn}/bundles/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject",
+                    "s3:GetObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${BackupBucket.Arn}/snapshots/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:ListBucket",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "BackupBucket",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "StringLike": {
+                      "s3:prefix": "snapshots/*"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "kms:Decrypt",
+                    "kms:Encrypt",
+                    "kms:GenerateDataKey",
+                    "kms:DescribeKey"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "DataKey",
+                      "Arn"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "InstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Attach only the new scoped runtime role.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "Roles": [
+          {
+            "Ref": "RuntimeRole"
+          }
+        ]
+      }
+    },
+    "DataVolume": {
+      "Type": "AWS::EC2::Volume",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Retained volume preserves private journals and ACME state when the host is replaced.",
+          "must": [
+            "Do not format an existing filesystem; bootstrap identifies this exact volume."
+          ]
+        }
+      },
+      "Properties": {
+        "AvailabilityZone": {
+          "Ref": "AvailabilityZone"
+        },
+        "Encrypted": true,
+        "KmsKeyId": {
+          "Fn::GetAtt": [
+            "DataKey",
+            "Arn"
+          ]
+        },
+        "Size": 16,
+        "VolumeType": "gp3",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-private-state"
+            }
+          }
+        ]
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "Host": {
+      "Type": "AWS::EC2::Instance",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Single small pilot host: standard credits cap surplus CPU charges; no SSH key or public source checkout.",
+          "must": [
+            "No worker, graph, user repository or permanent credential on this host."
+          ]
+        }
+      },
+      "Properties": {
+        "ImageId": {
+          "Ref": "UbuntuImage"
+        },
+        "InstanceType": "t4g.small",
+        "AvailabilityZone": {
+          "Ref": "AvailabilityZone"
+        },
+        "IamInstanceProfile": {
+          "Ref": "InstanceProfile"
+        },
+        "SubnetId": {
+          "Ref": "Subnet"
+        },
+        "SecurityGroupIds": [
+          {
+            "Ref": "SecurityGroup"
+          }
+        ],
+        "CreditSpecification": {
+          "CPUCredits": "standard"
+        },
+        "MetadataOptions": {
+          "HttpTokens": "required",
+          "HttpEndpoint": "enabled",
+          "HttpPutResponseHopLimit": 1,
+          "InstanceMetadataTags": "disabled"
+        },
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/sda1",
+            "Ebs": {
+              "Encrypted": true,
+              "VolumeSize": 8,
+              "VolumeType": "gp3",
+              "DeleteOnTermination": true
+            }
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash\n# New dedicated beta host only. Contains public configuration, never credentials.\nset -euo pipefail\nexport DEBIAN_FRONTEND=noninteractive\napt-get -o Acquire::Retries=10 update -qq\napt-get -o Acquire::Retries=10 install -y --no-install-recommends ca-certificates curl python3-boto3 e2fsprogs\n\n# Mount only the new stack's retained EBS volume, identified by its volume ID.\nvolume_id='",
+                {
+                  "Ref": "DataVolume"
+                },
+                "'\ndevice=''\nfor attempt in $(seq 1 120); do\n  for serial in /sys/block/nvme*n1/device/serial; do\n    [ -f \"$serial\" ] || continue\n    if [ \"$(tr -d ' -' < \"$serial\")\" = \"${volume_id//-/}\" ]; then\n      device=\"/dev/$(basename \"$(dirname \"$(dirname \"$serial\")\")\")\"\n      break\n    fi\n  done\n  [ -n \"$device\" ] && break\n  sleep 2\ndone\n[ -b \"$device\" ] || { echo 'Dedicated data volume not found'; exit 1; }\nif ! blkid \"$device\" >/dev/null 2>&1; then mkfs.ext4 -L memcode-team-data \"$device\"; fi\nmkdir -p /var/lib/memcode\nuuid=$(blkid -s UUID -o value \"$device\")\ngrep -q \"UUID=$uuid \" /etc/fstab || printf 'UUID=%s /var/lib/memcode ext4 defaults,nofail 0 2\\n' \"$uuid\" >> /etc/fstab\nmountpoint -q /var/lib/memcode || mount /var/lib/memcode\nchmod 711 /var/lib/memcode\nid memcode >/dev/null 2>&1 || useradd --system --home-dir /var/lib/memcode/state --shell /usr/sbin/nologin memcode\nid memcode-caddy >/dev/null 2>&1 || useradd --system --home-dir /var/lib/memcode/caddy --shell /usr/sbin/nologin memcode-caddy\ninstall -d -m 700 -o memcode -g memcode /var/lib/memcode/state\ninstall -d -m 700 -o memcode-caddy -g memcode-caddy /var/lib/memcode/caddy\ninstall -d -m 755 /opt/memcode-relay /opt/memcode-runtime /etc/memcode-relay\n\ncurl --fail --location --retry 3 '",
+                "https://nodejs.org/dist/v24.22.3/node-v24.22.3-linux-arm64.tar.gz",
+                "' -o /tmp/memcode-node.tar.gz\necho '",
+                "261af2af250dfd7e9f25cf151d1b2713a0adf8f10a9ad116c4947f68627affe8",
+                "  /tmp/memcode-node.tar.gz' | sha256sum --check --status\ntar -xzf /tmp/memcode-node.tar.gz -C /opt/memcode-runtime --strip-components=1\ncurl --fail --location --retry 3 '",
+                "https://github.com/caddyserver/caddy/releases/download/v2.11.9/caddy_2.11.9_linux_arm64.tar.gz",
+                "' -o /tmp/memcode-caddy.tar.gz\necho '",
+                "5e377cff994fc9362a6fcf695c53f226cfca3a3ef85bd3a3687cf252d6310165",
+                "  /tmp/memcode-caddy.tar.gz' | sha256sum --check --status\necho '",
+                "9e5e76d7888542924de2c25353ae87c5f77e2a22c5b1198633cae13688922282e05383d142599205c88d8d80eee5e967d291214d7abce4835329a191b20dd6e0",
+                "  /tmp/memcode-caddy.tar.gz' | sha512sum --check --status\ntar -xzf /tmp/memcode-caddy.tar.gz -C /opt/memcode-runtime caddy\nchmod 755 /opt/memcode-runtime/bin/node /opt/memcode-runtime/caddy\n[ \"$(/opt/memcode-runtime/bin/node --version)\" = 'v",
+                "24.22.3",
+                "' ]\n/opt/memcode-runtime/caddy version | grep -q '^v",
+                "2.11.9",
+                " '\nrm /tmp/memcode-node.tar.gz /tmp/memcode-caddy.tar.gz\n\ncat > /etc/memcode-relay/config.json <<'CONFIG'\n{\"region\":\"",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\",\"artifactBucket\":\"",
+                {
+                  "Ref": "ArtifactBucket"
+                },
+                "\",\"backupBucket\":\"",
+                {
+                  "Ref": "BackupBucket"
+                },
+                "\",\"publicURL\":\"https://",
+                {
+                  "Ref": "RelayHostname"
+                },
+                "\",\"nodeVersion\":\"",
+                "24.22.3",
+                "\",\"caddyVersion\":\"",
+                "2.11.9",
+                "\"}\nCONFIG\nchmod 644 /etc/memcode-relay/config.json\n\n# Restore only onto an empty, newly created state directory. A retained volume\n# with any existing Team state always wins over a backup; never overwrite it.\npython3 - <<'PY'\nimport boto3, json, pathlib, tarfile, tempfile\nroot=pathlib.Path('/var/lib/memcode')\nif not any((root/'state').iterdir()):\n  with open('/etc/memcode-relay/config.json') as file: config=json.load(file)\n  client=boto3.client('s3',region_name=config['region'])\n  entries=[]\n  for page in client.get_paginator('list_objects_v2').paginate(Bucket=config['backupBucket'],Prefix='snapshots/'):\n    entries.extend(item for item in page.get('Contents',[]) if item['Key'].endswith('.tar.gz'))\n  if entries:\n    latest=max(entries,key=lambda item:item['LastModified'])\n    if latest['Size']>16*1024**3: raise RuntimeError('Backup exceeds dedicated state capacity')\n    with tempfile.TemporaryFile() as archive:\n      client.download_fileobj(config['backupBucket'],latest['Key'],archive)\n      archive.seek(0)\n      with tarfile.open(fileobj=archive,mode='r:gz') as data:\n        members=data.getmembers()\n        if len(members)>200000 or sum(member.size for member in members)>16*1024**3:\n          raise RuntimeError('Expanded backup exceeds dedicated state capacity')\n        for member in members:\n          if member.name.split('/')[0] not in ('state','caddy') or member.issym() or member.islnk():\n            raise RuntimeError('Unexpected path or link in private state backup')\n        data.extractall(root,filter='data')\n    print('Restored latest private team checkpoint onto empty data volume')\nPY\nchown -R memcode:memcode /var/lib/memcode/state\nchown -R memcode-caddy:memcode-caddy /var/lib/memcode/caddy\n\ncat > /etc/memcode-relay/Caddyfile <<'CADDY'\n{\n  admin off\n  email support@memtrace.io\n}\n",
+                {
+                  "Ref": "RelayHostname"
+                },
+                " {\n  encode zstd gzip\n  header {\n    Strict-Transport-Security \"max-age=31536000\"\n    X-Content-Type-Options nosniff\n    Referrer-Policy no-referrer\n  }\n  request_body {\n    max_size 8MB\n  }\n  reverse_proxy 127.0.0.1:8787 {\n    flush_interval -1\n  }\n}\nCADDY\n\ncat > /etc/systemd/system/memcode-relay.service <<'UNIT'\n[Unit]\nDescription=MemCode authenticated beta team relay\nAfter=network-online.target\nWants=network-online.target\nRequiresMountsFor=/var/lib/memcode\nConditionPathExists=/opt/memcode-relay/relay.cjs\n[Service]\nType=simple\nUser=memcode\nGroup=memcode\nUMask=0077\nWorkingDirectory=/opt/memcode-relay\nEnvironment=NODE_ENV=production\nExecStart=/opt/memcode-runtime/bin/node /opt/memcode-relay/start.cjs\nRestart=on-failure\nRestartSec=3\nTimeoutStopSec=30\nNoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=strict\nProtectHome=true\nReadWritePaths=/var/lib/memcode/state\nProtectKernelTunables=true\nProtectKernelModules=true\nProtectControlGroups=true\nRestrictSUIDSGID=true\nLockPersonality=true\nCapabilityBoundingSet=\nLimitNOFILE=8192\nStandardOutput=journal\nStandardError=journal\n[Install]\nWantedBy=multi-user.target\nUNIT\n\ncat > /etc/systemd/system/memcode-caddy.service <<'UNIT'\n[Unit]\nDescription=HTTPS for the dedicated MemCode beta team relay\nAfter=network-online.target memcode-relay.service\nWants=network-online.target\nRequiresMountsFor=/var/lib/memcode\n[Service]\nType=notify\nUser=memcode-caddy\nGroup=memcode-caddy\nEnvironment=XDG_DATA_HOME=/var/lib/memcode/caddy\nEnvironment=XDG_CONFIG_HOME=/var/lib/memcode/caddy\nExecStart=/opt/memcode-runtime/caddy run --config /etc/memcode-relay/Caddyfile --adapter caddyfile\nRestart=on-failure\nRestartSec=3\nTimeoutStopSec=15\nNoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=strict\nProtectHome=true\nReadWritePaths=/var/lib/memcode/caddy\nAmbientCapabilities=CAP_NET_BIND_SERVICE\nCapabilityBoundingSet=CAP_NET_BIND_SERVICE\nLimitNOFILE=8192\n[Install]\nWantedBy=multi-user.target\nUNIT\n\n# Daily quiesced backup: a bounded pause preserves a consistent fsynced journal.\n# The trap restarts the relay even if tar or S3 upload fails. Credentials come\n# from the instance role; no key material is embedded in files or command lines.\ncat > /opt/memcode-relay/backup.sh <<'BACKUP'\n#!/bin/bash\nset -euo pipefail\nexec 9>/run/memcode-relay-backup.lock\nflock -n 9 || exit 0\nsystemctl stop memcode-relay\ntrap 'systemctl start memcode-relay; rm -f /tmp/memcode-state-backup.tar.gz' EXIT\ntar -czf /tmp/memcode-state-backup.tar.gz --exclude=state/relay.lock --exclude=state/ready.private.json -C /var/lib/memcode state caddy\nsystemctl start memcode-relay\npython3 - <<'PY'\nimport boto3, datetime, json\nwith open('/etc/memcode-relay/config.json') as file: config=json.load(file)\nkey='snapshots/'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y/%m/%d/%H%M%S')+'.tar.gz'\nboto3.client('s3',region_name=config['region']).upload_file('/tmp/memcode-state-backup.tar.gz',config['backupBucket'],key)\nprint('Encrypted private team-state backup completed')\nPY\nBACKUP\nchmod 700 /opt/memcode-relay/backup.sh\ncat > /etc/systemd/system/memcode-relay-backup.service <<'UNIT'\n[Unit]\nDescription=Consistent private MemCode beta backup\n[Service]\nType=oneshot\nExecStart=/opt/memcode-relay/backup.sh\nTimeoutStartSec=300\nUNIT\ncat > /etc/systemd/system/memcode-relay-backup.timer <<'UNIT'\n[Unit]\nDescription=Daily private MemCode beta backup\n[Timer]\nOnCalendar=*-*-* 03:15:00 UTC\nRandomizedDelaySec=300\nPersistent=true\n[Install]\nWantedBy=timers.target\nUNIT\n\nmkdir -p /etc/systemd/journald.conf.d\nprintf '[Journal]\\nStorage=persistent\\nSystemMaxUse=128M\\nMaxRetentionSec=30day\\n' > /etc/systemd/journald.conf.d/memcode.conf\nsystemctl restart systemd-journald\nsystemctl daemon-reload\nsystemctl enable memcode-relay memcode-caddy memcode-relay-backup.timer\nsystemctl start memcode-relay-backup.timer\necho 'Dedicated relay host prepared. Deploy the reviewed private bundle using Systems Manager before opening service discovery.'\n"
+              ]
+            ]
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-host"
+            }
+          },
+          {
+            "Key": "Product",
+            "Value": "MemCode"
+          },
+          {
+            "Key": "DataClass",
+            "Value": "PrivateTeamPlanning"
+          }
+        ]
+      },
+      "DependsOn": [
+        "Route",
+        "AuditTrail"
+      ]
+    },
+    "DataAttachment": {
+      "Type": "AWS::EC2::VolumeAttachment",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Keep retained private data separate from replaceable operating-system disk.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "Device": "/dev/sdf",
+        "InstanceId": {
+          "Ref": "Host"
+        },
+        "VolumeId": {
+          "Ref": "DataVolume"
+        }
+      }
+    },
+    "PublicAddress": {
+      "Type": "AWS::EC2::EIP",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "One stable public address for the new TLS hostname.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "Domain": "vpc"
+      },
+      "DependsOn": "GatewayAttachment"
+    },
+    "AddressAttachment": {
+      "Type": "AWS::EC2::EIPAssociation",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Attach only the new host and address.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "AllocationId": {
+          "Fn::GetAtt": [
+            "PublicAddress",
+            "AllocationId"
+          ]
+        },
+        "InstanceId": {
+          "Ref": "Host"
+        }
+      }
+    },
+    "DNS": {
+      "Type": "AWS::Route53::RecordSet",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Create only the new team-service DNS record; do not modify existing application records.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "HostedZoneId": {
+          "Ref": "HostedZoneId"
+        },
+        "Name": {
+          "Ref": "RelayHostname"
+        },
+        "Type": "A",
+        "TTL": "60",
+        "ResourceRecords": [
+          {
+            "Ref": "PublicAddress"
+          }
+        ]
+      }
+    },
+    "HostRecovery": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Automatic host recovery preserves its attached private volume and address.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "AlarmDescription": "Recover the dedicated beta host on an AWS system status failure",
+        "Namespace": "AWS/EC2",
+        "MetricName": "StatusCheckFailed_System",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "Host"
+            }
+          }
+        ],
+        "Statistic": "Maximum",
+        "Period": 60,
+        "EvaluationPeriods": 2,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "missing",
+        "AlarmActions": [
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:automate:${AWS::Region}:ec2:recover"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "ServiceURL": {
+      "Description": "Publish discovery only after HTTPS and authenticated API acceptance passes.",
+      "Value": {
+        "Fn::Sub": "https://${RelayHostname}"
+      }
+    },
+    "InstanceId": {
+      "Description": "New SSM-managed pilot host only.",
+      "Value": {
+        "Ref": "Host"
+      }
+    },
+    "PrivateArtifactBucket": {
+      "Description": "Private reviewed software bundles; never a public release bucket.",
+      "Value": {
+        "Ref": "ArtifactBucket"
+      }
+    },
+    "PrivateBackupBucket": {
+      "Description": "Retained encrypted daily team snapshots, 30-day object retention.",
+      "Value": {
+        "Ref": "BackupBucket"
+      }
+    },
+    "PrivateDataVolume": {
+      "Description": "Retained encrypted live state; never delete during host replacement.",
+      "Value": {
+        "Ref": "DataVolume"
+      }
+    }
+  }
+}

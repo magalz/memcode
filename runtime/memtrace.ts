@@ -22,6 +22,7 @@ import {
   disconnectedMemtraceClient,
 } from "./memtrace-owner";
 import { waitForPeerIndex } from "./memtrace-peer-index";
+import { appVersion } from "../src/version";
 
 type Json = Record<string, any>;
 function unwrap(value: unknown): any {
@@ -73,7 +74,7 @@ export interface MemtraceWatch {
 const WATCH_VERIFY_MS = 30_000;
 
 export class MemtraceEngine {
-  private readonly owners = new ManagedMemtraceOwners();
+  private owners = new ManagedMemtraceOwners();
   private readonly connecting = new Set<Client>();
   private watches = new Map<string, MemtraceWatch>();
   private watchChecked = new Map<string, number>();
@@ -88,7 +89,13 @@ export class MemtraceEngine {
     string,
     { client: Client; transport: StdioClientTransport; projectPath: string }
   >();
-  constructor(private readonly configuredPath: () => string) {}
+  constructor(
+    private readonly configuredPath: () => string,
+    private readonly options: {
+      environment?: () => Promise<Record<string, string>>;
+      privateProject?: () => boolean;
+    } = {},
+  ) {}
   scopeFor(projectId: string): MemtraceScopeBinding | null {
     const scope = this.scopes.get(projectId);
     return scope ? { ...scope } : null;
@@ -274,6 +281,11 @@ export class MemtraceEngine {
     if (this.closing) throw Error("The Memtrace connection is closing.");
     if (!project.path) throw Error("Choose a local project folder first.");
     const key = pathKey(project.path);
+    if (this.options.environment) await this.options.environment();
+    if (!project.path || pathKey(project.path) !== key)
+      throw Error(
+        "The project's local folder changed during connection. Retry on its current folder.",
+      );
     const opening = this.opening.get(project.id);
     if (opening) {
       if (this.bindingPaths.get(project.id) === key) return opening;
@@ -390,6 +402,8 @@ export class MemtraceEngine {
     privateProject = false,
   ): Promise<Client> {
     if (!project.path) throw new Error("Choose a local project folder first.");
+    const authentication = await this.options.environment?.();
+    privateProject ||= this.options.privateProject?.() === true;
     const command = await findCommand("memtrace", this.configuredPath());
     if (!command)
       throw new Error(
@@ -402,7 +416,11 @@ export class MemtraceEngine {
       : null;
     const env = normalizeMcpEnvironment(
       Object.fromEntries(
-        Object.entries({ ...childEnv(), ...command.env }).filter(
+        Object.entries({
+          ...childEnv(),
+          ...command.env,
+          ...authentication,
+        }).filter(
           (entry): entry is [string, string] => typeof entry[1] === "string",
         ),
       ),
@@ -439,7 +457,7 @@ export class MemtraceEngine {
         stderr: "pipe",
       });
       const client = new Client(
-        { name: "memcode", version: "0.3.0" },
+        { name: "memcode", version: appVersion },
         { capabilities: {} },
       );
       active = { client, transport };
@@ -746,5 +764,15 @@ export class MemtraceEngine {
     this.scopes.clear();
     this.bindingPaths.clear();
     this.watchingPaths.clear();
+  }
+  /** An account switch closes our own clients/watches/owners, never borrowed owners. */
+  async reconnect(): Promise<void> {
+    await this.close();
+    this.owners = new ManagedMemtraceOwners();
+    this.connecting.clear();
+    this.opening.clear();
+    this.watching.clear();
+    this.connectionProgress.clear();
+    this.closing = false;
   }
 }

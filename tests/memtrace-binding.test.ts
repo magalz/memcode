@@ -301,3 +301,47 @@ test("rebinding waits for an issued watch operation and cannot retain or recreat
   );
   await f.engine.close();
 });
+
+test("a cached engine connection still checks current access before every query and cannot fall back after logout", async () => {
+  const f = fixture(),
+    selected = project();
+  let allowed = true,
+    checks = 0;
+  (f.engine as any).options.environment = async () => {
+    checks++;
+    if (!allowed) throw Error("Reconnect beta access");
+    return {};
+  };
+  try {
+    await f.engine.call(selected, "get_repository_stats", {});
+    await f.engine.call(selected, "get_repository_stats", {});
+    assert.equal(f.opened.length, 1);
+    assert.equal(checks, 2);
+    allowed = false;
+    await assert.rejects(
+      f.engine.call(selected, "get_repository_stats", {}),
+      /Reconnect beta/,
+    );
+    assert.equal(
+      f.calls.filter((call) => call.name === "get_repository_stats").length,
+      2,
+    );
+  } finally {
+    await f.engine.close();
+  }
+});
+
+test("account reset closes owned watch/client and reopens the same project under a new engine session", async () => {
+  const f = fixture(),
+    selected = project();
+  await f.engine.watch(selected);
+  const first = await f.engine.call(selected, "get_repository_stats", {});
+  await f.engine.reconnect();
+  assert.equal(f.watches.has(selected.path!), false);
+  assert.equal(f.engine.scopeFor(selected.id), null);
+  const second = await f.engine.call(selected, "get_repository_stats", {});
+  assert.notEqual(second.connection, first.connection);
+  assert.equal(f.ownerStops, 1);
+  assert.equal(f.closed.length, 1);
+  await f.engine.close();
+});

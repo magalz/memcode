@@ -53,6 +53,8 @@ export interface TeamClientOptions {
   background?: boolean;
   identityProof?: TeamIdentityProofProvider;
   identityAvailable?: () => Promise<boolean>;
+  /** Production injects official HTTPS discovery; tests/private installations need no network. */
+  serviceDiscovery?: () => Promise<{ endpoint: string } | undefined>;
 }
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const mimeTypes: Record<string, string> = {
@@ -442,11 +444,24 @@ export class TeamSyncClient implements TeamWorkerClaims {
     return this.status(projectId)!;
   }
   private device() { return { deviceId: this.profile.deviceId, deviceName: process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "Mac" : "Linux" }; }
-  private async serviceConfiguration(): Promise<{ endpoint: string; bootstrapSecret?: string } | undefined> {
+  private serviceStatus?: { endpoint: string; selfServiceTeams: boolean; expires: number };
+  private async serviceConfiguration(): Promise<{ endpoint: string; bootstrapSecret?: string; selfServiceTeams?: boolean } | undefined> {
     try {
       const value = JSON.parse(await readFile(join(this.dataDir, "team", "service.private.json"), "utf8")) as { endpoint: string; bootstrapSecret?: string };
       return { endpoint: endpointURL(value.endpoint), ...(value.bootstrapSecret ? { bootstrapSecret: value.bootstrapSecret } : {}) };
-    } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw Error("The private Team service configuration is invalid. Its file has been preserved."); }
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw Error("The private Team service configuration is invalid. Its file has been preserved."); }
+    if (!this.options.serviceDiscovery) return undefined;
+    let service: { endpoint: string } | undefined;
+    try { service = await this.options.serviceDiscovery(); } catch { return undefined; }
+    if (!service) return undefined;
+    const endpoint = endpointURL(service.endpoint);
+    if (this.serviceStatus?.endpoint === endpoint && this.serviceStatus.expires > Date.now()) return this.serviceStatus;
+    try {
+      const status = await this.request<{ version?: unknown; selfServiceTeams?: unknown }>(endpoint, "/v1/service", undefined);
+      if (status.version !== 1 || typeof status.selfServiceTeams !== "boolean") return undefined;
+      this.serviceStatus = { endpoint, selfServiceTeams: status.selfServiceTeams, expires: Date.now() + 30_000 };
+      return this.serviceStatus;
+    } catch { return undefined; }
   }
   private savedTeam(teamId: string, allowLocked = false): SavedTeam {
     const value = this.profile.teams?.find((team) => team.credential.teamId === teamId);
@@ -490,7 +505,7 @@ export class TeamSyncClient implements TeamWorkerClaims {
       catch (error) { return this.decoratedTeam(saved, (error as Error & { code?: string }).code === "TEAM_REVOKED" ? "revoked" : "offline", message(error)); }
     }));
     await this.persist();
-    return { teams, configured: !!service || !!this.profile.teams?.length, canCreate: !!service?.bootstrapSecret, identityAvailable, ...(!identityAvailable ? {detail:"Verified Team sign-in is not available yet. Your local projects and existing preview rooms remain available."} : !service && !this.profile.teams?.length ? { detail: "The Team service has not been configured for this installation. Invitation links can still connect to their Team service." } : {}) };
+    return { teams, configured: !!service || !!this.profile.teams?.length, canCreate: !!service?.bootstrapSecret || service?.selfServiceTeams === true, identityAvailable, ...(!identityAvailable ? {detail:"Verified Team sign-in is not available yet. Your local projects and existing preview rooms remain available."} : !service && !this.profile.teams?.length ? { detail: "The Team service is not available yet. Invitation links can still connect to their Team service." } : service && !service.bootstrapSecret && !service.selfServiceTeams ? {detail:"This Team service accepts invitations; new Team creation is managed by its operator."} : {}) };
   }
   async createTeamWorkspace(input: { name: string }): Promise<WorkspaceTeam> {
     if (this.creatingTeam) throw Error("A Team is already being created. Finish its Memtrace sign-in first.");
@@ -498,7 +513,7 @@ export class TeamSyncClient implements TeamWorkerClaims {
     const epoch = this.accountEpoch;
     try {
     const service = await this.serviceConfiguration();
-    if (!service?.bootstrapSecret) throw Error("This installation needs a configured Team service before creating a Team. You can still join an invitation.");
+    if (!service || (!service.bootstrapSecret && !service.selfServiceTeams)) throw Error("A Team service with account-based creation is not available yet. You can still join an invitation.");
     const creates=(this.profile.teamCreates??=[]);
     let operation=creates.find((item)=>item.name===input.name);
     if(!operation){operation={name:input.name,opId:randomUUID()};creates.push(operation);await this.persist();}

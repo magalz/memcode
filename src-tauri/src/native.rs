@@ -55,6 +55,9 @@ fn loopback(url: &Url) -> bool {
 }
 
 pub async fn host_call(app: AppHandle, method: &str, input: Value) -> Result<Value, String> {
+    if method.starts_with("beta_store_") || method.starts_with("beta_access_") {
+        return crate::beta_store::call(app, method, input).await;
+    }
     if method.starts_with("terminal_") {
         return crate::terminal::call(app, method, input).await;
     }
@@ -103,6 +106,13 @@ pub async fn host_call(app: AppHandle, method: &str, input: Value) -> Result<Val
         }
         "open_memcode_identity" => {
             let url = memcode_identity_url(input["url"].as_str().ok_or("Missing team sign-in URL")?)?;
+            tauri::async_runtime::spawn_blocking(move || open_claim(&url))
+                .await
+                .map_err(|e| e.to_string())??;
+            Ok(Value::Null)
+        }
+        "open_memcode_beta" => {
+            let url = memcode_beta_url(input["url"].as_str().ok_or("Missing beta sign-in URL")?)?;
             tauri::async_runtime::spawn_blocking(move || open_claim(&url))
                 .await
                 .map_err(|e| e.to_string())??;
@@ -315,6 +325,43 @@ fn memcode_identity_url(value: &str) -> Result<String, String> {
         || callback.path() != format!("/memcode-identity/{}", get("state"))
     { return Err(invalid()); }
     Ok(url.to_string())
+}
+
+fn memcode_beta_url(value: &str) -> Result<String, String> {
+    let invalid = || "Only the official Memtrace beta authorization can open here".to_string();
+    let url = Url::parse(value).map_err(|_| invalid())?;
+    if value.len() > 4096 || url.scheme() != "https" || url.host_str() != Some("www.memtrace.io")
+        || url.path() != "/api/memcode/beta/authorize" || !url.username().is_empty() || url.password().is_some()
+        || url.port_or_known_default() != Some(443) || url.fragment().is_some() { return Err(invalid()); }
+    let pairs: Vec<_> = url.query_pairs().collect();
+    let names = ["device_id", "session_id", "nonce", "expires_at", "redirect_uri", "state", "code_challenge", "code_challenge_method"];
+    if pairs.len() != names.len() || names.iter().any(|name| pairs.iter().filter(|(key, _)| key == name).count() != 1) { return Err(invalid()); }
+    let get = |name: &str| pairs.iter().find(|(key, _)| key == name).map(|(_, value)| value.as_ref()).unwrap_or("");
+    let opaque = |value: &str, minimum: usize, maximum: usize| (minimum..=maximum).contains(&value.len()) && value.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !opaque(get("device_id"),16,128) || !opaque(get("session_id"),16,128)
+        || !opaque(get("nonce"),32,200) || !opaque(get("state"),32,200)
+        || !opaque(get("code_challenge"),43,43) || get("code_challenge_method") != "S256" { return Err(invalid()); }
+    let expires = get("expires_at").as_bytes();
+    if expires.len() != 24 || expires.iter().enumerate().any(|(i,c)| match i {4|7 => *c != b'-',10 => *c != b'T',13|16 => *c != b':',19 => *c != b'.',23 => *c != b'Z',_ => !c.is_ascii_digit()}) { return Err(invalid()); }
+    let callback = Url::parse(get("redirect_uri")).map_err(|_| invalid())?;
+    if callback.scheme() != "http" || callback.host_str() != Some("127.0.0.1") || callback.port().unwrap_or(0) < 1024
+        || !callback.username().is_empty() || callback.password().is_some() || callback.query().is_some() || callback.fragment().is_some()
+        || callback.path() != format!("/memcode-beta/{}", get("state")) { return Err(invalid()); }
+    Ok(url.to_string())
+}
+
+#[cfg(test)]
+mod beta_url_tests {
+    use super::memcode_beta_url;
+    #[test]
+    fn beta_authorization_opener_is_pinned_to_the_exact_service_and_callback() {
+        let state="s".repeat(43);
+        let mut url=tauri::Url::parse("https://www.memtrace.io/api/memcode/beta/authorize").unwrap();
+        for (key,value) in [("device_id","device-binding-123456".to_string()),("session_id","session-binding-123456".to_string()),("nonce","n".repeat(43)),("expires_at","2026-11-16T12:00:00.000Z".to_string()),("redirect_uri",format!("http://127.0.0.1:31245/memcode-beta/{state}")),("state",state),("code_challenge","c".repeat(43)),("code_challenge_method","S256".to_string())] {url.query_pairs_mut().append_pair(key,&value);}
+        assert!(memcode_beta_url(url.as_str()).is_ok());
+        for (key,value) in [("redirect_uri","http://localhost:31245/other"),("code_challenge_method","plain"),("device_id","short"),("state","short"),("expires_at","unbounded")]{let mut bad=url.clone();let pairs:Vec<_>=bad.query_pairs().map(|(k,v)|(k.to_string(),if k==key{value.to_string()}else{v.to_string()})).collect();bad.set_query(None);bad.query_pairs_mut().extend_pairs(pairs);assert!(memcode_beta_url(bad.as_str()).is_err());}
+        for bad in [url.to_string().replace("www.memtrace.io","evil.example"),url.to_string().replace("https:","http:"),url.to_string().replace("/api/memcode/beta/authorize","/api/memcode/authorize"),format!("{}&state=extra",url),format!("{}#secret",url)] {assert!(memcode_beta_url(&bad).is_err());}
+    }
 }
 
 #[cfg(test)]

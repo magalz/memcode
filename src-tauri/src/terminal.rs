@@ -27,6 +27,15 @@ struct Session {
 #[derive(Clone, Default)]
 pub struct TerminalState(Arc<Mutex<HashMap<String, Arc<Session>>>>);
 
+impl TerminalState {
+    pub fn active_count(&self) -> Result<usize, String> {
+        let sessions = lock(&self.0)?;
+        sessions.values().try_fold(0, |count, session| {
+            Ok(count + usize::from(lock(&session.output)?.exit.is_none()))
+        })
+    }
+}
+
 fn lock<T>(value: &Mutex<T>) -> Result<std::sync::MutexGuard<'_, T>, String> {
     value
         .lock()

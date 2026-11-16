@@ -61,10 +61,12 @@ import { WorkerConnections } from "./components/WorkerConnections";
 import { TeamOnboarding } from "./components/TeamOnboarding";
 import "./styles-team.css";
 import "./styles-collaboration.css";
-import { AccountConnections } from "./components/AccountConnections";
+import { BetaAccess } from "./components/BetaAccess";
+import type { MemCodeBetaStatus } from "./beta";
 import type { MemtraceAccount } from "./connections";
 import { approvedRuntime } from "./worker-availability";
 import { useRuntimeHealth } from "./useRuntimeHealth";
+import { primaryModifier, shortcutLabel } from "./platform";
 import "./styles-runtime-health.css";
 import "./styles-artifact-collection.css";
 import "./styles-artifact-thumbnail.css";
@@ -170,6 +172,7 @@ export function App() {
   const [docsArticle, setDocsArticle] = useState("start");
   const [createEpicRequest, setCreateEpicRequest] = useState(0);
   const [account, setAccount] = useState<MemtraceAccount>();
+  const [betaStatus, setBetaStatus] = useState<MemCodeBetaStatus>();
   const [toast, setToast] = useState("");
   const [fatal, setFatal] = useState("");
   const [collapsed, setCollapsed] = useState(false);
@@ -186,6 +189,38 @@ export function App() {
     },
     [notify],
   );
+  useEffect(() => {
+    let live = true;
+    const update = (value: MemCodeBetaStatus) => {
+      if (live) setBetaStatus(value);
+    };
+    const unsubscribe = window.memcode?.onBetaStatus?.(update);
+    void window.memcode
+      ?.betaStatus?.()
+      .then(update)
+      .catch(() => {});
+    let resumedAt = 0;
+    const resume = () => {
+      if (
+        document.visibilityState === "hidden" ||
+        Date.now() - resumedAt < 30000
+      )
+        return;
+      resumedAt = Date.now();
+      void window.memcode
+        ?.resumeBeta?.()
+        .then(update)
+        .catch(() => {});
+    };
+    window.addEventListener("focus", resume);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      live = false;
+      unsubscribe?.();
+      window.removeEventListener("focus", resume);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  }, []);
   useEffect(() => {
     if (!window.memcode) {
       setFatal("Open this workspace through the MemCode desktop app.");
@@ -237,7 +272,7 @@ export function App() {
       const input =
         event.target instanceof HTMLElement &&
         ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName);
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      if (primaryModifier(event) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setDialog("search");
       }
@@ -250,6 +285,7 @@ export function App() {
         !input &&
         !event.metaKey &&
         !event.ctrlKey &&
+        !event.altKey &&
         event.key.toLowerCase() === "c"
       ) {
         setStoryEpic(undefined);
@@ -433,7 +469,9 @@ export function App() {
   const projectGroups = new Map<string, typeof state.projects>();
   for (const item of state.projects) {
     const shared = state.team?.find((room) => room.projectId === item.id);
-    const label = shared ? shared.teamName ?? "Shared preview projects" : "Personal projects";
+    const label = shared
+      ? (shared.teamName ?? "Shared preview projects")
+      : "Personal projects";
     projectGroups.set(label, [...(projectGroups.get(label) ?? []), item]);
   }
   return (
@@ -503,27 +541,30 @@ export function App() {
           </button>
           {projectMenu && (
             <div className="project-menu">
-              {[...projectGroups].map(([group, items]) => <div key={group}>
-              <span className="menu-eyebrow">{group}</span>
-              {items.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    void act(() => window.memcode.selectProject(item.id));
-                    setSelectedId(null);
-                    setProjectMenu(false);
-                  }}
-                >
-                  <span className="project-avatar small">
-                    <Folder size={14} />
-                  </span>
-                  <span>
-                    {item.name}
-                    {item.example && <small>Example</small>}
-                  </span>
-                  {project.id === item.id && <Check size={13} />}
-                </button>
-              ))}</div>)}
+              {[...projectGroups].map(([group, items]) => (
+                <div key={group}>
+                  <span className="menu-eyebrow">{group}</span>
+                  {items.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        void act(() => window.memcode.selectProject(item.id));
+                        setSelectedId(null);
+                        setProjectMenu(false);
+                      }}
+                    >
+                      <span className="project-avatar small">
+                        <Folder size={14} />
+                      </span>
+                      <span>
+                        {item.name}
+                        {item.example && <small>Example</small>}
+                      </span>
+                      {project.id === item.id && <Check size={13} />}
+                    </button>
+                  ))}
+                </div>
+              ))}
               <div className="menu-divider" />
               <button
                 onClick={() => {
@@ -550,7 +591,7 @@ export function App() {
         <button className="sidebar-search" onClick={() => setDialog("search")}>
           <Search size={14} />
           <span>Search anything</span>
-          <kbd>⌘ K</kbd>
+          <kbd>{shortcutLabel("K")}</kbd>
         </button>
         <div className="nav-label">WORKSPACE</div>
         <nav>
@@ -635,7 +676,13 @@ export function App() {
             >
               <Search size={16} />
             </button>
-            <AccountConnections compact notify={notify} onStatus={setAccount} />
+            <BetaAccess
+              compact
+              notify={notify}
+              existingCLI
+              onStatus={setBetaStatus}
+              onAccountStatus={setAccount}
+            />
           </div>
         </header>
         {(!runtimeHealth.available || runtimeHealth.saveError) && (
@@ -1033,6 +1080,9 @@ export function App() {
       )}
       {dialog === "project" && (
         <NewProjectDialog
+          needsEngine={
+            !runtime.memtraceAvailable && betaStatus?.state !== "connected"
+          }
           onClose={() => setDialog(null)}
           onCreated={() => {
             setDialog(null);
@@ -1076,6 +1126,10 @@ export function App() {
         !state.onboarding.dismissed &&
         !state.onboarding.completedAt && (
           <Onboarding
+            needsEngine={
+              !runtime.memtraceAvailable && betaStatus?.state !== "connected"
+            }
+            notify={notify}
             progress={state.onboarding}
             state={state}
             project={guideProject}
@@ -1088,6 +1142,7 @@ export function App() {
                 approvedRuntime(adapter, state.workerConnections),
               ) &&
               (account?.status === "connected" ||
+                betaStatus?.state === "connected" ||
                 guideProject.analysis === "ready")
             }
             hidden={!!dialog}

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { expect } from "@playwright/test";
 import { join } from "node:path";
+import { writeFile } from "node:fs/promises";
 
 export async function verifyPlanning(page, call, out) {
   const loaded = await call("workspace:load");
@@ -228,11 +229,136 @@ export async function verifyPlanning(page, call, out) {
 
   await page.setViewportSize({ width: 1180, height: 820 });
   await expect
-    .poll(() => lane.evaluate((element) => element.clientHeight))
-    .toBeGreaterThan(290);
+    .poll(() =>
+      page.evaluate(() => {
+        const board = document
+          .querySelector(".work-board")
+          .getBoundingClientRect();
+        const workspace = document
+          .querySelector(".workspace-scroll")
+          .getBoundingClientRect();
+        return [...document.querySelectorAll(".column-cards")].every(
+          (element) => {
+            const bounds = element.getBoundingClientRect();
+            return (
+              bounds.height > 0 &&
+              bounds.top >= Math.max(board.top, workspace.top) - 1 &&
+              bounds.bottom <=
+                Math.min(board.bottom, workspace.bottom, innerHeight) + 1
+            );
+          },
+        );
+      }),
+    )
+    .toBe(true);
+  const compactBefore = await page.evaluate(() => ({
+    workspace: document.querySelector(".workspace-scroll").scrollTop,
+    pageTop: document.scrollingElement.scrollTop,
+    pageLeft: document.scrollingElement.scrollLeft,
+    headings: [...document.querySelectorAll(".column-heading")].map(
+      (element) => element.getBoundingClientRect().top,
+    ),
+    lanes: [...document.querySelectorAll(".column-cards")].map((element) => ({
+      top: element.scrollTop,
+      height: element.clientHeight,
+      extent: element.scrollHeight,
+    })),
+    horizontalOverflow: document.scrollingElement.scrollWidth > innerWidth + 1,
+  }));
+  assert.equal(
+    compactBefore.horizontalOverflow,
+    false,
+    "Compact workspace must not overflow the page horizontally",
+  );
+  const overflowing = compactBefore.lanes.findIndex(
+    (item) => item.extent > item.height + 1,
+  );
+  assert.ok(
+    overflowing >= 0,
+    "The populated compact fixture must exercise lane overflow",
+  );
+  const compactLane = page.locator(".column-cards").nth(overflowing);
+  await compactLane.hover();
+  await page.mouse.wheel(0, compactBefore.lanes[overflowing].extent + 1000);
+  await expect
+    .poll(() =>
+      compactLane.evaluate(
+        (element) =>
+          element.scrollHeight - element.clientHeight - element.scrollTop,
+      ),
+    )
+    .toBeLessThanOrEqual(1);
+  const last = compactLane.locator(".work-card").last();
+  const lastBounds = await last.boundingBox(),
+    laneBounds = await compactLane.boundingBox();
+  assert.ok(
+    lastBounds &&
+      laneBounds &&
+      lastBounds.y >= laneBounds.y - 1 &&
+      lastBounds.y + lastBounds.height <= laneBounds.y + laneBounds.height + 1,
+    "Last card must be fully reachable inside its lane",
+  );
+  await page.mouse.wheel(0, 650);
+  const compactAfter = await page.evaluate(() => ({
+    workspace: document.querySelector(".workspace-scroll").scrollTop,
+    pageTop: document.scrollingElement.scrollTop,
+    pageLeft: document.scrollingElement.scrollLeft,
+    headings: [...document.querySelectorAll(".column-heading")].map(
+      (element) => element.getBoundingClientRect().top,
+    ),
+    lanes: [...document.querySelectorAll(".column-cards")].map(
+      (element) => element.scrollTop,
+    ),
+    horizontalOverflow: document.scrollingElement.scrollWidth > innerWidth + 1,
+  }));
+  assert.deepEqual(
+    {
+      workspace: compactAfter.workspace,
+      pageTop: compactAfter.pageTop,
+      pageLeft: compactAfter.pageLeft,
+      headings: compactAfter.headings,
+    },
+    {
+      workspace: compactBefore.workspace,
+      pageTop: compactBefore.pageTop,
+      pageLeft: compactBefore.pageLeft,
+      headings: compactBefore.headings,
+    },
+    "Lane scrolling must preserve page position and lane headings",
+  );
+  compactAfter.lanes.forEach((top, index) => {
+    if (index !== overflowing)
+      assert.equal(
+        top,
+        compactBefore.lanes[index].top,
+        "Scrolling one lane must preserve other lanes",
+      );
+  });
+  assert.equal(compactAfter.horizontalOverflow, false);
+  await writeFile(
+    join(out, "native-compact-lanes.json"),
+    JSON.stringify(
+      {
+        viewport: { width: 1180, height: 820 },
+        lane: overflowing,
+        laneHeight: compactBefore.lanes[overflowing].height,
+        lastCardReachable: true,
+        independentScrolling: true,
+        pageStayedStill: true,
+        horizontalPageOverflow: false,
+        before: compactBefore,
+        after: compactAfter,
+      },
+      null,
+      2,
+    ),
+  );
   await page.screenshot({
     path: join(out, "native-workspace-compact.png"),
     animations: "disabled",
+  });
+  await compactLane.evaluate((element) => {
+    element.scrollTop = 0;
   });
   await page.setViewportSize({ width: 1512, height: 1000 });
 

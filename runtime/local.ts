@@ -1,4 +1,5 @@
 import { childEnv, findCommand } from "./commands";
+import { appVersion } from "../src/version";
 export { childEnv, findCommand, exists } from "./commands";
 export type { Command } from "./commands";
 import { discoverHarnesses } from "./catalog";
@@ -101,7 +102,7 @@ export class LocalStore {
   async runtime(): Promise<RuntimeInfo> {
     const harnesses = await discoverHarnesses();
     return {
-      appVersion: "0.3.0",
+      appVersion,
       harnesses,
       memtraceAvailable: !!(await findCommand(
         "memtrace",

@@ -1,0 +1,16 @@
+Required Notice: Copyright (c) 2026 Syncable (https://memtrace.io)
+
+MemCode's original code is provided under the PolyForm Noncommercial
+License 1.0.0 in LICENSE. Commercial use requires a separate license.
+Contact: support@memtrace.io
+
+Third-party components retain their own licenses. See THIRD_PARTY_NOTICES.md
+and the accompanying third-party license files. The noncommercial restriction
+does not replace or restrict rights granted by those components' licenses.
+
+Memtrace and its embedded MemDB engine are separately licensed proprietary
+software. Their source code is not included in this repository, and the
+MemCode license grants no rights to them.
+
+MemCode, Memtrace and their logos are brand identifiers. The software license
+does not grant permission to imply official endorsement of a modified product.

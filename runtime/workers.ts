@@ -219,6 +219,7 @@ export class WorkerManager {
     private readonly sessionFactory: typeof startHarnessSession = startHarnessSession,
     private readonly teamClaims?: TeamWorkerClaims,
     private readonly assertAccountSession?: () => void,
+    private readonly mayDispatch: (project?: Project) => boolean = () => true,
   ) {
     this.inputs = new WorkerInputs(state, changed);
     for (const task of state().tasks)
@@ -241,11 +242,11 @@ export class WorkerManager {
   }
   /** Safe to call after persistence, slot changes or task/prerequisite changes. */
   dispatchQueued(): void {
-    if (this.closing || this.dispatchScheduled) return;
+    if (this.closing || this.dispatchScheduled || !this.mayDispatch()) return;
     this.dispatchScheduled = true;
     queueMicrotask(() => {
       this.dispatchScheduled = false;
-      if (this.closing) return;
+      if (this.closing || !this.mayDispatch()) return;
       const tasks = this.state()
         .tasks.filter(
           (task) => !task.example && queuedFollowups(task).length > 0,
@@ -299,6 +300,7 @@ export class WorkerManager {
           void this.changed();
           continue;
         }
+        if (!this.mayDispatch(project)) continue;
         this.startingQueued.add(task.id);
         void this.start(task, project)
           .catch(async (error) => {
@@ -441,14 +443,24 @@ export class WorkerManager {
     this.assertAccountSession?.();
     // A personal record and an invitation-created record may reuse the same
     // checkout. Only one project identity may drive its branch at a time.
-    const checkoutKey = (value: string) => process.platform === "win32"
-      ? resolve(value).toLowerCase() : resolve(value);
-    const alias = this.state().projects.find((candidate) =>
-      candidate.id !== project.id && candidate.path && project.path &&
-      checkoutKey(candidate.path) === checkoutKey(project.path) &&
-      this.state().tasks.some((other) => other.projectId === candidate.id && isActive(other)),
+    const checkoutKey = (value: string) =>
+      process.platform === "win32"
+        ? resolve(value).toLowerCase()
+        : resolve(value);
+    const alias = this.state().projects.find(
+      (candidate) =>
+        candidate.id !== project.id &&
+        candidate.path &&
+        project.path &&
+        checkoutKey(candidate.path) === checkoutKey(project.path) &&
+        this.state().tasks.some(
+          (other) => other.projectId === candidate.id && isActive(other),
+        ),
     );
-    if (alias) throw new Error(`This local folder is already in use by a worker in ${alias.name}. Stop that worker before starting through this project.`);
+    if (alias)
+      throw new Error(
+        `This local folder is already in use by a worker in ${alias.name}. Stop that worker before starting through this project.`,
+      );
     task.run = {
       ...task.run,
       state: "preparing",
@@ -1036,7 +1048,11 @@ export class WorkerManager {
           stopHeartbeat();
           this.inputs.cancelTask(task.id);
           await releaseTeamClaim().catch((error) => {
-            this.message(task, "system", `Team claim release needs attention: ${(error as Error).message}`);
+            this.message(
+              task,
+              "system",
+              `Team claim release needs attention: ${(error as Error).message}`,
+            );
           });
           this.children.delete(task.id);
           finish();
