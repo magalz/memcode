@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MemCode",
-  "version": "0.4.0-beta.5",
+  "version": "0.4.0-beta.6",
   "identifier": "com.memtrace.memcode",
   "build": {
     "frontendDist": "../dist",
@@ -27,9 +27,7 @@
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost; media-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'",
       "devCsp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:5197; media-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'",
-      "capabilities": [
-        "main"
-      ]
+      "capabilities": ["main"]
     }
   },
   "plugins": {
@@ -60,13 +58,16 @@
       "../dist-artifact-annotations/": "artifact-annotations/",
       "../node_modules/playwright-core/": "runtime/node_modules/playwright-core/"
     },
-    "icon": [
-      "icons/icon.ico",
-      "icons/icon.png",
-      "icons/icon.icns"
-    ],
+    "icon": ["icons/icon.ico", "icons/icon.png", "icons/icon.icns"],
     "macOS": {
-      "minimumSystemVersion": "13.5"
+      "minimumSystemVersion": "13.5",
+      "hardenedRuntime": true,
+      "dmg": {
+        "background": "dmg-background.png",
+        "windowSize": { "width": 720, "height": 508 },
+        "appPosition": { "x": 180, "y": 272 },
+        "applicationFolderPosition": { "x": 540, "y": 272 }
+      }
     }
   }
 }

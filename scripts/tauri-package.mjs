@@ -2,6 +2,11 @@ import { execFileSync, spawn } from "node:child_process";
 import { readFile, access } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { nativeBuildEnv } from "./tauri-env.mjs";
+import {
+  macReleasePolicy,
+  prepareMacSigning,
+  verifyMacRelease,
+} from "./macos-release-trust.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 process.chdir(root);
@@ -19,6 +24,7 @@ if (!process.env.TAURI_SIGNING_PRIVATE_KEY)
   throw Error(
     "An updater signing key is required to package a release. Keep it outside this repository.",
   );
+if (process.platform === "darwin") macReleasePolicy();
 execFileSync(process.execPath, ["scripts/verify-third-party-notices.mjs"], {
   stdio: "inherit",
   windowsHide: true,
@@ -43,15 +49,33 @@ const config = JSON.stringify({
 const cli = fileURLToPath(
   new URL("../node_modules/@tauri-apps/cli/tauri.js", import.meta.url),
 );
-const child = spawn(
-  process.execPath,
-  [cli, "build", "--bundles", target, "--config", config],
-  { cwd: root, env: nativeBuildEnv(), stdio: "inherit", windowsHide: true },
-);
-child.on("error", (error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
-child.on("exit", (code) => {
-  process.exitCode = code ?? 1;
-});
+let signing;
+try {
+  signing =
+    process.platform === "darwin" ? await prepareMacSigning(root) : undefined;
+  const buildEnv = nativeBuildEnv(signing?.env);
+  // nativeBuildEnv inherits process.env. Do not reintroduce certificate material
+  // deliberately removed after import, or credentials in an ad-hoc candidate.
+  if (signing)
+    for (const key of Object.keys(process.env))
+      if (key.startsWith("APPLE_") && !(key in signing.env))
+        delete buildEnv[key];
+  const code = await new Promise((done, reject) => {
+    const child = spawn(
+      process.execPath,
+      [cli, "build", "--bundles", target, "--config", config],
+      {
+        cwd: root,
+        env: buildEnv,
+        stdio: "inherit",
+        windowsHide: true,
+      },
+    );
+    child.once("error", reject);
+    child.once("exit", (value) => done(value ?? 1));
+  });
+  if (code !== 0) throw Error("Native desktop packaging failed.");
+  if (signing) await verifyMacRelease(root, signing);
+} finally {
+  await signing?.cleanup();
+}

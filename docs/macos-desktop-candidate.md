@@ -54,14 +54,67 @@ the workflow. MemCode downloads its separately licensed engine after explicit
 beta approval. Normal project data and credentials do not exist in this clean
 CI checkout.
 
-This candidate has **ad-hoc macOS signing**, not an Apple Developer ID signature,
-and it is **not notarized**. A valid Tauri updater signature authenticates the
-update payload; it does not establish Apple's trust or remove Gatekeeper
-warnings. Do not label the candidate as an unrestricted public macOS release.
+## Explicit distribution modes
+
+`scripts/tauri-package.mjs` defaults to **public-release** on macOS. Missing Apple
+credentials fail before compilation; there is no silent downgrade to ad-hoc
+signing. The private workflow's automatic branch pushes explicitly select
+**private-candidate**. Manual dispatch also offers **manual-approval-beta** and
+**public-release**.
+
+- **private-candidate** creates a private Actions review artifact. It is ad-hoc
+  signed, not notarized, and never qualifies as a trusted public release.
+- **manual-approval-beta** also uses ad-hoc signing. Its metadata explicitly says
+  `manualApprovalRequired: true`, `notarized: false` and `publicReady: false`.
+  A release owner may offer it to the account-gated beta audience only with the
+  upfront Mac warning and Apple's per-app approval instructions. It must not be
+  advertised as a normal verified Mac installation or silently auto-promoted.
+- **public-release** requires a Developer ID Application certificate, complete
+  notarization authentication, app and DMG stapled tickets, accepted Gatekeeper
+  assessments and an independently checked updater archive containing the
+  already-stapled app. A Tauri updater signature alone is insufficient.
+
+For trusted public mode, add protected GitHub secrets `APPLE_CERTIFICATE`
+(base64 `.p12`), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`
+(`Developer ID Application: … (TEAMID)`) and `APPLE_TEAM_ID`. Notarization uses
+either `APPLE_API_KEY`, `APPLE_API_ISSUER` and `APPLE_API_KEY_P8` (the `.p8` file
+contents), or `APPLE_ID` and an **app-specific** `APPLE_PASSWORD`. Never put
+certificate/key material in source, chat, artifacts or log output. The temporary
+CI signing keychain and key files are removed after packaging.
+
+Bundled Node is a resource, not a Tauri `externalBin`. Public mode explicitly
+signs it before the enclosing app, with only the `allow-jit` entitlement. It
+checks every nested Mach-O signature/team and runs the signed Node's JIT smoke.
+The runtime provenance retains the original official Node archive/executable
+hash; `macOS.signedRuntime.signedExecutableSha256` separately identifies the
+post-signing executable. Signing changes bytes: do not compare the signed hash
+directly with the original vendor executable hash or rewrite vendor provenance.
+
+Before trusted public promotion run
+`node scripts/verify-macos-public-candidate.mjs <candidate.json>`. It rejects
+both ad-hoc modes. Actual artifact hashes and the native updater verifier still
+need independent review; this policy check does not replace them.
+
+## Installation visuals and cold start
+
+The DMG uses a branded 720×480-point background with 1440×960 pixels at 144 dpi.
+AppKit verifies that logical/pixel relationship on the Mac runner. The outer
+window includes title-bar space, with the app on the left and Applications on
+the right. `TAURI_BUNDLER_DMG_IGNORE_CI=true` enables Tauri's hosted-runner Finder
+customization; a blank CI fallback is rejected by mounting the finished DMG and
+checking its background and Finder metadata. Finder backgrounds are static;
+the app's first-launch welcome provides motion and the product introduction.
+
+The workflow also launches the actual packaged native app in a fresh profile,
+with global Node lookup removed and no account/model/engine started. It observes
+the bundled Node child and a renderer-to-runtime RPC handshake, and captures a
+screen image when the runner permits it. This catches native/JIT/runtime startup
+failures, but **does not establish physical Mac UI usability or Gatekeeper
+acceptance for an ad-hoc beta**. Those limits are recorded in the candidate.
+
 Test the downloaded DMG on a separate Mac/profile, including normal Gatekeeper
-handling, app launch, browser consent, Keychain persistence, managed engine
-preparation and a local project analysis. A release-to-release updater restart
-is a separate acceptance check.
+handling, launch, browser consent, Keychain persistence, managed engine and a
+local project analysis. A release-to-release updater restart is a separate gate.
 
 The workflow source has been prepared on Windows. A successful macOS build,
 installer and cold-start test must be recorded from the actual workflow and Mac;
@@ -69,4 +122,8 @@ their success is not implied by the existence of this file.
 
 Reference behavior: [GitHub's runner architecture table](https://docs.github.com/en/actions/reference/runners/github-hosted-runners),
 [Tauri macOS signing](https://v2.tauri.app/distribute/sign/macos/) and
-[Tauri signed updates](https://v2.tauri.app/plugin/updater/).
+[Tauri signed updates](https://v2.tauri.app/plugin/updater/). See also
+[Apple Developer ID](https://developer.apple.com/developer-id/),
+[Apple's notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow),
+[Apple's narrow JIT entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.cs.allow-jit)
+and the [current Tauri DMG implementation](https://github.com/tauri-apps/tauri/blob/tauri-v2.12.4/crates/tauri-bundler/src/bundle/macos/dmg/mod.rs).

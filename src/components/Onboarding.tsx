@@ -4,7 +4,6 @@ import {
   Check,
   Code2,
   Folder,
-  FolderPlus,
   GitBranch,
   Layers3,
   LoaderCircle,
@@ -20,7 +19,7 @@ import type {
   OnboardingProgress,
 } from "../onboarding";
 import { Modal } from "./Dialogs";
-import { GuideFlow } from "./GuideFlow";
+import { InstallWelcome } from "./InstallWelcome";
 import { BetaAccess } from "./BetaAccess";
 import "../styles-onboarding.css";
 
@@ -138,39 +137,11 @@ export function Onboarding({
         close={pause}
         wide
       >
-        <div className="onboarding-welcome">
-          <GuideFlow />
-          <div className="guide-welcome-notes">
-            <span>
-              <FolderPlus size={15} /> Keep your project local
-            </span>
-            <span>
-              <Plug size={15} /> Connect with your approval
-            </span>
-            <span>
-              <MessageSquare size={15} /> Write your own first story
-            </span>
-          </div>
-          <p>
-            Start with a project. We’ll help you connect its code context and a
-            worker, then leave the first piece of work to you.
-          </p>
-          {preference}
-          <footer>
-            <button className="button secondary" onClick={pause}>
-              Skip for now
-            </button>
-            <button
-              className="button primary"
-              onClick={() => onUpdate({ step: "project", dismissed: false })}
-            >
-              Let’s get started <ArrowRight size={14} />
-            </button>
-          </footer>
-          <small className="guide-reopen-note">
-            You can reopen setup from Docs → Guide me through.
-          </small>
-        </div>
+        <InstallWelcome
+          preference={preference}
+          onSkip={pause}
+          onContinue={() => onUpdate({ step: "project", dismissed: false })}
+        />
       </Modal>
     );
 

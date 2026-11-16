@@ -2,6 +2,15 @@ name: Private macOS desktop candidate
 
 on:
   workflow_dispatch:
+    inputs:
+      release_mode:
+        description: Apple trust requirement (public-release fails without signing and notarization)
+        type: choice
+        options:
+          - private-candidate
+          - manual-approval-beta
+          - public-release
+        default: private-candidate
   push:
     branches:
       - beta/memcode-desktop-candidate
@@ -24,8 +33,10 @@ jobs:
       CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: never
       RUSTUP_TOOLCHAIN: 1.97.1
-      # This is an explicitly unnotarized testing candidate, not Developer ID signing.
-      APPLE_SIGNING_IDENTITY: "-"
+      # Pushes remain private manual-approval candidates. Public mode is an
+      # explicit dispatch and cannot silently fall back to ad-hoc signing.
+      MEMCODE_MACOS_RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_mode || 'private-candidate' }}
+      TAURI_BUNDLER_DMG_IGNORE_CI: "true"
     steps:
       - name: Check out the reviewed private candidate
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -36,11 +47,22 @@ jobs:
         id: runtime
         env:
           UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: |
           node --input-type=module <<'NODE'
           import { appendFileSync, readFileSync } from 'node:fs';
+          import { macReleasePolicy } from './scripts/macos-release-trust.mjs';
           if (process.platform !== 'darwin' || process.arch !== 'arm64') throw Error('This candidate requires a native Apple Silicon runner');
           if (!process.env.UPDATER_KEY) throw Error('Configure the protected TAURI_SIGNING_PRIVATE_KEY repository secret before building this candidate');
+          macReleasePolicy();
           const runtime = JSON.parse(readFileSync('scripts/desktop-node.json', 'utf8'));
           if (!/^24\.\d+\.\d+$/.test(runtime.version) || !runtime.archives['darwin-arm64']) throw Error('The reviewed Apple Silicon Node runtime manifest is missing');
           appendFileSync(process.env.GITHUB_OUTPUT, `version=${runtime.version}\n`);
@@ -69,16 +91,30 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: node scripts/tauri-package.mjs
 
-      - name: Verify the bundled runtime and ad-hoc application signature
+      - name: Verify the bundled runtime, application trust and compatibility
         run: |
           APP=src-tauri/target/release/bundle/macos/MemCode.app
           test -d "$APP"
           test "$(lipo -archs "$APP/Contents/MacOS/memcode")" = arm64
           codesign --verify --deep --strict "$APP"
           codesign --display --verbose=4 "$APP" 2> "$RUNNER_TEMP/memcode-codesign.txt"
-          grep -q 'Signature=adhoc' "$RUNNER_TEMP/memcode-codesign.txt"
+          if [ "$MEMCODE_MACOS_RELEASE_MODE" != public-release ]; then
+            grep -q 'Signature=adhoc' "$RUNNER_TEMP/memcode-codesign.txt"
+          else
+            grep -q 'Authority=Developer ID Application:' "$RUNNER_TEMP/memcode-codesign.txt"
+            node --input-type=module -e "import {readFileSync} from 'node:fs'; import {assertPublicMacTrust} from './scripts/macos-release-trust.mjs'; assertPublicMacTrust(JSON.parse(readFileSync('release/macos-release-trust.json','utf8')));"
+          fi
           env -u MEMCODE_NODE_PATH -u NODE_PATH PATH=/usr/bin:/bin "$APP/Contents/Resources/desktop-runtime/node" --version > "$RUNNER_TEMP/memcode-bundled-node.txt"
           test "$(cat "$RUNNER_TEMP/memcode-bundled-node.txt")" = "v${{ steps.runtime.outputs.version }}"
           node --input-type=module <<'NODE'
@@ -103,6 +139,10 @@ jobs:
           writeFileSync(join(process.env.RUNNER_TEMP,'memcode-macos-compatibility.json'),JSON.stringify(compatibility,null,2));
           console.log(JSON.stringify(compatibility));
           NODE
+
+      - name: Cold-start the actual packaged app in a fresh private profile
+        timeout-minutes: 2
+        run: node scripts/macos-cold-start.mjs
 
       - name: Verify the updater and collect bounded candidate files
         run: |
@@ -133,7 +173,13 @@ jobs:
             target: 'aarch64-apple-darwin',
             published: false,
             updaterSignatureVerified: true,
-            macOS: { ...JSON.parse(readFileSync(join(process.env.RUNNER_TEMP, 'memcode-macos-compatibility.json'), 'utf8')), signing: 'ad-hoc', developerIdSigned: false, notarized: false, gatekeeperAcceptance: 'not-established' },
+            macOS: {
+              ...JSON.parse(readFileSync(join(process.env.RUNNER_TEMP, 'memcode-macos-compatibility.json'), 'utf8')),
+              ...JSON.parse(readFileSync('release/macos-release-trust.json', 'utf8')),
+              signing: process.env.MEMCODE_MACOS_RELEASE_MODE === 'public-release' ? 'developer-id' : 'ad-hoc',
+              gatekeeperAcceptance: process.env.MEMCODE_MACOS_RELEASE_MODE === 'public-release' ? 'accepted' : 'manual-approval-required',
+            },
+            nativeColdStart: JSON.parse(readFileSync('release/macos-cold-start.json', 'utf8')),
             packagedRuntime: JSON.parse(readFileSync('dist-desktop-runtime/provenance.json', 'utf8')),
             files,
           };
@@ -141,7 +187,19 @@ jobs:
           writeFileSync(join(output, 'candidate.json'), metadata);
           writeFileSync(join(output, 'SHA256SUMS'), [...files.map(file => `${file.sha256}  ${file.name}`), `${digest(metadata)}  candidate.json`].join('\n') + '\n');
           NODE
-          printf '%s\n' 'Private candidate only. The updater is cryptographically signed; the macOS app is ad-hoc signed and NOT notarized. Gatekeeper approval and a cold-install/account/engine test are still required.' >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "Candidate mode: $MEMCODE_MACOS_RELEASE_MODE. Private-candidate mode is NOT Apple-notarized and needs explicit per-app beta approval. Public-release mode requires verified Developer ID, app/DMG tickets and Gatekeeper acceptance. The fresh-profile transport smoke does not replace physical Mac installation, sign-in, managed-engine and UI acceptance." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload bounded cold-start evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: MemCode-macos-cold-start-${{ github.sha }}
+          path: |
+            release/macos-cold-start.json
+            release/macos-cold-start.png
+            release/macos-release-trust.json
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload the private review candidate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

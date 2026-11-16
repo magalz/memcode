@@ -1,0 +1,461 @@
+.modal.wide:has(> .install-welcome) {
+  width: 1120px;
+  max-width: calc(100vw - 64px);
+  border-radius: 18px;
+  position: relative;
+  border-color: #c9d6ce;
+  overflow-x: hidden;
+}
+.modal:has(> .install-welcome) > .modal-heading {
+  position: absolute;
+  inset: 0 0 auto;
+  padding: 0;
+  height: 0;
+  z-index: 2;
+}
+.modal:has(> .install-welcome) > .modal-heading > :not(.modal-close) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.modal:has(> .install-welcome) .modal-close {
+  top: 17px;
+  right: 17px;
+  width: 28px;
+  height: 28px;
+  color: #bfd3c8;
+  background: #ffffff08;
+  border: 1px solid #ffffff0d;
+  border-radius: 7px;
+}
+.modal:has(> .install-welcome) .modal-close:hover {
+  background: #ffffff16;
+}
+.install-welcome {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.84fr) minmax(0, 1.36fr);
+  min-height: 600px;
+  background: #fbfdf9;
+}
+.install-welcome-copy {
+  padding: 35px 34px 24px;
+  display: flex;
+  flex-direction: column;
+}
+.install-welcome-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.install-welcome-brand .brand-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+}
+.install-welcome-brand strong {
+  display: block;
+  font-size: 21px;
+  letter-spacing: -0.8px;
+  font-weight: 590;
+}
+.install-welcome-brand div > span {
+  display: block;
+  margin-top: 5px;
+  font: 6.5px var(--mono);
+  letter-spacing: 1.4px;
+  color: #6b8174;
+}
+.install-welcome-message {
+  margin-top: 42px;
+  animation: install-welcome-message 0.55s ease both;
+}
+.install-welcome-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #6c8b78;
+  font: 7px var(--mono);
+  letter-spacing: 1.6px;
+}
+.install-welcome-eyebrow i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #22b293;
+}
+.install-welcome-message h3 {
+  color: #172e23;
+  font-size: clamp(29px, 3.05vw, 38px);
+  font-weight: 510;
+  line-height: 1.15;
+  letter-spacing: -1.8px;
+  white-space: pre-line;
+  margin: 18px 0 18px;
+}
+.install-welcome-message > p {
+  color: #6e8074;
+  font-size: 12px;
+  line-height: 1.9;
+  min-height: 78px;
+  max-width: 305px;
+}
+.install-welcome-promises {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  margin: 14px 0 26px;
+}
+.install-welcome-promises li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 10px;
+  color: #526e5c;
+}
+.install-welcome-promises svg {
+  color: #4b987b;
+}
+.install-welcome-actions {
+  margin-top: auto;
+}
+.install-welcome-actions > .button {
+  width: 100%;
+  min-height: 42px;
+  justify-content: space-between;
+  padding: 0 16px;
+  font-size: 11px;
+}
+.install-welcome-skip {
+  display: block;
+  padding: 13px 18px;
+  font-size: 10px;
+  color: #718278;
+  margin: 1px auto 8px;
+}
+.install-welcome-skip:hover {
+  color: #243f30;
+}
+.install-welcome-actions .guide-auto-preference {
+  display: flex;
+  align-items: flex-start;
+  font-size: 8px;
+  line-height: 1.6;
+  color: #849188;
+  margin: 0;
+  gap: 7px;
+}
+.install-welcome-actions .guide-auto-preference input {
+  width: 11px;
+  height: 11px;
+  margin-top: 1px;
+}
+.install-welcome-footnote {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 21px;
+  padding-top: 15px;
+  border-top: 1px solid #e7ede6;
+  font-size: 8px;
+  color: #8d9b90;
+}
+.install-welcome-footnote > span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.install-welcome-footnote kbd {
+  font-size: 8px;
+  padding: 1px 3px;
+}
+.install-welcome-stage {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  min-width: 0;
+  color: #c6ded1;
+  background: #091b13;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 70px 31px 30px;
+}
+.install-welcome-stage::before {
+  content: "";
+  z-index: -1;
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  right: -220px;
+  top: -280px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #24bca32d, #24bca300 68%);
+}
+.install-welcome-stage::after {
+  content: "";
+  z-index: -1;
+  position: absolute;
+  width: 550px;
+  height: 480px;
+  bottom: -290px;
+  left: -180px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #5ed2dc15, #5ed2dc00 68%);
+}
+.install-welcome-stage-grid {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background-image:
+    linear-gradient(#8cb6a108 1px, transparent 1px),
+    linear-gradient(90deg, #8cb6a108 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(ellipse at 45% 35%, black, transparent 73%);
+}
+.install-welcome-stage-top {
+  position: absolute;
+  inset: 42px 42px auto 32px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  font: 6.5px var(--mono);
+  letter-spacing: 1.2px;
+  color: #7ea68e;
+}
+.install-welcome-stage-top > span {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+.install-welcome-stage-top > span:last-child {
+  color: #647e6f;
+  font-size: 6px;
+}
+.install-welcome-stage-top i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #32d7b3;
+  box-shadow: 0 0 9px #32d7b34a;
+}
+.install-welcome-screen {
+  width: 100%;
+  border: 1px solid #51765c80;
+  border-radius: 9px;
+  overflow: hidden;
+  background: #f9fcf8;
+  box-shadow:
+    0 26px 60px #0005,
+    0 0 0 7px #e0f4e905,
+    0 0 0 8px #e0f4e908;
+  transform: translateY(4px);
+}
+.install-welcome-screen-bar {
+  height: 25px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #e8f0e8;
+  color: #778c7d;
+  font-size: 6px;
+  border-bottom: 1px solid #dce7dc;
+}
+.install-welcome-screen-bar > span:first-child {
+  display: flex;
+  gap: 4px;
+}
+.install-welcome-screen-bar > span:first-child i {
+  width: 4px;
+  height: 4px;
+  border: 1px solid #b3c4b7;
+  border-radius: 50%;
+}
+.install-welcome-screen-local {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.install-welcome-screen-local > i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #60a988;
+}
+.install-welcome-screen-images {
+  position: relative;
+  aspect-ratio: 1.35;
+  overflow: hidden;
+}
+.install-welcome-screen-images img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+.install-welcome-screen-images img.is-active {
+  opacity: 1;
+}
+.install-welcome-stage-bottom {
+  padding: 32px 2px 0;
+}
+.install-welcome-stage-bottom > p {
+  font-size: 13px;
+  font-weight: 440;
+  line-height: 1.5;
+  letter-spacing: -0.2px;
+  color: #cce5d6;
+}
+.install-welcome-stage-bottom > span {
+  display: block;
+  margin-top: 8px;
+  font-size: 8px;
+  color: #6b8876;
+}
+.install-welcome-carousel-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  min-height: 28px;
+}
+.install-welcome-pages {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.install-welcome-pages button {
+  display: grid;
+  place-items: center;
+  width: 29px;
+  height: 26px;
+}
+.install-welcome-pages button > span {
+  display: block;
+  width: 20px;
+  height: 3px;
+  background: #345341;
+  border-radius: 3px;
+  transition: background 0.3s;
+}
+.install-welcome-pages button.is-active > span {
+  background: #31ceb0;
+}
+.install-welcome-playback {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 2px 7px 10px;
+  font-size: 8px;
+  color: #86a28f;
+}
+.install-welcome-playback:hover {
+  color: #d8eade;
+}
+@keyframes install-welcome-message {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 850px) {
+  .install-welcome {
+    grid-template-columns: minmax(280px, 0.95fr) minmax(0, 1fr);
+    min-height: 590px;
+  }
+  .install-welcome-copy {
+    padding: 29px 25px 22px;
+  }
+  .install-welcome-message {
+    margin-top: 38px;
+  }
+  .install-welcome-stage {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+  .install-welcome-stage-top {
+    left: 23px;
+    right: 23px;
+  }
+  .install-welcome-stage-top > span:last-child {
+    display: none;
+  }
+  .install-welcome-stage-bottom > p {
+    font-size: 11px;
+  }
+}
+@media (max-width: 650px) {
+  .modal:has(> .install-welcome) {
+    max-width: calc(100vw - 32px);
+  }
+  .install-welcome {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  .install-welcome-stage {
+    padding: 52px 28px 20px;
+  }
+  .install-welcome-stage-top {
+    top: 23px;
+    left: 28px;
+  }
+  .install-welcome-screen {
+    width: 100%;
+    max-width: 380px;
+    margin: auto;
+  }
+  .install-welcome-screen-images {
+    aspect-ratio: 2.1;
+  }
+  .install-welcome-stage-bottom {
+    padding-top: 19px;
+  }
+  .install-welcome-stage-bottom > p,
+  .install-welcome-stage-bottom > span {
+    display: none;
+  }
+  .install-welcome-carousel-controls {
+    margin-top: 0;
+  }
+  .install-welcome-copy {
+    padding: 25px 28px;
+  }
+  .install-welcome-message {
+    margin-top: 26px;
+  }
+  .install-welcome-message > p {
+    min-height: 0;
+    max-width: none;
+  }
+  .install-welcome-promises {
+    margin: 20px 0 24px;
+  }
+  .install-welcome-footnote {
+    margin-top: 17px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .install-welcome *,
+  .install-welcome *::before,
+  .install-welcome *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
