@@ -9,13 +9,15 @@ export interface PeerIndexWaitOptions {
   timeoutMs?: number;
   readTimeoutMs?: number;
   pollMs?: number;
+  publicationMs?: number;
+  isCancelled?: () => boolean;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
 }
 const pathKey = (value: string) => {
   const normalized = value
-    .replace(/^\\\\\?\\/, "")
     .replaceAll("\\", "/")
+    .replace(/^\/\/\?\//, "")
     .replace(/\/$/, "");
   return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 };
@@ -24,6 +26,26 @@ const jobPath = (job: Json) =>
 const jobBranch = (job: Json) => job.branch ?? job.result?.branch;
 const usable = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= 500;
+
+/** Counts and a current repository summary are not a source/publication certificate. */
+export const verifiedIndexRevision = (
+  value: Json | null | undefined,
+  project: Project,
+  repoId: string,
+) =>
+  value?.ready === true &&
+  value.branch === project.branch &&
+  (!value.repo_id || value.repo_id === repoId) &&
+  (!value.worktree || pathKey(value.worktree) === pathKey(project.path!)) &&
+  value.source_unchanged_during_observation !== false &&
+  value.requested_source_matches !== false &&
+  value.requested_revision_matches !== false &&
+  value.default_branch_matches !== false &&
+  value.publication?.status !== "partial" &&
+  value.status !== "partial" &&
+  value.graph_revision?.status !== "partial" &&
+  value.retry_query_group !== true &&
+  value.graph_revision?.publication_unchanged_during_call !== false;
 
 /** Follow an existing owner's job. Never enqueue, clear a store or infer completion from a lease. */
 export async function waitForPeerIndex(
@@ -41,9 +63,18 @@ export async function waitForPeerIndex(
     started = now(),
     discoveryDeadline = started + (options.discoveryMs ?? 8000),
     deadline = started + (options.timeoutMs ?? 900000),
-    pollMs = options.pollMs ?? 1000;
-  const repoId = existingRepoId ?? response.repo_id;
-  if (!usable(repoId) || !project.path)
+    pollMs = Math.min(
+      10000,
+      Math.max(
+        options.pollMs ?? 1000,
+        typeof response.retry_after_s === "number" &&
+          Number.isFinite(response.retry_after_s)
+          ? Math.max(0, response.retry_after_s * 1000)
+          : 0,
+      ),
+    );
+  let repoId = existingRepoId ?? response.repo_id;
+  if (!project.path || (repoId !== undefined && !usable(repoId)))
     throw Error(
       "Memtrace reported a peer index without a verified repository identity and local checkout.",
     );
@@ -54,10 +85,24 @@ export async function waitForPeerIndex(
     throw Error(
       "The reported Memtrace index belongs to another repository or branch. This project's analysis was not adopted.",
     );
+  const requestedPath = pathKey(project.path),
+    requestedBranch = project.branch;
+  const assertActive = () => {
+    if (
+      options.isCancelled?.() ||
+      !project.path ||
+      pathKey(project.path) !== requestedPath ||
+      project.branch !== requestedBranch
+    )
+      throw Error(
+        "Memtrace analysis was cancelled or its local checkout/branch changed. Its result was not adopted.",
+      );
+  };
   const read = async (name: string, args: Json): Promise<any> => {
+    assertActive();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      return await Promise.race([
+      const result = await Promise.race([
         client.call(project, name, args),
         new Promise((_, reject) => {
           timer = setTimeout(
@@ -71,6 +116,8 @@ export async function waitForPeerIndex(
           );
         }),
       ]);
+      assertActive();
+      return result;
     } finally {
       clearTimeout(timer);
     }
@@ -88,14 +135,53 @@ export async function waitForPeerIndex(
       `Memtrace indexing job ${job.id} failed: ${job.error ?? job.message ?? "The engine did not provide an error."}`,
     );
   };
-  const binding = async () => {
+  let backgroundObserved = false;
+  const binding = async (trackedJob = false) => {
+    if (!repoId) {
+      const listed = await read("list_indexed_repositories", {});
+      const repos = Array.isArray(listed)
+        ? listed
+        : (listed?.repos ?? listed?.repositories ?? []);
+      const match = repos.find(
+        (repo: Json) =>
+          pathKey(repo.repo_path ?? repo.path ?? "") === requestedPath &&
+          (!repo.branch || repo.branch === requestedBranch),
+      );
+      if (!usable(match?.repo_id)) return null;
+      repoId = match.repo_id;
+    }
     const value = await read("get_query_revision", { repo_id: repoId });
-    return value?.ready === true && value.branch === project.branch
-      ? value
-      : null;
+    const exactSource =
+      value?.repo_id === repoId &&
+      typeof value.worktree === "string" &&
+      pathKey(value.worktree) === requestedPath &&
+      value.branch === requestedBranch;
+    if (exactSource) backgroundObserved = true;
+    if (!verifiedIndexRevision(value, project, repoId)) return null;
+    if (!trackedJob && !exactSource) {
+      const listed = await read("list_indexed_repositories", {});
+      const repos = Array.isArray(listed)
+        ? listed
+        : (listed?.repos ?? listed?.repositories ?? []);
+      if (
+        !repos.some(
+          (repo: Json) =>
+            repo.repo_id === repoId &&
+            pathKey(repo.repo_path ?? repo.path ?? "") === requestedPath &&
+            (!repo.branch || repo.branch === requestedBranch),
+        )
+      )
+        return null;
+    }
+    return value;
   };
   let current: Json | undefined;
-  while (now() <= discoveryDeadline && now() <= deadline) {
+  const publicationDeadline = Math.min(
+    deadline,
+    started + (options.publicationMs ?? 120000),
+  );
+  while (now() <= deadline) {
+    assertActive();
     const listed = await read("list_jobs", {});
     const jobs: Json[] = Array.isArray(listed)
       ? listed
@@ -136,7 +222,7 @@ export async function waitForPeerIndex(
       current = active[0];
     }
     if (current) break;
-    if (await binding()) return repoId;
+    if (await binding()) return repoId!;
     const acquired =
       typeof response.acquired_at === "string"
         ? Date.parse(response.acquired_at)
@@ -151,12 +237,21 @@ export async function waitForPeerIndex(
       )
       .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
     if (failed[0]) fail(failed[0]);
-    if (now() >= discoveryDeadline) break;
+    const waitUntil = backgroundObserved
+      ? publicationDeadline
+      : discoveryDeadline;
+    if (now() >= waitUntil) break;
     update(
-      "Memtrace reported an index owner; checking for this checkout's active job…",
+      backgroundObserved
+        ? "Waiting for Memtrace startup to publish verified code context…"
+        : "Memtrace reported an index owner; checking for this checkout's active job…",
     );
-    await sleep(Math.min(pollMs, Math.max(0, discoveryDeadline - now())));
+    await sleep(Math.min(pollMs, Math.max(0, waitUntil - now())));
   }
+  if (!current && backgroundObserved)
+    throw Error(
+      "Memtrace's startup graph has not finished verifying this checkout and branch. Retry to follow its publication; no duplicate index was queued.",
+    );
   if (!current)
     throw Error(
       "Memtrace reported another index owner, but no active job for this local checkout and branch could be verified. The owner may still be starting or its lease may be stale. Retry when it is ready; no duplicate index was queued.",
@@ -164,6 +259,7 @@ export async function waitForPeerIndex(
   let followed: Json = current;
   const trackedId = followed.id;
   while (now() <= deadline) {
+    assertActive();
     if (!belongs(followed))
       throw Error(
         "The existing Memtrace job changed repository or checkout scope. Its result was not adopted.",
@@ -177,7 +273,7 @@ export async function waitForPeerIndex(
       // Current Rust jobs omit branch while active. Their completion is useful
       // only after the engine independently certifies this exact branch/source.
       for (let attempt = 0; attempt < 3 && now() <= deadline; attempt++) {
-        if (await binding()) return repoId;
+        if (await binding(true)) return repoId!;
         if (attempt < 2) await sleep(pollMs);
       }
       throw Error(

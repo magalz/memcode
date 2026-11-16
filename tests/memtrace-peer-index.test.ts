@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { waitForPeerIndex } from "../runtime/memtrace-peer-index";
+import {
+  verifiedIndexRevision,
+  waitForPeerIndex,
+} from "../runtime/memtrace-peer-index";
 import { MemtraceEngine } from "../runtime/memtrace";
 import type { Project } from "../src/shared";
 
@@ -311,4 +314,189 @@ test("unresponsive owner diagnostics are bounded rather than inheriting a long b
     ),
     /list_jobs did not respond/,
   );
+});
+
+const backgroundRevision = (patch: Record<string, unknown> = {}) => ({
+  repo_id: "fixture",
+  worktree: project.path,
+  branch: "main",
+  ready: false,
+  status: "partial",
+  source_revision: "stable-source",
+  source_file_count: 2,
+  indexed_file_count: 2,
+  mismatched_files: 0,
+  source_unchanged_during_observation: true,
+  graph_revision: { publication_unchanged_during_call: false },
+  ...patch,
+});
+
+test("native bootstrap may hold the lease with no foreground job until its exact source publication converges", async () => {
+  let revisions = 0;
+  const names: string[] = [],
+    notes: string[] = [];
+  const options = clock();
+  const client = {
+    call: async (_p: Project, name: string) => {
+      names.push(name);
+      if (name === "list_jobs") return { jobs: [] };
+      if (name === "get_query_revision")
+        return backgroundRevision(
+          ++revisions < 6
+            ? {}
+            : {
+                ready: true,
+                status: "complete",
+                graph_revision: { publication_unchanged_during_call: true },
+              },
+        );
+      throw Error("Unexpected mutation " + name);
+    },
+  };
+  assert.equal(
+    await waitForPeerIndex(
+      client,
+      project,
+      skipped,
+      "fixture",
+      (n) => notes.push(n),
+      options,
+    ),
+    "fixture",
+  );
+  assert.equal(
+    revisions,
+    6,
+    "Wait continues beyond the short foreground job discovery budget",
+  );
+  assert.ok(notes.some((n) => n.includes("startup")));
+  assert.deepEqual([...new Set(names)].sort(), [
+    "get_query_revision",
+    "list_jobs",
+  ]);
+});
+
+test("a fresh peer owner without a repo ID is resolved only from the exact local repository", async () => {
+  let discoveries = 0;
+  const client = {
+    call: async (_p: Project, name: string) => {
+      if (name === "list_jobs") return [];
+      if (name === "list_indexed_repositories")
+        return ++discoveries === 1
+          ? []
+          : [
+              { repo_id: "wrong", path: project.path + "-other" },
+              { repo_id: "fixture", path: project.path, branch: "main" },
+            ];
+      if (name === "get_query_revision")
+        return backgroundRevision({
+          ready: true,
+          status: "complete",
+          graph_revision: { publication_unchanged_during_call: true },
+        });
+      throw Error("Unexpected " + name);
+    },
+  };
+  assert.equal(
+    await waitForPeerIndex(
+      client,
+      project,
+      { skipped: true, reason: "peer_indexing" },
+      undefined,
+      () => {},
+      clock(),
+    ),
+    "fixture",
+  );
+  assert.equal(discoveries, 2);
+});
+
+test("matching source counts cannot qualify an unpublished or changed-source background graph", async () => {
+  for (const patch of [
+    { ready: false, status: "partial" },
+    { source_unchanged_during_observation: false },
+    { requested_source_matches: false },
+    { graph_revision: { publication_unchanged_during_call: false } },
+  ]) {
+    const client = {
+      call: async (_p: Project, name: string) => {
+        if (name === "list_jobs") return { jobs: [] };
+        if (name === "get_query_revision")
+          return backgroundRevision({
+            ready: true,
+            status: "complete",
+            graph_revision: { publication_unchanged_during_call: true },
+            ...patch,
+          });
+        throw Error("Unexpected mutation " + name);
+      },
+    };
+    await assert.rejects(
+      waitForPeerIndex(client, project, skipped, "fixture", () => {}, {
+        ...clock(),
+        publicationMs: 50,
+      }),
+      /startup graph.*not finished verifying.*no duplicate/,
+    );
+  }
+});
+
+test("jobless source certificates for another checkout or branch never qualify", async () => {
+  for (const patch of [
+    { worktree: project.path + "-other" },
+    { branch: "other" },
+    { repo_id: "other" },
+  ]) {
+    const value = backgroundRevision({
+      ready: true,
+      status: "complete",
+      graph_revision: { publication_unchanged_during_call: true },
+      ...patch,
+    });
+    assert.equal(verifiedIndexRevision(value, project, "fixture"), false);
+  }
+  if (process.platform === "win32")
+    assert.equal(
+      verifiedIndexRevision(
+        backgroundRevision({
+          ready: true,
+          status: "complete",
+          worktree: "//?/" + project.path!.replaceAll("\\", "/"),
+          graph_revision: { publication_unchanged_during_call: true },
+        }),
+        project,
+        "fixture",
+      ),
+      true,
+      "Rust canonical Windows worktree paths identify the same checkout",
+    );
+});
+
+test("cancellation or checkout/branch changes stop background publication adoption", async () => {
+  for (const change of ["cancel", "path", "branch"]) {
+    const selected = { ...project },
+      options = clock();
+    let cancelled = false;
+    const client = {
+      call: async (_p: Project, name: string) => {
+        if (name === "list_jobs") return { jobs: [] };
+        if (name === "get_query_revision") return backgroundRevision();
+        throw Error("Unexpected mutation " + name);
+      },
+    };
+    const sleep = options.sleep;
+    await assert.rejects(
+      waitForPeerIndex(client, selected, skipped, "fixture", () => {}, {
+        ...options,
+        isCancelled: () => cancelled,
+        sleep: async (ms) => {
+          await sleep(ms);
+          if (change === "cancel") cancelled = true;
+          if (change === "path") selected.path += "-rebound";
+          if (change === "branch") selected.branch = "another";
+        },
+      }),
+      /cancelled or its local checkout\/branch changed/,
+    );
+  }
 });

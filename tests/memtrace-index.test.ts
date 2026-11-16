@@ -48,10 +48,39 @@ for (const [shape, rows] of [
     assert.equal(await f.engine.analyze(project, () => {}), project.repoId);
     assert.deepEqual(
       f.calls.map((call) => call.name),
-      ["list_indexed_repositories"],
+      ["list_indexed_repositories", "get_query_revision"],
     );
   });
 }
+
+test("a current summary waits for independently verified startup publication without enqueueing", async () => {
+  const f = fixture([repository]);
+  const original = f.engine.call;
+  let reads = 0;
+  f.engine.call = async (p, name, args) => {
+    if (name === "list_jobs") return { jobs: [] };
+    if (name === "get_query_revision")
+      return {
+        ready: ++reads >= 3,
+        branch: project.branch,
+        repo_id: project.repoId,
+        worktree: project.path,
+        source_unchanged_during_observation: true,
+        graph_revision: { publication_unchanged_during_call: reads >= 3 },
+      };
+    return original(p, name, args);
+  };
+  try {
+    assert.equal(await f.engine.analyze(project, () => {}), project.repoId);
+    assert.equal(reads, 3);
+    assert.equal(
+      f.calls.some((c) => c.name === "index_directory"),
+      false,
+    );
+  } finally {
+    await f.engine.close();
+  }
+});
 
 test("refresh preserves existing identity and requests incremental indexing of the selected branch", async () => {
   const f = fixture({ repos: [repository] });
@@ -87,4 +116,27 @@ test("job completion for a different source branch is rejected", async () => {
     f.engine.analyze(project, () => {}, true),
     /not verified/,
   );
+});
+
+test("native alreadyUpToDate admission still requires a verified revision, not a foreground job", async () => {
+  const f = fixture([repository]),
+    original = f.engine.call;
+  let submissions = 0;
+  f.engine.call = async (p, name, args) => {
+    if (name === "index_directory") {
+      submissions++;
+      return { alreadyUpToDate: true, repo_id: project.repoId };
+    }
+    if (name === "list_jobs") return { jobs: [] };
+    return original(p, name, args);
+  };
+  try {
+    assert.equal(
+      await f.engine.analyze(project, () => {}, true),
+      project.repoId,
+    );
+    assert.equal(submissions, 1);
+  } finally {
+    await f.engine.close();
+  }
 });

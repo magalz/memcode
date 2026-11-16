@@ -21,7 +21,7 @@ import {
   pendingMemtraceOwner,
   disconnectedMemtraceClient,
 } from "./memtrace-owner";
-import { waitForPeerIndex } from "./memtrace-peer-index";
+import { verifiedIndexRevision, waitForPeerIndex } from "./memtrace-peer-index";
 import { appVersion } from "../src/version";
 
 type Json = Record<string, any>;
@@ -631,7 +631,36 @@ export class MemtraceEngine {
       (repo) =>
         pathKey(repo.repo_path ?? repo.path ?? "") === pathKey(project.path!),
     );
-    if (!force && match?.index_state === "current") return match.repo_id;
+    const connection = this.clients.get(project.id),
+      scope = this.scopes.get(project.id);
+    const isCancelled = () =>
+      this.closing ||
+      this.clients.get(project.id) !== connection ||
+      this.scopes.get(project.id) !== scope;
+    const assertActive = () => {
+      if (isCancelled())
+        throw Error(
+          "Memtrace analysis was cancelled or its engine binding changed. Its result was not adopted.",
+        );
+    };
+    if (!force && match?.index_state === "current") {
+      const revision = await this.call(project, "get_query_revision", {
+        repo_id: match.repo_id,
+      });
+      assertActive();
+      if (verifiedIndexRevision(revision, project, match.repo_id))
+        return match.repo_id;
+      // Native startup can publish the repository summary before its independent
+      // source certificate. Follow that publication without enqueueing a duplicate.
+      return waitForPeerIndex(
+        this,
+        project,
+        { repo_id: match.repo_id, branch: project.branch },
+        match.repo_id,
+        update,
+        { isCancelled },
+      );
+    }
     update("Reading the project structure and building its code graph…");
     const queueIndex = () =>
       this.call(project, "index_directory", {
@@ -642,9 +671,11 @@ export class MemtraceEngine {
         branch: project.branch,
       });
     const job = await queueIndex();
+    assertActive();
     if (
       (job.skipped && job.reason === "peer_indexing") ||
-      job.reason === "repository_busy"
+      job.reason === "repository_busy" ||
+      job.alreadyUpToDate === true
     )
       return waitForPeerIndex(
         this,
@@ -652,6 +683,7 @@ export class MemtraceEngine {
         job,
         match?.repo_id ?? project.repoId,
         update,
+        { isCancelled },
       );
     if (job.skipped)
       throw new Error(
@@ -663,9 +695,11 @@ export class MemtraceEngine {
       );
     for (let i = 0; i < 600; i++) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
+      assertActive();
       const status = await this.call(project, "check_job_status", {
         job_id: job.job_id,
       });
+      assertActive();
       update(`Analyzing code · ${status.stage ?? status.status ?? "working"}`);
       if (status.status === "failed")
         throw new Error(status.error ?? "Project analysis failed");
@@ -697,8 +731,8 @@ export class MemtraceEngine {
           revision = await this.call(project, "get_query_revision", {
             repo_id: repoId,
           });
-          if (revision?.ready === true && revision.branch === project.branch)
-            return repoId;
+          assertActive();
+          if (verifiedIndexRevision(revision, project, repoId)) return repoId;
           if (attempt < 2)
             await new Promise((resolve) => setTimeout(resolve, 1000));
         }
