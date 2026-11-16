@@ -20,8 +20,9 @@ not OSI-approved open source. A public repository does not remove that
 restriction. No source-code license can promise to prevent every misuse.
 
 Memtrace and MemDB remain separately licensed proprietary products. MemCode
-uses the installed Memtrace engine through its public interfaces; their
-implementation is not part of this source release. The beta's unlimited
+uses Memtrace through its public interfaces. Official desktop installers include
+a separately licensed compiled engine bundle; its backend source is not part
+of this source release. The beta's unlimited
 Memtrace allowance applies inside an authorized MemCode beta session. It does
 not include model-provider usage, an account-wide enterprise plan or a right
 to redistribute the engine independently.

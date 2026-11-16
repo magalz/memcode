@@ -4,7 +4,8 @@ The declared minimum is **macOS 13.5 on Apple Silicon**. The bundled Node
 24.22.3 [release build requirements](https://github.com/nodejs/node/blob/v24.22.3/BUILDING.md#platform-list)
 set that minimum. Packaging records the actual Mach-O minimum versions of both
 MemCode and bundled Node, compares them with Tauri's configuration and the app's
-Info.plist, and fails if the declared support is older than either binary needs.
+Info.plist. Engine acceptance also inspects all four extracted engine Mach-O
+minimum versions and fails if declared support is older than any bundled binary.
 This static compatibility check does not replace physical Mac acceptance.
 
 The `Private macOS desktop candidate` workflow builds an Apple Silicon app,
@@ -33,8 +34,9 @@ checksums recorded in `scripts/desktop-node.json`. It checks types, behavior and
 third-party notices before packaging. It verifies the app signature, directly
 runs its bundled Node with global Node lookup disabled, and uses the actual
 Tauri updater verifier against the configured public key before collecting
-files. These checks do not launch the app or establish a successful account or
-engine connection.
+files. The native cold-start check separately launches the real app. Engine
+acceptance runs the real packaged Node and separately tests the compiled engine;
+its evidence boundaries are described below.
 
 The shared live worker browser currently depends on Windows WebView2. This
 macOS packaging workflow does not provide or establish full live-browser or
@@ -49,10 +51,13 @@ The uploaded artifact contains:
   signing limitations, file sizes and hashes.
 - `SHA256SUMS` for these files and the metadata.
 
-No proprietary Memtrace engine or engine source is added to this artifact by
-the workflow. MemCode downloads its separately licensed engine after explicit
-beta approval. Normal project data and credentials do not exist in this clean
-CI checkout.
+The separately licensed **compiled Memtrace engine is included** as the immutable
+reviewed `memtrace-engine/engine.zip`, its pinned manifest and license notices.
+No proprietary engine source is copied into this repository. After explicit beta
+approval, MemCode validates and extracts this local payload into its private
+profile. A verified cache is reused before network access. A separate global
+Memtrace CLI installation and its credentials are not replaced. Normal project
+data and credentials do not exist in the clean CI checkout.
 
 ## Explicit distribution modes
 
@@ -72,7 +77,11 @@ signing. The private workflow's automatic branch pushes explicitly select
 - **public-release** requires a Developer ID Application certificate, complete
   notarization authentication, app and DMG stapled tickets, accepted Gatekeeper
   assessments and an independently checked updater archive containing the
-  already-stapled app. A Tauri updater signature alone is insufficient.
+  already-stapled app. The four extracted engine executables must independently
+  pass Developer ID, hardened-runtime and Gatekeeper checks as well. An opaque
+  archive inside a signed app is not that proof; the current ad-hoc engine pin
+  therefore cannot qualify as a trusted public release. A Tauri updater signature
+  alone is insufficient.
 
 For trusted public mode, add protected GitHub secrets `APPLE_CERTIFICATE`
 (base64 `.p12`), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`
@@ -119,6 +128,42 @@ in the candidate.
 Test the downloaded DMG on a separate Mac/profile, including normal Gatekeeper
 handling, launch, browser consent, Keychain persistence, managed engine and a
 local project analysis. A release-to-release updater restart is a separate gate.
+
+## Fresh-machine engine acceptance
+
+Every candidate runs `node scripts/bundled-engine-acceptance.mjs --prepare-only`.
+The helper executes with the **Node inside the completed app**, fresh HOME and
+XDG directories and `PATH=/usr/bin:/bin`. It refuses a discoverable global
+Memtrace CLI. Engine downloads are disabled by an injected fetch function that
+throws. Preparation must succeed from the bundled archive, succeed from the
+verified cache and succeed again in another Node process. The actual app,
+updater and read-only mounted DMG must contain the same manifest/archive bytes.
+The report also records the actual engine version and native minimum OS values.
+
+For the authenticated native integration test, manually dispatch with
+`engine_acceptance=true`. A release owner first obtains a **dedicated real
+browser-approved beta session** and provides the temporary repository secret
+`MEMCODE_MAC_ENGINE_ACCEPTANCE_GRANT` containing its device/session binding and
+refresh token. Never reuse a normal user session, put this JSON in source, echo
+it or attach it to an artifact. The helper uses the production refresh endpoint,
+verifies its signed access proof against the official JWKS, and passes only a
+short-lived proof file and binding to the engine. It creates a disposable Git
+project, indexes it through MemCode's real `MemtraceEngine`, retrieves a symbol
+and requires an aligned source/index revision. It starts the native watch, saves
+a new symbol and requires retrieval and alignment without submitting another
+index job. It revokes the rotated test grant and deletes the proof in `finally`.
+Remove the temporary repository secret after the run; a consumed grant is not a
+reusable CI credential.
+
+Only content-free numeric/boolean/stage reports are uploaded. Native stderr,
+source, account metadata and tokens are not retained in these artifacts. A
+missing grant or failed graph/watch is a failed authenticated test, not inferred
+success. These checks establish native Mac engine/account integration; browser
+approval may have occurred on another computer. They do **not** claim that Mac
+browser consent, native Keychain persistence or the project-picker UI was tested.
+Those remain part of physical Mac acceptance. Original engine archive bytes are
+preserved; this test does not establish Apple notarization of the extracted
+engine executables or remove the current manual beta approval requirement.
 
 The workflow source has been prepared on Windows. A successful macOS build,
 installer and cold-start test must be recorded from the actual workflow and Mac;

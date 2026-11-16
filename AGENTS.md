@@ -1,7 +1,9 @@
 # MemCode
 
-MemCode is an independent Tauri app. It uses the installed Memtrace engine;
-do not copy the Memtrace backend into this repository.
+MemCode is an independent Tauri app. Official installers include a pinned,
+separately licensed compiled Memtrace engine, staged during release packaging.
+Do not copy the Memtrace backend source into this repository or commit generated
+engine binaries. Keep managed engines separate from a user's global CLI setup.
 
 ## Product
 

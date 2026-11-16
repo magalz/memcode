@@ -406,7 +406,7 @@ export const guideArticles: GuideArticle[] = [
     caption: "Connect Memtrace separately from approving a coding worker.",
     steps: [
       "Open Settings or the account control in the top bar, then choose Connect Memtrace beta.",
-      "Approve the intended account in the official browser flow. MemCode downloads and verifies its local engine after approval; the desktop installer already includes Node.js.",
+      "Approve the intended account in the official browser flow. The Mac and Windows installers include Memtrace and Node.js; MemCode verifies and prepares its private local engine after approval.",
       "Choose Change account to approve a different account. Cancel stops a pending sign-in. Finish active workers before changing their engine access.",
       "Sign out of Memtrace beta pauses analysis until you reconnect or explicitly choose Use existing CLI setup. Local projects and coding-provider sign-ins stay saved; MemCode never silently falls back to a paid CLI plan.",
       "Approve coding adapters separately in Workers. Memtrace access and a coding provider’s authentication serve different roles.",

@@ -12,9 +12,10 @@ internal company development, requires a separate license. See
 
 ## Use the desktop beta
 
-Published installers include Node.js. Choose **Connect Memtrace beta** and
-approve your account in the browser; MemCode then downloads and verifies its
-separately licensed local Memtrace engine. A separate Memtrace CLI is not
+Published installers include Node.js and a verified, separately licensed
+Memtrace engine bundle. Choose **Connect Memtrace beta** and approve your account
+in the browser; MemCode prepares the included engine in its private app storage.
+A separate Memtrace CLI is not
 required for beta use. Git and your chosen coding tool still need to be
 installed and configured. The shared native agent browser currently requires
 Windows WebView2.
@@ -60,11 +61,19 @@ npm run build:native
 npm start
 ```
 
-Development checkouts open the real MemCode dogfood project with **9 epics and 38
-stories**. A separate **Design preview** project is clearly labelled as example data.
+Fresh checkouts and installers start with onboarding, without a development backlog.
+A separate **Design preview** project is clearly labelled as example data.
 Use **Add a project**
 to choose an existing folder or start a new Git repository from a project brief.
-MemCode then connects to the installed Memtrace engine to analyze it.
+MemCode then uses its managed Memtrace engine to analyze it. A valid private engine
+cache is checked before any download, so restarting does not require the engine
+release service. Account sign-in and renewal still need the Memtrace service.
+
+An existing global Memtrace CLI can stay installed. MemCode's managed engine does
+not replace its executable, settings or credentials, and each project's MemCode
+graph stays under `.memcode/memtrace`. **Use existing CLI setup** remains an
+explicit advanced option with that CLI account's plan and limits. See
+[bundled engine](docs/bundled-engine.md).
 
 ## The first working version
 

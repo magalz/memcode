@@ -109,6 +109,7 @@ test("an updater signature alone cannot qualify a Mac candidate as trusted", () 
     dmgLayoutVerified: true,
     teamId: "ABCDEFGHIJ",
     nestedMachOCount: 2,
+    bundledEngineNativeTrust: { developerIdSigned: true, gatekeeper: "accepted", nativeExecutables: 4 },
   };
   assert.equal(assertPublicMacTrust(complete), complete);
   for (const key of [
@@ -122,12 +123,15 @@ test("an updater signature alone cannot qualify a Mac candidate as trusted", () 
     "dmgGatekeeper",
     "dmgLayoutVerified",
     "signedNodeJitSmoke",
+    "bundledEngineNativeTrust",
   ]) {
     assert.throws(
       () => assertPublicMacTrust({ ...complete, [key]: undefined }),
       /not approved/,
     );
   }
+  assert.throws(() => assertPublicMacTrust({ ...complete, bundledEngineNativeTrust: { developerIdSigned: false, gatekeeper: "accepted", nativeExecutables: 4 } }), /not approved/);
+  assert.throws(() => assertPublicMacTrust({ ...complete, bundledEngineNativeTrust: { developerIdSigned: true, gatekeeper: "not-established", nativeExecutables: 4 } }), /not approved/);
 });
 
 test("the installer background is genuinely 2x at the configured logical size", async () => {

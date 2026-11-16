@@ -13,6 +13,16 @@ than the code linked into any one installer. License alternatives are preserved;
 MemCode uses permissive alternatives such as MIT where offered, rather than GPL
 or LGPL alternatives. Conjunctive licenses remain conjunctive.
 
+## Separately licensed Memtrace engine
+
+Official MemCode desktop installers include a tested compiled Memtrace engine.
+Its original archive and reviewed checksums are supplied in `memtrace-engine/`;
+the unchanged license, beta usage terms, dependency notices and build provenance
+are also available in `memtrace-engine/notices/`. The engine is separately
+licensed and is not covered by MemCode's PolyForm Noncommercial license. No
+Memtrace or MemDB backend source is included. The app activates the private
+engine after account approval without replacing an installed Memtrace CLI.
+
 ## Source access for MPL components
 
 The unmodified MPL-2.0 components listed below remain available under MPL-2.0.

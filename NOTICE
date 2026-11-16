@@ -11,6 +11,8 @@ does not replace or restrict rights granted by those components' licenses.
 Memtrace and its embedded MemDB engine are separately licensed proprietary
 software. Their source code is not included in this repository, and the
 MemCode license grants no rights to them.
+Official desktop installers include a separately licensed compiled Memtrace
+engine bundle. Its license and component notices accompany that bundle.
 
 MemCode, Memtrace and their logos are brand identifiers. The software license
 does not grant permission to imply official endorsement of a modified product.

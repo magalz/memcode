@@ -9,6 +9,7 @@ import {
   lstat,
   rm,
   open,
+  chmod,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -303,11 +304,14 @@ export function assertPublicMacTrust(proof) {
     proof.updaterAppGatekeeper !== "accepted" ||
     proof.dmgLayoutVerified !== true ||
     proof.signedNodeJitSmoke !== "passed" ||
+    proof.bundledEngineNativeTrust?.developerIdSigned !== true ||
+    proof.bundledEngineNativeTrust?.gatekeeper !== "accepted" ||
+    proof.bundledEngineNativeTrust?.nativeExecutables !== 4 ||
     !/^[A-Z0-9]{10}$/.test(proof.teamId ?? "") ||
     !(proof.nestedMachOCount >= 2)
   )
     throw Error(
-      "This macOS candidate is not approved for public distribution. Developer ID, notarization, stapled tickets in app and updater, Gatekeeper and installer layout must all be verified.",
+      "This macOS candidate is not approved for public distribution. Developer ID, notarization, stapled tickets in app and updater, Gatekeeper, extracted engine trust and installer layout must all be verified.",
     );
   return proof;
 }
@@ -336,6 +340,38 @@ export async function verifyMacRelease(root, signing) {
     signedRuntime: signing.signedRuntime ?? null,
   };
   if (signing.policy.mode === "public-release") {
+    // A signed/notarized container does not establish the trust of executables
+    // hidden in an immutable archive and later extracted into a private profile.
+    // Never rewrite vendor bytes or count the app signature as their signature.
+    const engineDirectory = join(app, "Contents/Resources/memtrace-engine");
+    const engineManifest = JSON.parse(await readFile(join(engineDirectory, "memcode-engine.json"), "utf8"));
+    const engineArchive = join(engineDirectory, "engine.zip");
+    const engineBytes = await readFile(engineArchive);
+    if (digest(engineBytes) !== engineManifest.sha256)
+      throw Error("The packaged engine archive differs from its reviewed manifest.");
+    const engineTemp = await mkdtemp(join(tmpdir(), "memcode-engine-trust-"));
+    try {
+      run("/usr/bin/ditto", ["-x", "-k", engineArchive, engineTemp]);
+      const names = ["memtrace", "memcore-server", "memcortex-daemon", "memcortex-mcp"];
+      const { spawnSync } = await import("node:child_process");
+      for (const name of names) {
+        const binary = join(engineTemp, name);
+        const expected = engineManifest.files.find(file => file.name === name);
+        const info = await lstat(binary);
+        if (!expected || !info.isFile() || info.isSymbolicLink() || digest(await readFile(binary)) !== expected.sha256)
+          throw Error("An extracted engine executable differs from its reviewed manifest.");
+        await chmod(binary, 0o700);
+        run("/usr/bin/codesign", ["--verify", "--strict", binary]);
+        const display = spawnSync("/usr/bin/codesign", ["--display", "--verbose=4", binary], { encoding: "utf8" });
+        const details = display.stdout + display.stderr;
+        if (display.status !== 0 || !details.includes("Authority=Developer ID Application:") || !details.includes("TeamIdentifier=" + proof.teamId) || !/flags=.*runtime/.test(details))
+          throw Error("Public Mac distribution requires separately Developer ID signed, hardened and notarized engine executables. This bundled engine has not established that trust; use an explicitly labelled manual-approval beta until a trusted engine release is pinned.");
+        run("/usr/sbin/spctl", ["--assess", "--type", "execute", "--verbose=4", binary]);
+      }
+      proof.bundledEngineNativeTrust = { developerIdSigned: true, gatekeeper: "accepted", nativeExecutables: names.length, archiveSha256: engineManifest.sha256 };
+    } finally {
+      await rm(engineTemp, { recursive: true, force: true });
+    }
     const actualNode = join(app, "Contents/Resources/desktop-runtime/node");
     if (
       digest(await readFile(actualNode)) !==

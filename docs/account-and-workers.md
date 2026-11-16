@@ -4,8 +4,8 @@
 
 Use the account button at the top right, or open Settings and choose
 **Connect Memtrace beta**. Approve the intended Memtrace account in the official
-browser flow. After that explicit approval, MemCode downloads and verifies its
-separately licensed local engine. Published installers include Node.js; a
+browser flow. After that explicit approval, MemCode verifies and prepares the
+separately licensed engine included in the installer. Published installers include Node.js; a
 separate global Node installation or Memtrace CLI is not required for beta use.
 
 Your source, local analysis graph and worker execution stay on your computer.

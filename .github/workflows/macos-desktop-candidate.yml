@@ -11,6 +11,10 @@ on:
           - manual-approval-beta
           - public-release
         default: private-candidate
+      engine_acceptance:
+        description: Run real account, fresh project graph and live watch acceptance with a dedicated approved test grant
+        type: boolean
+        default: false
   push:
     branches:
       - beta/memcode-desktop-candidate
@@ -144,7 +148,22 @@ jobs:
         timeout-minutes: 2
         run: node scripts/macos-cold-start.mjs
 
+      - name: Verify packaged engine copies and offline preparation without any installed CLI
+        timeout-minutes: 4
+        run: node scripts/bundled-engine-acceptance.mjs --prepare-only
+
+      - name: Verify real beta account, fresh local graph and live edit indexing on native Mac
+        if: github.event_name == 'workflow_dispatch' && inputs.engine_acceptance
+        timeout-minutes: 22
+        env:
+          # Dedicated test session approved in the official browser. Never the
+          # user's normal CLI account; the helper rotates and revokes it.
+          MEMCODE_MAC_ENGINE_ACCEPTANCE_GRANT: ${{ secrets.MEMCODE_MAC_ENGINE_ACCEPTANCE_GRANT }}
+        run: node scripts/bundled-engine-acceptance.mjs
+
       - name: Verify the updater and collect bounded candidate files
+        env:
+          ENGINE_ACCEPTANCE: ${{ github.event_name == 'workflow_dispatch' && inputs.engine_acceptance && 'true' || 'false' }}
         run: |
           node --input-type=module <<'NODE'
           import { mkdirSync, readFileSync, readdirSync, copyFileSync, writeFileSync } from 'node:fs';
@@ -180,6 +199,8 @@ jobs:
               gatekeeperAcceptance: process.env.MEMCODE_MACOS_RELEASE_MODE === 'public-release' ? 'accepted' : 'manual-approval-required',
             },
             nativeColdStart: JSON.parse(readFileSync('release/macos-cold-start.json', 'utf8')),
+            bundledEngine: JSON.parse(readFileSync('release/bundled-engine-darwin-prepare-only.json', 'utf8')),
+            authenticatedEngineAcceptance: process.env.ENGINE_ACCEPTANCE === 'true' ? JSON.parse(readFileSync('release/bundled-engine-darwin-real-account-index-watch.json', 'utf8')) : {tested:false,reason:'dedicated real account test not requested'},
             packagedRuntime: JSON.parse(readFileSync('dist-desktop-runtime/provenance.json', 'utf8')),
             files,
           };
@@ -187,7 +208,7 @@ jobs:
           writeFileSync(join(output, 'candidate.json'), metadata);
           writeFileSync(join(output, 'SHA256SUMS'), [...files.map(file => `${file.sha256}  ${file.name}`), `${digest(metadata)}  candidate.json`].join('\n') + '\n');
           NODE
-          printf '%s\n' "Candidate mode: $MEMCODE_MACOS_RELEASE_MODE. Private-candidate mode is NOT Apple-notarized and needs explicit per-app beta approval. Public-release mode requires verified Developer ID, app/DMG tickets and Gatekeeper acceptance. The fresh-profile transport smoke does not replace physical Mac installation, sign-in, managed-engine and UI acceptance." >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "Candidate mode: $MEMCODE_MACOS_RELEASE_MODE. Private-candidate mode is NOT Apple-notarized and needs explicit per-app beta approval. Public-release mode requires verified Developer ID, app/DMG tickets and Gatekeeper acceptance. The native cold-start and real engine integration checks do not replace physical Mac installation, browser sign-in, native Keychain and project-picker UI acceptance." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload bounded cold-start evidence even on failure
         if: always()
@@ -198,6 +219,8 @@ jobs:
             release/macos-cold-start.json
             release/macos-cold-start.png
             release/macos-release-trust.json
+            release/bundled-engine-darwin-prepare-only.json
+            release/bundled-engine-darwin-real-account-index-watch.json
           if-no-files-found: ignore
           retention-days: 7
 

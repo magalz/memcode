@@ -6,6 +6,9 @@ sign-in and noncommercial consent page. No coding worker is connected or started
 by this action.
 
 After approval, MemCode prepares its separately licensed local Memtrace engine.
+Published Mac and Windows installers include the verified engine bundle. A valid
+private cache is reused before reading the bundle or requesting a download.
+Source builds can retrieve the same pinned engine when no local copy is available.
 It analyzes the local project folder and keeps the graph in that project's
 private `.memcode/memtrace/.memdb` directory. Source files and graphs are not
 uploaded by beta authentication. A new project can still be saved for planning

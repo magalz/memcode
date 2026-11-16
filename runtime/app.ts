@@ -128,6 +128,7 @@ export async function createRuntime(
   });
   await telemetry.initialize();
   const managedEngine = new ManagedMemcodeEngine(store.dir, {
+    bundledDirectory: join(appPath, "memtrace-engine"),
     progress: (note) => beta?.reportEngineProgress(note),
   });
   const engine = new MemtraceEngine(

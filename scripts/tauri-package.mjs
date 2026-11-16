@@ -33,6 +33,10 @@ execFileSync(process.execPath, ["scripts/prepare-desktop-runtime.mjs"], {
   stdio: "inherit",
   windowsHide: true,
 });
+execFileSync(process.execPath, ["--import", "tsx", "scripts/prepare-memtrace-engine.mjs"], {
+  stdio: "inherit",
+  windowsHide: true,
+});
 execFileSync(process.execPath, ["scripts/build.mjs"], {
   stdio: "inherit",
   windowsHide: true,
@@ -43,8 +47,17 @@ const target =
     : process.platform === "darwin"
       ? "app,dmg"
       : "deb,appimage";
+const baseConfig = JSON.parse(await readFile("src-tauri/tauri.conf.json", "utf8"));
 const config = JSON.stringify({
-  bundle: { active: true, createUpdaterArtifacts: true },
+  bundle: {
+    active: true,
+    createUpdaterArtifacts: true,
+    // Keep development/no-bundle builds independent of installer downloads.
+    resources: {
+      ...baseConfig.bundle.resources,
+      "../dist-memtrace-engine/": "memtrace-engine/",
+    },
+  },
 });
 const cli = fileURLToPath(
   new URL("../node_modules/@tauri-apps/cli/tauri.js", import.meta.url),

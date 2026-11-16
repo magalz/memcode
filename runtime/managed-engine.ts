@@ -1,9 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { chmod, lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, open, readFile, readdir, rename, rm, writeFile, type FileHandle } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
-import { unzip } from 'fflate';
+import { setImmediate as yieldLoop } from 'node:timers/promises';
+import { Unzip, UnzipInflate } from 'fflate';
 import { z } from 'zod';
+import enginePins from '../scripts/memtrace-engine.json';
 
 const filename = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._+-]{0,120}$/).refine((value) => value !== '..');
 const fileSchema = z.object({ name: filename, sha256: z.string().regex(/^[a-f0-9]{64}$/), bytes: z.number().int().positive().max(350_000_000) }).strict();
@@ -28,6 +30,14 @@ function assetUrl(value: string) {
   return url.href;
 }
 async function digest(path: string) { const hash = createHash('sha256'); for await (const chunk of createReadStream(path)) hash.update(chunk); return hash.digest('hex'); }
+async function digestBytes(bytes: Uint8Array) {
+  const hash = createHash('sha256');
+  for (let offset = 0; offset < bytes.length; offset += 1024 * 1024) {
+    hash.update(bytes.subarray(offset, offset + 1024 * 1024));
+    await yieldLoop();
+  }
+  return hash.digest('hex');
+}
 async function bounded(response: Response, limit: number) {
   if (!response.ok || Number(response.headers.get('content-length') ?? 0) > limit) throw Error('The MemCode beta engine is not available yet. Try again when its release is published.');
   const reader = response.body?.getReader(); if (!reader) throw Error('The release service returned an empty response.');
@@ -36,27 +46,86 @@ async function bounded(response: Response, limit: number) {
   finally { await reader.cancel().catch(() => {}); }
   return Buffer.concat(chunks);
 }
-async function extracted(bytes: Uint8Array, bundle: MemcodeEngineBundle) {
+async function extractInto(bytes: Uint8Array, bundle: MemcodeEngineBundle, directory: string) {
   const expected = new Map(bundle.files.map((file) => [file.name, file]));
   if (expected.size !== bundle.files.length || bundle.files.reduce((sum, file) => sum + file.bytes, 0) > 750_000_000) throw Error('The beta engine manifest contains duplicate or oversized files.');
-  let invalid = false;
-  const files = await new Promise<Record<string, Uint8Array>>((resolveFiles, reject) => unzip(bytes, { filter: (file) => {
+  const files = new Map<string, { opened: Promise<FileHandle>; writes: Promise<void>; received: number; finished: boolean; verified: boolean }>();
+  const handles = new Set<FileHandle>();
+  let failure: Error | undefined, pending: Promise<void>[] = [];
+  const archive = new Unzip(file => {
     const match = expected.get(file.name);
-    if (!match || file.originalSize !== match.bytes) { invalid = true; return false; }
-    return true;
-  } }, (error, result) => error ? reject(error) : resolveFiles(result)));
-  if (invalid || Object.keys(files).length !== expected.size) throw Error('The beta engine archive does not match its manifest.');
-  for (const file of bundle.files) {
-    if (!files[file.name] || files[file.name].byteLength !== file.bytes || createHash('sha256').update(files[file.name]).digest('hex') !== file.sha256) throw Error('The beta engine file integrity check failed. No engine was activated.');
+    if (!match || file.originalSize !== match.bytes || files.has(file.name)) throw Error('The beta engine archive does not match its manifest.');
+    const hash = createHash('sha256');
+    const state = {
+      opened: open(join(directory, file.name), 'wx', 0o600).then(handle => { handles.add(handle); return handle; }),
+      writes: Promise.resolve(), received: 0, finished: false, verified: false,
+    };
+    files.set(file.name, state);
+    void state.opened.catch(error => { failure ??= error; });
+    file.ondata = (error, chunk, final) => {
+      if (error) { failure ??= error; return; }
+      if (state.finished || state.received + chunk.length > match.bytes) { failure ??= Error('The beta engine file exceeds its declared size.'); return; }
+      state.received += chunk.length;
+      state.finished = final;
+      state.writes = state.writes.then(async () => {
+        const handle = await state.opened;
+        if (failure) return;
+        // Hash/write bounded slices, with backpressure before feeding more ZIP
+        // input. Never retain the complete uncompressed executable in memory.
+        for (let offset = 0; offset < chunk.length; offset += 1024 * 1024) {
+          const part = chunk.subarray(offset, offset + 1024 * 1024);
+          hash.update(part);
+          for (let written = 0; written < part.length;) {
+            const result = await handle.write(part, written, part.length - written, null);
+            if (!result.bytesWritten) throw Error('The beta engine file could not be written.');
+            written += result.bytesWritten;
+          }
+        }
+        if (final) {
+          if (state.received !== match.bytes || hash.digest('hex') !== match.sha256) throw Error('The beta engine file integrity check failed. No engine was activated.');
+          state.verified = true;
+        }
+      });
+      pending.push(state.writes.catch(error => { failure ??= error; }));
+    };
+    file.start();
+  });
+  archive.register(UnzipInflate);
+  try {
+    for (let offset = 0; offset < bytes.length; offset += 16_384) {
+      archive.push(bytes.subarray(offset, offset + 16_384), offset + 16_384 >= bytes.length);
+      await Promise.all(pending); pending = [];
+      if (failure) throw failure;
+      await yieldLoop();
+    }
+    if (files.size !== expected.size || [...files.values()].some(file => !file.finished || !file.verified)) throw Error('The beta engine archive is incomplete. No engine was activated.');
+  } finally {
+    // Includes opens/writes queued by a malformed final ZIP push. Settle all I/O
+    // before closing files and letting the caller remove its private temp dir.
+    await Promise.allSettled([...files.values()].map(async file => { await file.opened; await file.writes; }));
+    await Promise.all([...handles].map(handle => handle.close()));
   }
-  return files;
 }
 export interface ManagedMemcodeEngineOptions {
-  /** A test seam only. Production calls the fixed official service over HTTPS. */
+  /** Immutable installer resources, resolved by the native host, never PATH. */
+  bundledDirectory?: string;
+  /** Test seams only. Production uses the reviewed pin compiled into this app. */
   fetch?: typeof fetch;
   platform?: NodeJS.Platform;
   arch?: string;
+  bundle?: unknown;
   progress?: (note: string) => void;
+}
+
+function manifestIdentity(bundle: MemcodeEngineBundle) {
+  // Sorting permits only harmless JSON/file-order differences, not different bytes.
+  return JSON.stringify({ ...bundle, files: [...bundle.files].sort((a, b) => a.name.localeCompare(b.name)) });
+}
+
+async function regularFile(path: string, maxBytes: number) {
+  const info = await lstat(path);
+  if (!info.isFile() || info.isSymbolicLink() || info.size > maxBytes) throw Error('The local Memtrace engine resource is not a bounded regular file.');
+  return info;
 }
 
 /** Installs the separately licensed engine into MemCode's private profile, never the global CLI. */
@@ -84,32 +153,70 @@ export class ManagedMemcodeEngine {
   }
   private async verify(directory: string, bundle: MemcodeEngineBundle) {
     try {
-      if ((await lstat(directory)).isSymbolicLink()) return false;
-      for (const file of bundle.files) { const path = join(directory, file.name), info = await lstat(path); if (!info.isFile() || info.isSymbolicLink() || info.size !== file.bytes || await digest(path) !== file.sha256) return false; }
+      const info = await lstat(directory);
+      if (!info.isDirectory() || info.isSymbolicLink()) return false;
+      const names = await readdir(directory), expected = new Set([...bundle.files.map(file => file.name), 'memcode-engine.json']);
+      if (names.length !== expected.size || names.some(name => !expected.has(name))) return false;
+      await this.checkManifest(join(directory, 'memcode-engine.json'), bundle);
+      for (const file of bundle.files) {
+        const path = join(directory, file.name), info = await regularFile(path, file.bytes);
+        if (info.size !== file.bytes || await digest(path) !== file.sha256) return false;
+        if (process.platform !== 'win32' && ['memtrace', 'memcore-server', 'memcortex-daemon', 'memcortex-mcp'].includes(file.name) && !(info.mode & 0o100)) return false;
+      }
       return true;
     } catch { return false; }
   }
+  private async checkManifest(path: string, bundle: MemcodeEngineBundle) {
+    await regularFile(path, 32_768);
+    const local = memcodeEngineBundleSchema.parse(JSON.parse(await readFile(path, 'utf8')));
+    if (manifestIdentity(local) !== manifestIdentity(bundle)) throw Error('The local Memtrace engine does not match this MemCode release. No engine was activated.');
+  }
+  private async archive(bundle: MemcodeEngineBundle): Promise<Uint8Array> {
+    const directory = this.options.bundledDirectory;
+    if (directory) {
+      let info;
+      try { info = await lstat(directory); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+      if (info) {
+        // A damaged installed resource is not an invitation to trust another
+        // manifest or silently choose an installed global CLI.
+        if (!info.isDirectory() || info.isSymbolicLink()) throw Error('The bundled Memtrace engine directory is invalid. Reinstall MemCode.');
+        await this.checkManifest(join(directory, 'memcode-engine.json'), bundle);
+        const path = join(directory, 'engine.zip'), file = await regularFile(path, bundle.bytes);
+        if (file.size !== bundle.bytes) throw Error('The bundled Memtrace engine archive size is invalid. Reinstall MemCode.');
+        this.options.progress?.('Preparing the bundled Memtrace engine…');
+        return readFile(path);
+      }
+    }
+    // Source checkouts and older installations can recover the exact reviewed
+    // engine. Never consult a moving online manifest before a usable local copy.
+    this.options.progress?.('Downloading the separately licensed Memtrace beta engine…');
+    return bounded(await (this.options.fetch ?? fetch)(assetUrl(bundle.url), { redirect: 'error', signal: AbortSignal.timeout(180_000) }), bundle.bytes);
+  }
   private async install(): Promise<string> {
     if (!['windows', 'macos', 'linux'].includes(this.platform) || !['x86_64', 'aarch64'].includes(this.arch)) throw Error('A MemCode beta engine has not been published for this platform.');
-    const request = this.options.fetch ?? fetch;
-    this.options.progress?.('Checking the MemCode beta engine…');
-    const body = await bounded(await request(`https://www.memtrace.io/api/memcode/engine/${this.platform}/${this.arch}`, { redirect: 'error', signal: AbortSignal.timeout(12_000), headers: { accept: 'application/json' } }), 32_768);
-    const envelope = JSON.parse(body.toString('utf8'));
-    const bundle = memcodeEngineBundleSchema.parse(envelope.bundle);
-    if (bundle.platform !== this.platform || bundle.arch !== this.arch) throw Error('The release service returned the wrong engine platform.');
-    const url = assetUrl(bundle.url), executable = this.platform === 'windows' ? 'memtrace.exe' : 'memtrace';
+    const pins = enginePins.bundles as Record<string, unknown>;
+    const candidate = this.options.bundle ?? pins[`${this.platform}-${this.arch}`];
+    if (!candidate) throw Error('A MemCode beta engine has not been published for this platform.');
+    const bundle = memcodeEngineBundleSchema.parse(candidate);
+    if (bundle.platform !== this.platform || bundle.arch !== this.arch) throw Error('The engine pin belongs to a different platform.');
+    assetUrl(bundle.url);
+    const executable = this.platform === 'windows' ? 'memtrace.exe' : 'memtrace';
     if (!bundle.files.some((file) => file.name === executable)) throw Error('The beta engine executable is missing from its manifest.');
+    const names = new Set(bundle.files.map(file => file.name.toLowerCase()));
+    if (names.size !== bundle.files.length || names.has('memcode-engine.json') || bundle.files.reduce((sum, file) => sum + file.bytes, 0) > 750_000_000) throw Error('The beta engine manifest contains duplicate or oversized files.');
+    this.options.progress?.('Checking the local Memtrace engine…');
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     if ((await lstat(this.directory)).isSymbolicLink()) throw Error('The private engine directory must not be a symbolic link.');
     const destination = join(this.directory, `${bundle.id}-${this.platform}-${this.arch}`);
     if (!await this.verify(destination, bundle)) {
-      this.options.progress?.('Downloading the separately licensed Memtrace beta engine…');
-      const archive = await bounded(await request(url, { redirect: 'error', signal: AbortSignal.timeout(180_000) }), bundle.bytes);
-      if (archive.length !== bundle.bytes || createHash('sha256').update(archive).digest('hex') !== bundle.sha256) throw Error('The beta engine archive checksum failed. No engine was activated.');
-      const files = await extracted(archive, bundle), temporary = join(this.directory, `.install-${randomUUID()}`);
+      const archive = await this.archive(bundle);
+      if (archive.length !== bundle.bytes || await digestBytes(archive) !== bundle.sha256) throw Error('The beta engine archive checksum failed. No engine was activated.');
+      const temporary = join(this.directory, `.install-${randomUUID()}`);
       await mkdir(temporary, { mode: 0o700 });
       try {
-        for (const file of bundle.files) { const path = join(temporary, file.name); await writeFile(path, files[file.name], { flag: 'wx', mode: 0o600 }); if (this.platform !== 'windows' && !/\.(txt|md|json)$/i.test(file.name) && !/^(LICENSE|NOTICE)/i.test(file.name)) await chmod(path, 0o700); }
+        await extractInto(archive, bundle, temporary);
+        for (const file of bundle.files) if (this.platform !== 'windows' && !/\.(txt|md|json)$/i.test(file.name) && !/^(LICENSE|NOTICE)/i.test(file.name)) await chmod(join(temporary, file.name), 0o700);
         await writeFile(join(temporary, 'memcode-engine.json'), JSON.stringify(bundle, null, 2), { flag: 'wx', mode: 0o600 });
         // Preserve an unexpected prior installation for diagnosis; never overwrite it.
         try { await lstat(destination); await rename(destination, destination + `.invalid-${Date.now()}`); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
