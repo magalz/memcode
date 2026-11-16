@@ -59,9 +59,10 @@ jobs:
         run: npm ci
 
       - name: Check types, behavior and license material
+        timeout-minutes: 5
         run: |
           npm run typecheck
-          npm test
+          node --import tsx --test --test-reporter=tap --test-timeout=90000 tests/*.test.ts
           node scripts/verify-third-party-notices.mjs
 
       - name: Build the private app, disk image and signed updater
