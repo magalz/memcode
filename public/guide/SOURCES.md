@@ -1,6 +1,6 @@
 # Guide image sources
 
-Most images are unmodified screenshots of MemCode's actual native UI, captured from an independent disposable onboarding QA profile rather than the user's production profile. Built-in Design preview content is seeded example content. The Team and Terminal illustrations use synthetic renderer fixtures, documented below. A screenshot of a UI or empty state does not verify a model run, code quality or token-saving claim.
+Most images are unmodified screenshots of MemCode's actual native UI, captured from an independent disposable onboarding QA profile rather than the user's production profile. Built-in Design preview content is seeded example content. The Team, Terminal and Account illustrations use synthetic renderer fixtures, documented below. A screenshot of a UI or empty state does not verify a model run, code quality or token-saving claim.
 
 The capture script does not launch coding models, grant worker access, sign in, record audio, download models or alter project source. It may add an ordinary file-reference message in the temporary QA story and open a local browser tab. It starts and closes only its own illustrative local terminal.
 
@@ -19,7 +19,7 @@ Captured: 2026-11-14T21:10:48.871Z
 | delivery.png | Built-in Design preview (seeded examples) | Delivery charts in the labelled example/current empty state; no claimed performance improvement. |
 | project.png | Disposable onboarding QA project | Actual create/open project dialog. No project is created by this capture script. |
 | workers.png | Disposable onboarding QA project | Actual installed/approved worker connection states; no approval was performed for this image. |
-| account.png | Disposable onboarding QA project | Actual read-only status of the installed Memtrace session. No sign-in was initiated; a valid license/session is not presented as a verified person identity. |
+| account.png | Actual BetaAccess component; synthetic disconnected fixture, captured 2026-11-16 | Current Connect Memtrace beta panel. Visible example label, no account connected. No browser consent, engine download, real credentials or worker; capture verified zero external requests. |
 | dictation.png | Disposable onboarding QA project | Actual local dictation setup/status. This capture never downloads a model, records audio or changes settings. |
 | story.png | Disposable onboarding QA project | Actual brief-only onboarding story. Its worker has not been started. |
 | routing.png | Disposable onboarding QA project; same frame as story.png | The same actual story inspector shows measured/provisional routing state honestly; no route metrics were injected. |
