@@ -323,7 +323,6 @@ export async function installNativeBridge(): Promise<void> {
     stopWorker: (id) => call("worker:stop", id),
     createEpic: (input) => call("epic:create", input),
     updateEpic: (id, patch) => call("epic:update", { id, patch }),
-    installDogfoodBacklog: (id) => call("roadmap:install", id),
     refreshFleet: (id) => call("fleet:refresh", id),
     resolveFleetConflict: (id, resolution, winnerTaskId) =>
       call("fleet:resolve", { id, resolution, winnerTaskId }),

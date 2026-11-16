@@ -18,7 +18,7 @@ import { PreviewManager } from "./preview";
 import { localURL } from "./urls";
 import { discoverHarnesses } from "./catalog";
 import { planDefinedStory } from "./story-route";
-import { registerPlanning, attachDogfoodProject } from "./planning";
+import { registerPlanning } from "./planning";
 import { registerPlanningControls } from "./planning-controls";
 import { ensureTaskEpic } from "./epic-workspace";
 import { createExampleArtifacts } from "./examples";
@@ -108,8 +108,6 @@ export async function createRuntime(
   const discover = options?.discoverHarnesses ?? discoverHarnesses;
   const store = new LocalStore(dataDir);
   await store.load();
-  if (await exists(join(appPath, ".git")))
-    attachDogfoodProject(store.state, appPath);
   const state = () => store.state;
   let beta: MemCodeBeta | undefined;
   let betaNeedsAnalysis = false;

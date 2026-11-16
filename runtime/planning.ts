@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import type { AppState, Project } from "../src/shared";
-import { installDogfoodPlan } from "../src/dogfood";
 
 type Register = (
   name: string,
@@ -61,34 +60,4 @@ export function registerPlanning(
       await changed();
     },
   );
-  register("roadmap:install", id, async (id) => {
-    const result = installDogfoodPlan(state(), project(id));
-    await changed();
-    return result;
-  });
-}
-
-export function attachDogfoodProject(state: AppState, path: string): Project {
-  let project = state.projects.find(
-    (p) =>
-      p.path?.replaceAll("\\", "/").toLowerCase() ===
-      path.replaceAll("\\", "/").toLowerCase(),
-  );
-  if (!project) {
-    project = {
-      id: "memcode-dogfood",
-      name: "MemCode",
-      description:
-        "The Fleet Agentic Worker Suite. Build a local workspace with measured routing, coordinated workers, and a considered developer experience.",
-      path,
-      branch: "main",
-      repoId: "memcode",
-      analysis: "idle",
-      createdAt: new Date().toISOString(),
-    };
-    state.projects.push(project);
-    if (state.activeProjectId === "example") state.activeProjectId = project.id;
-  }
-  installDogfoodPlan(state, project);
-  return project;
 }

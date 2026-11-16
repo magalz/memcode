@@ -68,11 +68,21 @@ try {
         }
       });
     const handshake = calls.find(
-      (call) =>
-        call.stage === "rpc-end" &&
-        ["workspace:load", "beta:status"].includes(call.method),
+      (call) => call.stage === "rpc-end" && call.method === "workspace:load",
     );
-    if (handshake) {
+    // rpc-end is emitted for errors too. On a fresh profile App's successful
+    // workspace.load().then continuation validates state/runtime and requests
+    // onboarding:update. That existing downstream call proves more than merely
+    // observing a completed transport exchange; no new native test hook needed.
+    const continuation =
+      handshake &&
+      calls.find(
+        (call) =>
+          call.stage === "rpc-start" &&
+          call.method === "onboarding:update" &&
+          call.at >= handshake.at,
+      );
+    if (handshake && continuation) {
       const pids = execFileSync("/usr/bin/pgrep", ["-P", String(child.pid)], {
         encoding: "utf8",
       })
@@ -95,6 +105,7 @@ try {
         nativeProcessStarted: true,
         bundledNodeObserved: true,
         rendererToRuntimeHandshake: handshake.method,
+        workspaceLoadSuccessEvidence: "renderer-onboarding-continuation",
         noGlobalNodeFallback: true,
       };
       break;
@@ -104,8 +115,14 @@ try {
   assert.equal(
     report.passed,
     true,
-    "No renderer-to-runtime cold-start handshake within 60 seconds",
+    "No successful workspace-load renderer continuation within 60 seconds",
   );
+  // Let React commit and paint the actual first-launch view. The old beta:status
+  // snapshot was too early and captured only the opening-workspace spinner.
+  await pause(2000);
+  if (child.exitCode !== null)
+    throw Error("The Mac app exited before its first-launch view settled");
+  report.renderSettleMs = 2000;
   // Screen capture can be restricted on hosted runners. Retain an image when
   // available, without treating a successful screenshot as a visual test.
   const screenshot = join(root, "release/macos-cold-start.png");
@@ -120,6 +137,7 @@ try {
     report.screenshotCaptured = false;
   }
 } catch (error) {
+  report.passed = false;
   report.failure = error.message;
   process.exitCode = 1;
 } finally {

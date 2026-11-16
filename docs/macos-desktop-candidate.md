@@ -107,10 +107,14 @@ the app's first-launch welcome provides motion and the product introduction.
 
 The workflow also launches the actual packaged native app in a fresh profile,
 with global Node lookup removed and no account/model/engine started. It observes
-the bundled Node child and a renderer-to-runtime RPC handshake, and captures a
-screen image when the runner permits it. This catches native/JIT/runtime startup
-failures, but **does not establish physical Mac UI usability or Gatekeeper
-acceptance for an ad-hoc beta**. Those limits are recorded in the candidate.
+the bundled Node child, completion of `workspace:load` and the renderer's existing
+onboarding continuation (which runs only after loading valid state/runtime).
+The transport's `rpc-end` alone cannot prove success, because it also logs failed
+replies. After that continuation, the smoke waits two seconds for rendering and
+captures a screen image when the runner permits it. This catches
+native/JIT/runtime startup failures, but **does not establish physical Mac UI
+usability or Gatekeeper acceptance for an ad-hoc beta**. Those limits are recorded
+in the candidate.
 
 Test the downloaded DMG on a separate Mac/profile, including normal Gatekeeper
 handling, launch, browser consent, Keychain persistence, managed engine and a

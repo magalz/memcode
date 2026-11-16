@@ -7,10 +7,8 @@ import {
   ChevronRight,
   Flag,
   GitBranch,
-  Layers3,
   Plus,
   Route,
-  Sparkles,
 } from "lucide-react";
 import type { Epic, Project, WorkItem } from "../shared";
 import { isActive } from "../domain";
@@ -61,19 +59,12 @@ export function Roadmap({
       onCreateRequestConsumed?.();
     }
   }, [createRequest, onCreateRequestConsumed]);
-  const [busy, setBusy] = useState(false);
   const done = tasks.filter((task) => task.stage === "done").length;
   const blocked = (task: WorkItem) =>
     (task.dependsOn ?? []).some(
       (id) => tasks.find((t) => t.id === id)?.stage !== "done",
     );
-  const next =
-    tasks.find(
-      (task) =>
-        task.sourceKey === "route-regressions" &&
-        task.stage === "planned" &&
-        !blocked(task),
-    ) ?? tasks.find((task) => task.stage === "planned" && !blocked(task));
+  const next = tasks.find((task) => task.stage === "planned" && !blocked(task));
   const toggle = (id: string) =>
     setExpanded((current) => {
       const next = new Set(current);
@@ -81,21 +72,6 @@ export function Roadmap({
       else next.add(id);
       return next;
     });
-  const importPlan = async () => {
-    setBusy(true);
-    try {
-      const result = await window.memcode.installDogfoodBacklog(project.id);
-      notify(
-        result.stories
-          ? `${result.epics} epics and ${result.stories} stories added to this project.`
-          : "The build plan is already in your roadmap.",
-      );
-    } catch (error) {
-      notify((error as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
   return (
     <div className="roadmap-view">
       <section className="roadmap-summary">
@@ -181,14 +157,6 @@ export function Roadmap({
               >
                 <Plus size={14} />
                 Create an epic
-              </button>
-              <button
-                className="text-button"
-                onClick={() => void importPlan()}
-                disabled={busy}
-              >
-                {busy ? <Spinner size={12} /> : <Sparkles size={12} />}Use the
-                MemCode build plan
               </button>
             </div>
           }
@@ -370,10 +338,6 @@ export function Roadmap({
             Stories carry the brief, runbook, model route and worker result.
             Prerequisites keep the order explicit.
           </span>
-          <button onClick={() => void importPlan()} disabled={busy}>
-            {busy ? <Spinner size={11} /> : <Layers3 size={11} />}Sync build
-            plan
-          </button>
         </div>
       )}
       {newEpic && (

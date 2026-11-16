@@ -561,9 +561,6 @@ export interface MemCodeAPI {
     id: string,
     patch: Partial<Pick<Epic, "title" | "description" | "phase">>,
   ): Promise<void>;
-  installDogfoodBacklog(
-    projectId: string,
-  ): Promise<{ epics: number; stories: number }>;
   updateTask(id: string, patch: TaskPatch): Promise<void>;
   addMessage(
     id: string,
