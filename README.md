@@ -10,9 +10,21 @@ MemCode is **source-available for noncommercial use** under the
 internal company development, requires a separate license. See
 [licensing](docs/licensing.md) and [third-party notices](THIRD_PARTY_NOTICES.md).
 
-## Run
+## Use the desktop beta
 
-Requires Node.js 22.12+ and Git. Native development/builds also require Rust and
+Published installers include Node.js. Choose **Connect Memtrace beta** and
+approve your account in the browser; MemCode then downloads and verifies its
+separately licensed local Memtrace engine. A separate Memtrace CLI is not
+required for beta use. Git and your chosen coding tool still need to be
+installed and configured. The shared native agent browser currently requires
+Windows WebView2.
+
+Beta sign-out pauses analysis until you reconnect or explicitly choose an
+existing CLI setup. It never silently switches to a paid CLI account or plan.
+
+## Develop from source
+
+Requires Node.js 22.12+ and Git. Native development/builds also require Rust 1.90+ and
 Tauri prerequisites. Windows builds use MSVC Build Tools and installed WebView2.
 
 ```sh

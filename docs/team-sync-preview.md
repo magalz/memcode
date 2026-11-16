@@ -14,7 +14,7 @@ Start with the [team quickstart](team-quickstart.md) for the shortest path from 
 
 One team can have several projects. Existing personal projects stay available and separate. Creating a team does not start a worker.
 
-For this pilot, the owner’s installation needs a configured, reachable Team service and Memtrace browser identity support. The Team screen reports when that setup is missing. Teammates receive the service address in their invitation; they do not enter a relay address or setup secret.
+MemCode discovers the official Team service when it is enabled. Normal users do not configure a server or receive a setup secret. If Team creation is not available yet, the Team screen explains that it needs service activation; you can continue working locally. Invitations include the service address automatically. Private service operation remains an advanced option.
 
 ## Join the work
 

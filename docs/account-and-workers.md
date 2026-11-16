@@ -1,8 +1,34 @@
 # Account and worker connections
 
-MemCode uses the session managed by the installed Memtrace CLI. It does not
-create a second account, read or copy the Memtrace credential file, or expose
-license keys and session tokens to the renderer.
+## Connect Memtrace beta
+
+Use the account button at the top right, or open Settings and choose
+**Connect Memtrace beta**. Approve the intended Memtrace account in the official
+browser flow. After that explicit approval, MemCode downloads and verifies its
+separately licensed local engine. Published installers include Node.js; a
+separate global Node installation or Memtrace CLI is not required for beta use.
+
+Your source, local analysis graph and worker execution stay on your computer.
+Beta access provides unlimited local Memtrace analysis for eligible
+noncommercial use. Coding-model accounts, tokens and subscriptions remain
+separate. Connect and approve your installed coding tool in **Workers**.
+
+When connected, choose **Change account** to approve a different Memtrace
+account in the browser. **Cancel** ends a pending sign-in. A cancelled or failed
+attempt is not presented as a completed account change.
+
+Choose **Sign out of Memtrace beta** and confirm to pause beta access on this
+device. Local projects stay saved. Analysis remains paused until you reconnect
+or deliberately choose **Use existing CLI setup**. Sign-out, expiry or failed
+renewal never silently falls back to paid CLI usage.
+
+## Advanced: existing Memtrace CLI setup
+
+The account panel also supports **Existing Memtrace CLI setup** for developers
+who explicitly choose their separately installed engine, account and plan.
+That choice disconnects beta access and uses the CLI's own usage limits.
+MemCode does not create a second account, read or copy the CLI credential file,
+or expose license keys and session tokens to the renderer.
 
 The host reads `memtrace status --json`. A running owner's session state can
 establish an existing Memtrace connection; a standalone default `Valid` state
@@ -16,7 +42,7 @@ There is no `memtrace auth status` command: in the current CLI it falls through
 to login. MemCode never calls it. It also never runs global `auth logout` as a
 side effect of disconnecting a worker.
 
-## Sign out or use another account
+### Sign out or use another CLI account
 
 Open the account button at the top right, or **Settings → Your Memtrace account**.
 Choose **Switch account** or **Sign out**, then confirm the action in the same panel.
@@ -57,7 +83,7 @@ device synchronization and claims, not verified multi-user account permissions.
 
 ## Identity boundary
 
-The current Memtrace `AuthState` and stored credential shape contain session,
+In advanced CLI mode, Memtrace `AuthState` and its stored credential shape contain session,
 edition and optional organization/seat principal fields. The current public
 status interface does not expose a general signed-in person's account ID,
 display name or email. A valid license/session must not be labelled as a verified

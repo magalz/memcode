@@ -10,7 +10,7 @@ MemCode is source-available for noncommercial work. Company-internal and commerc
 2. Choose **Share with your team**. Check the project and repository. Its current stories, epics, cycles, comments and activity become the shared starting point.
 3. Choose **Invite teammate**, optionally restrict the invitation to their verified email, then copy the link and send it privately.
 
-For this beta, the owner needs a configured, reachable Team service and Memtrace browser identity support. The Team screen explains when that setup is missing. An invitation includes the service address; invited members do not configure a relay or enter a setup secret.
+MemCode discovers the official Team service when it is enabled. You do not set up a server or receive a setup secret. If Team creation is not available yet, keep working locally and retry after service activation. Invitations include the service address automatically; private service operation is an advanced option.
 
 ## Accept an invitation
 
@@ -25,7 +25,7 @@ You do not need to create an empty project or download MemCode again. Accepting 
 1. Choose **Work on this computer** in the shared project.
 2. Reuse a matching checkout, or select where to clone the repository. Git access is checked separately. Existing local changes are preserved; unrelated folders are not adopted.
 3. Let Memtrace analyze the checkout. If setup needs attention, use **Check local engine** to inspect this computer's branch, source/index alignment and watch state.
-4. In **Workers**, explicitly connect and approve your own installed Codex, Claude Code or Cursor setup. Set its default permissions once.
+4. In **Workers**, explicitly connect and approve your installed coding tool. MemCode currently supports Codex, Claude Code and Cursor; more adapters can be added. Set its default permissions once.
 5. Open a focused story, confirm the brief and start its worker. MemCode confirms your shared story claim before starting work.
 
 Use an epic for a coherent outcome and its Git branch; use stories for focused tasks with a clear result and a way to check it. Cycles can wait until your team wants a delivery rhythm.
