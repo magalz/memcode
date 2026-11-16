@@ -184,6 +184,7 @@ export class AppUpdater {
       const release = await this.api.check();
       this.set({
         phase: release ? "available" : "current",
+        info: { ...this.snapshot.info, previousError: undefined },
         release: release ?? undefined,
         checkedAt: new Date().toISOString(),
       });

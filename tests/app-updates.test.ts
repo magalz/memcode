@@ -284,6 +284,40 @@ test("passive focus and long-running checks are throttled and leave ready downlo
   assert.equal(updater.getSnapshot().phase, "ready");
 });
 
+test("a successful retry clears the prior install failure and resumes passive discovery", async () => {
+  let now = 1000,
+    checks = 0;
+  const updater = new AppUpdater(
+    api({
+      info: async () => ({
+        currentVersion: "0.4.0-beta.1",
+        development: false,
+        previousError: "Installer could not open",
+      }),
+      check: async () => {
+        checks++;
+        return release;
+      },
+    }),
+    () => now,
+  );
+  await updater.start();
+  assert.equal(
+    checks,
+    0,
+    "a failed prior install stays visible until user retries",
+  );
+  await updater.check();
+  assert.equal(updater.getSnapshot().info?.previousError, undefined);
+  now += 15 * 60000;
+  await updater.poll();
+  assert.equal(
+    checks,
+    2,
+    "a recovered install error must not permanently disable update checks",
+  );
+});
+
 test("one explicit restart click updates an idle workspace without another confirmation", async () => {
   let installs = 0;
   const updater = new AppUpdater(

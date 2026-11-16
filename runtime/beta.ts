@@ -115,6 +115,7 @@ export class MemCodeBeta {
   private committing = false;
   private generation = 0;
   private closing = false;
+  private closed?: Promise<void>;
   private retryAfter = 0;
   private timer: ReturnType<typeof setInterval>;
   private readonly clock: () => number;
@@ -297,6 +298,7 @@ export class MemCodeBeta {
   ) {
     const verified = await verifyBetaAccess(tokens.access_token, binding, {
       loadKeys: this.options.loadKeys,
+      cachedKey: identityChange ? undefined : this.record?.publicKey,
       now: this.clock,
       accountId: tokens.account.id,
     });
@@ -311,7 +313,7 @@ export class MemCodeBeta {
         "Memtrace returned an inconsistent beta account. Connect again.",
       );
     if (
-      this.closing ||
+      (this.closing && identityChange) ||
       generation !== this.generation ||
       (identityChange && this.connectCancelled)
     )
@@ -329,7 +331,7 @@ export class MemCodeBeta {
     };
     if (identityChange) await this.options.beforeIdentityChange();
     if (
-      this.closing ||
+      (this.closing && identityChange) ||
       generation !== this.generation ||
       (identityChange && this.connectCancelled)
     )
@@ -375,6 +377,8 @@ export class MemCodeBeta {
     this.emit();
   }
   connect(): Promise<MemCodeBetaStatus> {
+    if (this.closing)
+      return Promise.reject(new Error("MemCode beta sign-in was cancelled."));
     if (this.connecting)
       return Promise.reject(
         new Error("Finish or cancel the current beta sign-in first."),
@@ -682,10 +686,30 @@ export class MemCodeBeta {
     return this.snapshot();
   }
   close() {
-    this.telemetry = undefined;
+    if (this.closed) return this.closed;
     this.closing = true;
-    ++this.generation;
+    this.connectCancelled = true;
     clearInterval(this.timer);
     this.options.authorization.cancel();
+    this.closed = (async () => {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        // A refresh may already have consumed its one-use server credential.
+        // Let that same-session rotation reach secure storage before exit;
+        // new refreshes and browser/account changes are blocked by closing.
+        if (this.refreshing)
+          await Promise.race([
+            this.refreshing.catch(() => {}),
+            new Promise<void>((resolve) => {
+              timeout = setTimeout(resolve, 17000);
+            }),
+          ]);
+      } finally {
+        clearTimeout(timeout);
+        ++this.generation;
+        this.telemetry = undefined;
+      }
+    })();
+    return this.closed;
   }
 }

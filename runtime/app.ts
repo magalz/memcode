@@ -1299,7 +1299,7 @@ export async function createRuntime(
     async close() {
       if (closed) return;
       closed = true;
-      beta?.close();
+      const betaClosing = beta?.close();
       clearInterval(artifactMaintenance);
       await reconcilingArtifacts?.catch((error) =>
         console.error("Artifact catalog check failed:", error),
@@ -1315,6 +1315,7 @@ export async function createRuntime(
       await browsers.close();
       await preview.close();
       await engine.close();
+      await betaClosing;
       await store.save();
     },
   };

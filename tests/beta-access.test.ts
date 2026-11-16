@@ -415,6 +415,232 @@ test("concurrent engine reads renew once and persist the rotated secret before u
   }
 });
 
+test("same-session refresh reuses its verified signing key, fetches a changed kid and still rejects a forged signature", async () => {
+  const fixture = managerFixture();
+  let keyLoads = 0,
+    keys = [publicKey];
+  fixture.options.loadKeys = async () => {
+    keyLoads++;
+    return { keys };
+  };
+  try {
+    await fixture.manager.connect();
+    assert.equal(keyLoads, 1);
+    await fixture.manager.refresh();
+    assert.equal(
+      keyLoads,
+      1,
+      "ordinary rotation must not wait on a redundant JWKS request",
+    );
+    const nextPair = generateKeyPairSync("ed25519");
+    const nextKey = {
+      ...nextPair.publicKey.export({ format: "jwk" }),
+      kid: "rotated-test-key",
+      alg: "EdDSA",
+      use: "sig",
+    } as BetaPublicKey;
+    keys = [nextKey];
+    const signed = (bound: BetaBinding, forge = false) => {
+      const next = tokens(bound, fixture.now);
+      const head = Buffer.from(
+        JSON.stringify({ alg: "EdDSA", typ: "JWT", kid: nextKey.kid }),
+      ).toString("base64url");
+      const input = head + "." + next.access_token.split(".")[1];
+      next.access_token =
+        input +
+        "." +
+        sign(
+          null,
+          Buffer.from(input),
+          forge ? pair.privateKey : nextPair.privateKey,
+        ).toString("base64url");
+      return next;
+    };
+    fixture.authorization.refresh = async (_, bound) => signed(bound);
+    await fixture.manager.refresh();
+    assert.equal(
+      keyLoads,
+      2,
+      "an unknown kid must load and verify the current official keys",
+    );
+    assert.equal(
+      (fixture.disk.state.credentials as BetaCredentials).publicKey.kid,
+      nextKey.kid,
+    );
+    await fixture.manager.refresh();
+    assert.equal(keyLoads, 2);
+    const retained = structuredClone(fixture.disk.state);
+    fixture.authorization.refresh = async (_, bound) => signed(bound, true);
+    await fixture.manager.refresh();
+    assert.equal(keyLoads, 2);
+    assert.deepEqual(
+      fixture.disk.state,
+      retained,
+      "a matching cached kid never bypasses cryptographic verification",
+    );
+  } finally {
+    await fixture.manager.close();
+  }
+});
+
+test("update shutdown retains an in-flight one-use refresh rotation for the next launch", async () => {
+  const fixture = managerFixture();
+  let resumed: MemCodeBeta | undefined;
+  try {
+    await fixture.manager.connect();
+    fixture.advance(14 * 60000);
+    let release!: (value: BetaTokens) => void;
+    let rotated: BetaTokens | undefined;
+    fixture.authorization.refresh = async (_secret, bound) => {
+      rotated = tokens(bound, fixture.now);
+      return new Promise((resolve) => {
+        release = resolve;
+      });
+    };
+    const refreshing = fixture.manager.refresh();
+    await delay();
+    assert.ok(rotated);
+    const closing = fixture.manager.close();
+    release(rotated);
+    await Promise.all([refreshing, closing]);
+    assert.equal(
+      (fixture.disk.state.credentials as BetaCredentials).refreshToken,
+      rotated.refresh_token,
+      "a consumed server token must be replaced in secure storage before shutdown",
+    );
+    assert.equal(
+      fixture.revokes.length,
+      0,
+      "updating must not revoke the account",
+    );
+    fixture.authorization.authorize = async () => {
+      throw Error("A restart must not request browser approval");
+    };
+    fixture.authorization.refresh = async (secret, bound) => {
+      assert.equal(
+        secret,
+        rotated!.refresh_token,
+        "the next launch must use the committed rotated secret",
+      );
+      return tokens(bound, fixture.now);
+    };
+    resumed = new MemCodeBeta({
+      ...fixture.options,
+      storage: fixture.disk.storage,
+    });
+    assert.equal((await resumed.status()).state, "connected");
+    fixture.advance(14 * 60000);
+    assert.equal((await resumed.refresh()).state, "connected");
+  } finally {
+    await resumed?.close();
+    await fixture.manager.close();
+  }
+});
+
+test("shutdown bounds a stalled refresh drain and rejects a response after its deadline", async (context) => {
+  const fixture = managerFixture();
+  let release!: (value: BetaTokens) => void;
+  try {
+    await fixture.manager.connect();
+    const original = (fixture.disk.state.credentials as BetaCredentials)
+      .refreshToken;
+    fixture.advance(14 * 60000);
+    fixture.authorization.refresh = async () =>
+      new Promise((resolve) => {
+        release = resolve;
+      });
+    const refreshing = fixture.manager.refresh();
+    await delay();
+    context.mock.timers.enable({ apis: ["setTimeout"] });
+    let done = false;
+    const closing = fixture.manager.close().then(() => {
+      done = true;
+    });
+    await delay();
+    context.mock.timers.tick(16999);
+    await delay();
+    assert.equal(done, false);
+    context.mock.timers.tick(1);
+    await closing;
+    assert.equal(
+      done,
+      true,
+      "shutdown must stay inside the native runtime's twenty-second grace",
+    );
+    release(tokens(fixture.lastBinding!, fixture.now));
+    await refreshing;
+    assert.equal(
+      (fixture.disk.state.credentials as BetaCredentials).refreshToken,
+      original,
+      "late responses after shutdown must not mutate the retained account",
+    );
+  } finally {
+    context.mock.timers.reset();
+    await fixture.manager.close();
+  }
+});
+
+test("shutdown still cancels a late browser account approval without replacing the retained account", async () => {
+  const fixture = managerFixture();
+  try {
+    await fixture.manager.connect();
+    const original = structuredClone(fixture.disk.state.credentials);
+    let release!: (value: BetaTokens) => void;
+    let pendingBinding!: BetaBinding;
+    fixture.authorization.authorize = async (bound) => {
+      pendingBinding = bound;
+      return new Promise((resolve) => {
+        release = resolve;
+      });
+    };
+    const connecting = fixture.manager.connect();
+    const rejected = assert.rejects(connecting, /cancelled/);
+    await delay();
+    await fixture.manager.close();
+    release(tokens(pendingBinding, fixture.now));
+    await rejected;
+    assert.deepEqual(fixture.disk.state.credentials, original);
+    assert.equal(fixture.revokes.length, 0);
+  } finally {
+    await fixture.manager.close();
+  }
+});
+
+test("an account switch waiting for rotation cannot start a browser approval after shutdown", async () => {
+  const fixture = managerFixture();
+  try {
+    await fixture.manager.connect();
+    fixture.advance(14 * 60000);
+    let release!: (value: BetaTokens) => void;
+    let approvals = 0;
+    fixture.authorization.refresh = async () =>
+      new Promise((resolve) => {
+        release = resolve;
+      });
+    fixture.authorization.authorize = async (bound) => {
+      approvals++;
+      return tokens(bound, fixture.now);
+    };
+    const refreshing = fixture.manager.refresh();
+    await delay();
+    const switching = fixture.manager.connect();
+    const rejected = assert.rejects(switching, /cancelled/);
+    await delay();
+    const closing = fixture.manager.close();
+    const rotated = tokens(fixture.lastBinding!, fixture.now);
+    release(rotated);
+    await Promise.all([refreshing, closing, rejected]);
+    assert.equal(approvals, 0);
+    assert.equal(
+      (fixture.disk.state.credentials as BetaCredentials).refreshToken,
+      rotated.refresh_token,
+    );
+    await assert.rejects(fixture.manager.connect(), /cancelled/);
+  } finally {
+    await fixture.manager.close();
+  }
+});
+
 test("logout retains beta-mode tombstone, blocks paid CLI fallback, and survives a restart", async () => {
   const fixture = managerFixture();
   try {

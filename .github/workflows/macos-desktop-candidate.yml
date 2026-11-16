@@ -156,8 +156,9 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.engine_acceptance
         timeout-minutes: 22
         env:
-          # Dedicated test session approved in the official browser. Never the
-          # user's normal CLI account; the helper rotates and revokes it.
+          # Dedicated test authorization only, never a normal CLI account.
+          # Refresh grants rotate/revoke; short proofs are verified/deleted.
+          # A retained native QA session stays approved on its owning machine.
           MEMCODE_MAC_ENGINE_ACCEPTANCE_GRANT: ${{ secrets.MEMCODE_MAC_ENGINE_ACCEPTANCE_GRANT }}
         run: node scripts/bundled-engine-acceptance.mjs
 
