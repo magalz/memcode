@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { ManagedMemcodeEngine } from '../../runtime/managed-engine';
 import { MemtraceEngine } from '../../runtime/memtrace';
@@ -31,9 +31,36 @@ const report: Record<string, any> = {
   nativeKeychainPersistenceTested: false,
   nativeProjectPickerTested: false,
   modelProviderStarted: false,
+  profileAliasCanonicalized: process.env.MEMCODE_ACCEPTANCE_PROFILE_CANONICALIZED === 'true',
+  stageDurationsMs: {},
 };
 const pause = (ms: number) => new Promise(done => setTimeout(done, ms));
-let stage = 'environment', networkRequests = 0, engine: MemtraceEngine | undefined;
+const startedAt = Date.now();
+let stage = 'environment', stageStarted = startedAt, networkRequests = 0, engine: MemtraceEngine | undefined;
+let progress = 'none', lastProgress = 0, writes = Promise.resolve();
+const persist = () => {
+  const snapshot = JSON.stringify({ ...report, stage, elapsedMs: Date.now() - startedAt }, null, 2) + '\n';
+  writes = writes.then(() => writeFile(output, snapshot));
+  return writes;
+};
+const signal = () => {
+  console.log('[memcode-engine-acceptance] ' + JSON.stringify({ stage, progress, elapsedMs: Date.now() - startedAt }));
+  void persist();
+};
+const setStage = (next: string) => {
+  report.stageDurationsMs[stage] = Date.now() - stageStarted;
+  stage = next; stageStarted = Date.now(); progress = 'none'; signal();
+};
+const onProgress = (note: string) => {
+  progress = /embed|model/i.test(note) ? 'embedding' : /certif|verif/i.test(note) ? 'verification' : /starting|preparing|Memtrace ·/i.test(note) ? 'engine-startup' : /Analyzing|index|Reading the project/i.test(note) ? 'indexing' : 'connecting';
+  report.lastProgressCategory = progress;
+  if (Date.now() - lastProgress > 10000) { lastProgress = Date.now(); signal(); }
+};
+const bounded = async <T>(pending: Promise<T>, ms: number): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try { return await Promise.race([pending, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Acceptance operation deadline exceeded')), ms); })]); }
+  finally { clearTimeout(timer); }
+};
 let grant: { deviceId: string; sessionId: string; refreshToken: string } | undefined;
 let refreshToken: string | undefined;
 const authorization = createBetaAuthorization({ openExternal: async () => { throw Error('Unexpected browser authorization in CI'); } });
@@ -48,7 +75,7 @@ try {
     bundledDirectory: join(resources, 'memtrace-engine'),
     fetch: (async () => { networkRequests++; throw Error('Engine download forbidden in packaged acceptance.'); }) as typeof fetch,
   };
-  stage = 'offline-engine-prepare';
+  setStage('offline-engine-prepare');
   const managed = new ManagedMemcodeEngine(join(profile, 'data'), options);
   const executable = await managed.prepare();
   assert.equal(executable.startsWith(resolve(profile, 'data', 'engines') + (process.platform === 'win32' ? '\\' : '/')), true);
@@ -64,7 +91,7 @@ try {
   if (mode === 'prepare-only') {
     report.passed = true;
   } else {
-    stage = 'real-account-refresh';
+    setStage('real-account-refresh');
     assert.ok(rawGrant, 'A dedicated real browser-approved test grant is required.');
     grant = JSON.parse(rawGrant);
     assert.ok(grant && /^[A-Za-z0-9_-]{16,128}$/.test(grant.deviceId) && /^[A-Za-z0-9_-]{16,128}$/.test(grant.sessionId) && /^[A-Za-z0-9_-]{32,200}$/.test(grant.refreshToken));
@@ -83,9 +110,12 @@ try {
       MEMCORTEX_STORE_DIR: join(profile, 'cortex'),
       MEMTRACE_ENGINEER: access.account.id,
     };
-    stage = 'fresh-project';
-    const directory = join(profile, 'project');
-    await mkdir(directory, { recursive: true });
+    setStage('fresh-project');
+    const requestedDirectory = join(profile, 'project');
+    await mkdir(requestedDirectory, { recursive: true });
+    const directory = await realpath(requestedDirectory);
+    report.projectAliasCanonicalized = directory !== requestedDirectory;
+    report.projectPathCanonical = directory === await realpath(directory);
     const git = process.platform === 'darwin' ? '/usr/bin/git' : 'git';
     execFileSync(git, ['init', '-b', 'main', directory], { stdio: 'pipe' });
     await writeFile(join(directory, '.gitignore'), '.memcode/\n');
@@ -93,37 +123,39 @@ try {
     execFileSync(git, ['-C', directory, 'add', '.'], { stdio: 'pipe' });
     execFileSync(git, ['-C', directory, '-c', 'user.name=MemCode acceptance', '-c', 'user.email=acceptance@example.invalid', 'commit', '-m', 'Fresh project fixture'], { stdio: 'pipe' });
     const project: Project = { id: 'fresh-engine-acceptance', name: 'Fresh engine acceptance', description: 'Disposable native integration fixture', path: directory, branch: 'main', analysis: 'idle', createdAt: new Date().toISOString() };
-    stage = 'actual-mcp-index';
+    setStage('actual-mcp-index');
     engine = new MemtraceEngine(() => managed.executable(), {
       privateProject: () => true,
       environment: async () => authentication,
     });
-    project.repoId = await engine.analyze(project, () => {});
+    const indexDeadline = Date.now() + 180000;
+    const indexBudget = () => Math.max(1, indexDeadline - Date.now());
+    project.repoId = await bounded(engine.analyze(project, onProgress), indexBudget());
     const scope = engine.scopeFor(project.id);
     assert.equal(scope?.mode, 'project');
     assert.equal(scope?.dataDirectory, join(directory, '.memcode', 'memtrace', '.memdb'));
-    const indexed = await engine.call(project, 'find_symbol', { repo_id: project.repoId, branch: project.branch, name: 'welcome', limit: 5 });
+    const indexed = await bounded(engine.call(project, 'find_symbol', { repo_id: project.repoId, branch: project.branch, name: 'welcome', limit: 5 }), indexBudget());
     assert.equal(indexed.found, true);
     assert.ok(indexed.count > 0);
-    const revision = await engine.call(project, 'get_query_revision', { repo_id: project.repoId, branch: project.branch });
+    const revision = await bounded(engine.call(project, 'get_query_revision', { repo_id: project.repoId, branch: project.branch }), indexBudget());
     assert.equal(verifiedIndexRevision(revision, project, project.repoId), true);
     report.realProjectIndexed = true;
     report.privateProjectGraphAligned = true;
     report.indexedSymbolRetrieved = true;
-    stage = 'actual-mcp-watch';
-    const watch = await engine.watch(project);
+    setStage('actual-mcp-watch');
+    const watch = await bounded(engine.watch(project), 15000);
     assert.equal(watch?.state, 'watching');
     report.nativeWatchStarted = true;
     await writeFile(join(directory, 'index.ts'), 'export function welcome(name: string): string { return `Hello ${name}`; }\nexport function total(values: number[]): number { return values.reduce((sum, value) => sum + value, 0); }\nexport function savedAfterIndex(value: number): number { return value * 2; }\n');
     const deadline = Date.now() + 180000;
     let saved = false;
-    while (Date.now() < deadline) {
+    await bounded((async () => { while (Date.now() < deadline) {
       await pause(1500);
       const result = await engine.call(project, 'find_symbol', { repo_id: project.repoId, branch: project.branch, name: 'savedAfterIndex', limit: 5 });
       if (!result.found || !result.count) continue;
       const revision = await engine.call(project, 'get_query_revision', { repo_id: project.repoId, branch: project.branch });
-      if (verifiedIndexRevision(revision, project, project.repoId)) { saved = true; break; }
-    }
+      if (verifiedIndexRevision(revision, project, project.repoId!)) { saved = true; break; }
+    } })(), 180000);
     assert.equal(saved, true, 'The real watch must publish the edited symbol and aligned revision.');
     report.savedEditIndexedWithoutReindex = true;
     report.engineDownloadRequests = networkRequests;
@@ -135,17 +167,22 @@ try {
   // credentials or account metadata. The stage is enough for the CI gate.
   report.failedStage = stage;
   report.failureType = error instanceof assert.AssertionError ? 'assertion' : 'operation-failed';
+  const message = error instanceof Error ? error.message : '';
+  report.failureCategory = /deadline|taking too long|timed out/i.test(message) ? 'operation-timeout' : /not verified|does not match|checkout scope|workspace does not include/i.test(message) ? 'source-binding-not-verified' : /credentials|auth|beta access|license/i.test(message) ? 'account-or-license' : /connection closed|not connected|transport.*closed/i.test(message) ? 'engine-disconnected' : /indexing job.*failed|analysis failed/i.test(message) ? 'index-job-failed' : 'unclassified-operation-failure';
+  const errorCode = (error as NodeJS.ErrnoException)?.code;
+  if (typeof errorCode === 'string' && /^[A-Z0-9_]{1,40}$/.test(errorCode)) report.failureCode = errorCode;
   report.passed = false;
   process.exitCode = 1;
 } finally {
-  await engine?.close().catch(() => { report.engineCleanupFailed = true; process.exitCode = 1; report.passed = false; });
   if (grant && refreshToken) {
     try { await authorization.revoke(refreshToken, grant); report.testGrantRevoked = true; }
     catch { report.testGrantRevoked = false; report.passed = false; process.exitCode = 1; }
   }
   await rm(proof, { force: true });
+  if (engine) await bounded(engine.close(), 15000).catch(() => { report.engineCleanupFailed = true; process.exitCode = 1; report.passed = false; });
   report.checkedAt = new Date().toISOString();
-  await writeFile(output, JSON.stringify(report, null, 2) + '\n');
+  setStage('finished');
+  await persist();
   console.log(JSON.stringify(report));
 }
 }

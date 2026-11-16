@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdir, mkdtemp, open, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +17,8 @@ const option = name => { const at = process.argv.indexOf(name); return at < 0 ? 
 const resources = resolve(option('--resources') ?? join(root, 'src-tauri/target/release/bundle/macos/MemCode.app/Contents/Resources'));
 const mode = process.argv.includes('--prepare-only') ? 'prepare-only' : 'real-account-index-watch';
 const output = resolve(option('--output') ?? join(root, `release/bundled-engine-${process.platform}-${mode}.json`));
-const profile = await mkdtemp(join(tmpdir(), 'memcode-bundled-engine-'));
+const createdProfile = await mkdtemp(join(tmpdir(), 'memcode-bundled-engine-'));
+const profile = await realpath(createdProfile);
 await mkdir(join(profile, 'home'), { recursive: true, mode: 0o700 });
 await mkdir(join(root, 'release'), { recursive: true });
 const helper = join(profile, 'acceptance.cjs');
@@ -28,6 +29,7 @@ Object.assign(env, {
   XDG_CONFIG_HOME: join(profile, 'home', '.config'),
   XDG_CACHE_HOME: join(profile, 'home', '.cache'),
   MEMTRACE_MEMDB_SIDECAR_STARTUP_SECS: '180',
+  MEMCODE_ACCEPTANCE_PROFILE_CANONICALIZED: String(profile !== createdProfile),
 });
 if (process.platform === 'darwin') env.PATH = '/usr/bin:/bin';
 if (process.platform === 'win32') {
@@ -48,9 +50,25 @@ if (mode !== 'prepare-only') {
 const node = join(resources, 'desktop-runtime', process.platform === 'win32' ? 'node.exe' : 'node');
 const runHelper = helperOutput => new Promise((done, reject) => {
   const child = spawn(node, [helper, resources, profile, helperOutput, mode], { cwd: profile, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-  const timeout = setTimeout(() => { child.kill('SIGTERM'); }, mode === 'prepare-only' ? 120000 : 1200000);
-  // Drain but never retain or upload raw engine/account output.
-  for (const stream of [child.stdout, child.stderr]) stream.on('data', () => {});
+  const timeout = setTimeout(() => { child.kill('SIGTERM'); }, mode === 'prepare-only' ? 120000 : 480000);
+  // Forward only our tightly validated content-free stage protocol. Never
+  // retain or forward raw engine/account output, including on failure.
+  let pending = '';
+  child.stdout.on('data', chunk => {
+    pending = (pending + chunk.toString()).slice(-4000);
+    const lines = pending.split(/\r?\n/); pending = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line.startsWith('[memcode-engine-acceptance] ')) continue;
+      try {
+        const value = JSON.parse(line.slice('[memcode-engine-acceptance] '.length));
+        const stages = ['environment','offline-engine-prepare','real-account-refresh','fresh-project','actual-mcp-index','actual-mcp-watch','finished'];
+        const categories = ['none','connecting','engine-startup','indexing','embedding','verification'];
+        if (Object.keys(value).sort().join(',') === 'elapsedMs,progress,stage' && stages.includes(value.stage) && categories.includes(value.progress) && Number.isSafeInteger(value.elapsedMs) && value.elapsedMs >= 0)
+          console.log('[memcode-engine-acceptance] ' + JSON.stringify(value));
+      } catch { /* Discard malformed/unexpected output. */ }
+    }
+  });
+  child.stderr.on('data', () => {});
   child.once('error', reject);
   child.once('close', value => { clearTimeout(timeout); done(value ?? 1); });
 });
