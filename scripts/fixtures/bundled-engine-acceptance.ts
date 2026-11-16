@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { ChildProcess, execFileSync } from 'node:child_process';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { ManagedMemcodeEngine } from '../../runtime/managed-engine';
@@ -37,6 +38,7 @@ const report: Record<string, any> = {
 const pause = (ms: number) => new Promise(done => setTimeout(done, ms));
 const startedAt = Date.now();
 let stage = 'environment', stageStarted = startedAt, networkRequests = 0, engine: MemtraceEngine | undefined;
+let restoreMetadataObserver: (() => void) | undefined;
 let progress = 'none', lastProgress = 0, writes = Promise.resolve();
 const persist = () => {
   const snapshot = JSON.stringify({ ...report, stage, elapsedMs: Date.now() - startedAt }, null, 2) + '\n';
@@ -61,7 +63,7 @@ const bounded = async <T>(pending: Promise<T>, ms: number): Promise<T> => {
   try { return await Promise.race([pending, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Acceptance operation deadline exceeded')), ms); })]); }
   finally { clearTimeout(timer); }
 };
-let grant: { deviceId: string; sessionId: string; refreshToken: string } | undefined;
+let grant: { deviceId: string; sessionId: string; refreshToken?: string; kind?: string; accessProof?: string } | undefined;
 let refreshToken: string | undefined;
 const authorization = createBetaAuthorization({ openExternal: async () => { throw Error('Unexpected browser authorization in CI'); } });
 const proof = join(profile, 'engine-access.jwt');
@@ -94,15 +96,29 @@ try {
     setStage('real-account-refresh');
     assert.ok(rawGrant, 'A dedicated real browser-approved test grant is required.');
     grant = JSON.parse(rawGrant);
-    assert.ok(grant && /^[A-Za-z0-9_-]{16,128}$/.test(grant.deviceId) && /^[A-Za-z0-9_-]{16,128}$/.test(grant.sessionId) && /^[A-Za-z0-9_-]{32,200}$/.test(grant.refreshToken));
-    refreshToken = grant.refreshToken;
-    const tokens = await authorization.refresh(refreshToken, grant);
-    refreshToken = tokens.refresh_token;
-    const access = await verifyBetaAccess(tokens.access_token, grant, { accountId: tokens.account.id });
-    await writeFile(proof, tokens.access_token, { mode: 0o600, flag: 'wx' });
+    assert.ok(grant && /^[A-Za-z0-9_-]{16,128}$/.test(grant.deviceId) && /^[A-Za-z0-9_-]{16,128}$/.test(grant.sessionId));
+    let accessToken: string;
+    let access: Awaited<ReturnType<typeof verifyBetaAccess>>;
+    if (grant.kind === 'short-lived-engine-proof') {
+      assert.ok(typeof grant.accessProof === 'string' && grant.accessProof.length < 16385 && !grant.refreshToken);
+      accessToken = grant.accessProof;
+      access = await verifyBetaAccess(accessToken, grant);
+      report.grantKind = 'short-lived-engine-proof';
+      report.nativeMacTokenRefresh = false;
+      report.originalGrantRevocationTested = false;
+    } else {
+      assert.ok(typeof grant.refreshToken === 'string' && /^[A-Za-z0-9_-]{32,200}$/.test(grant.refreshToken));
+      refreshToken = grant.refreshToken;
+      const tokens = await authorization.refresh(refreshToken, grant);
+      refreshToken = tokens.refresh_token;
+      accessToken = tokens.access_token;
+      access = await verifyBetaAccess(accessToken, grant, { accountId: tokens.account.id });
+      report.grantKind = 'dedicated-refresh-session';
+      report.nativeMacTokenRefresh = process.platform === 'darwin';
+    }
+    await writeFile(proof, accessToken, { mode: 0o600, flag: 'wx' });
     report.realAccountGrantVerified = true;
     report.accountApprovalOrigin = 'dedicated-browser-approved-session';
-    report.nativeMacTokenRefresh = process.platform === 'darwin';
     const authentication = {
       ...managed.executionEnvironment(),
       MEMCODE_ENGINE_ACCESS_FILE: proof,
@@ -124,6 +140,49 @@ try {
     execFileSync(git, ['-C', directory, 'add', '.'], { stdio: 'pipe' });
     execFileSync(git, ['-C', directory, '-c', 'user.name=MemCode acceptance', '-c', 'user.email=acceptance@example.invalid', 'commit', '-m', 'Fresh project fixture'], { stdio: 'pipe' });
     const project: Project = { id: 'fresh-engine-acceptance', name: 'Fresh engine acceptance', description: 'Disposable native integration fixture', path: directory, branch: 'main', analysis: 'idle', createdAt: new Date().toISOString() };
+    // Test-only observer of REAL replies, not a transport fixture. It neither
+    // supplies responses nor edits arguments/results/errors. Only bounded
+    // metadata booleans and fixed enums enter the report.
+    report.nativeMcpMetadata = [];
+    const originalCallTool = Client.prototype.callTool;
+    const normalize = (path: string) => path.replace(/^\\\\\?\\/, '').replaceAll('\\', '/').replace(/\/$/, '').toLowerCase();
+    const matches = (path: unknown) => typeof path === 'string' ? normalize(path) === normalize(directory) : null;
+    const enumValue = (value: unknown, allowed: string[]) => typeof value === 'string' && allowed.includes(value) ? value : value == null ? null : 'other';
+    const observe = (name: string, args: Record<string, any>, response: Record<string, any> | undefined, rejected = false) => {
+      try {
+        if (!['list_indexed_repositories', 'get_repository_stats', 'get_query_revision'].includes(name) || report.nativeMcpMetadata.length >= 32) return;
+        const values = (response?.content ?? []).flatMap((entry: Record<string, any>) => { if (entry.type !== 'text') return []; try { return [JSON.parse(entry.text)]; } catch { return []; } });
+        const value = values.at(-1);
+        const row: Record<string, any> = { tool: name, elapsedMs: Date.now() - startedAt, rejected, isError: response?.isError === true, hasJsonBody: value !== undefined };
+        if (name === 'list_indexed_repositories') {
+          const repos = Array.isArray(value) ? value : Array.isArray(value?.repos) ? value.repos : [];
+          row.rowCount = repos.length;
+          row.pathMatchingRows = repos.filter((item: Record<string, any>) => matches(item.repo_path ?? item.path) === true).length;
+          row.pathlessEpisodeRows = repos.filter((item: Record<string, any>) => item.ingestion_path === 'episode_only' && item.repo_path == null && item.path == null).length;
+          row.foreignPathRows = repos.filter((item: Record<string, any>) => typeof (item.repo_path ?? item.path) === 'string' && matches(item.repo_path ?? item.path) === false).length;
+          row.rows = repos.slice(0, 5).map((item: Record<string, any>) => ({ pathPresent: typeof item.path === 'string', repoPathPresent: typeof item.repo_path === 'string', pathMatches: matches(item.path), repoPathMatches: matches(item.repo_path), episodeOnly: item.ingestion_path === 'episode_only' }));
+        } else if (name === 'get_repository_stats') {
+          row.repoInStore = typeof value?.repo_in_store === 'boolean' ? value.repo_in_store : null;
+          row.errorCode = enumValue(value?.error_code, ['repo_not_in_store', 'repo_busy', 'busy', 'unindexed', 'indexing_in_progress']);
+          row.diagnosticKind = enumValue(value?.diagnostic?.kind, ['wrong_store', 'busy', 'repo_not_in_store']);
+          row.diagnosticReason = enumValue(value?.diagnostic?.reason, ['not_in_store', 'ambiguous_repo_id', 'membership_not_established', 'no_manifest']);
+        } else {
+          row.ready = typeof value?.ready === 'boolean' ? value.ready : null;
+          row.worktreeMatches = matches(value?.worktree);
+          row.branchMatches = typeof value?.branch === 'string' ? value.branch === project.branch : null;
+          row.repoIdMatchesRequested = typeof value?.repo_id === 'string' ? value.repo_id === args.repo_id : null;
+          row.status = enumValue(value?.status, ['current', 'partial', 'stale', 'unindexed', 'partial_source', 'indexing_in_progress', 'unavailable', 'aligned']);
+          row.sourceUnchanged = typeof value?.source_unchanged_during_observation === 'boolean' ? value.source_unchanged_during_observation : null;
+          row.requestedSourceMatches = typeof value?.requested_source_matches === 'boolean' ? value.requested_source_matches : null;
+        }
+        report.nativeMcpMetadata.push(row);
+      } catch { report.metadataObserverErrors = (report.metadataObserverErrors ?? 0) + 1; }
+    };
+    Client.prototype.callTool = function(this: Client, ...args: Parameters<typeof originalCallTool>) {
+      const pending = Reflect.apply(originalCallTool, this, args) as ReturnType<typeof originalCallTool>;
+      return pending.then(result => { observe(args[0].name, args[0].arguments ?? {}, result as Record<string, any>); return result; }, error => { observe(args[0].name, args[0].arguments ?? {}, undefined, true); throw error; });
+    } as typeof originalCallTool;
+    restoreMetadataObserver = () => { Client.prototype.callTool = originalCallTool; };
     setStage('actual-mcp-index');
     engine = new MemtraceEngine(() => managed.executable(), {
       privateProject: () => true,
@@ -175,11 +234,13 @@ try {
   report.passed = false;
   process.exitCode = 1;
 } finally {
+  restoreMetadataObserver?.();
   if (grant && refreshToken) {
     try { await authorization.revoke(refreshToken, grant); report.testGrantRevoked = true; }
     catch { report.testGrantRevoked = false; report.passed = false; process.exitCode = 1; }
   }
   await rm(proof, { force: true });
+  report.engineProofDeleted = true;
   if (engine) await bounded(engine.close(), 15000).catch(() => { report.engineCleanupFailed = true; process.exitCode = 1; report.passed = false; });
   await pause(250);
   report.activeResourceCountsAtEnd = process.getActiveResourcesInfo().reduce<Record<string, number>>((counts, name) => { counts[name] = (counts[name] ?? 0) + 1; return counts; }, {});

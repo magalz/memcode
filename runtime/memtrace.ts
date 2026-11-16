@@ -11,6 +11,7 @@ import {
   resolveMcpWorkspace,
   projectMcpWorkspace,
   MemtraceAdmissionError,
+  admitPrivateEpisodeRepository,
   normalizeMcpEnvironment,
   type MemtraceScopeBinding,
 } from "./memtrace-workspace";
@@ -516,10 +517,22 @@ export class MemtraceEngine {
       const repos: Json[] = Array.isArray(discovered)
         ? discovered
         : (discovered?.repos ?? []);
-      const admitted = repos.find(
+      let admitted = repos.find(
         (repo) =>
           pathKey(repo.repo_path ?? repo.path ?? "") === pathKey(project.path!),
       );
+      let privateEpisodeAdmitted = false;
+      if (!admitted && local) {
+        admitted = (await admitPrivateEpisodeRepository(
+          repos,
+          local,
+          project.branch,
+          async (name, args) => unwrap(await active!.client.callTool(
+            { name, arguments: args }, undefined, { timeout: 30_000 },
+          )),
+        )) ?? undefined;
+        privateEpisodeAdmitted = !!admitted;
+      }
       // A healthy, explicit one-member private owner may have no index yet.
       // Let analyze submit its first job; unrelated/partial stores still fail.
       if (!admitted && !(local && repos.length === 0))
@@ -528,7 +541,7 @@ export class MemtraceEngine {
         );
       const repoId =
         admitted?.repo_id ?? (admitted ? project.repoId : undefined);
-      if (repoId) {
+      if (repoId && !privateEpisodeAdmitted) {
         const admission = unwrap(
           await active!.client.callTool(
             {

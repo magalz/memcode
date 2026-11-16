@@ -71,6 +71,43 @@ export async function projectMcpWorkspace(projectPath: string) {
 
 export class MemtraceAdmissionError extends Error {}
 
+const admissionPath = (value: string) => {
+  const normalized = value.replaceAll("\\", "/").replace(/^\/\/\?\//, "").replace(/\/$/, "");
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+};
+
+/** A native owner can publish an Episode before its Repository/path row exists. */
+export async function admitPrivateEpisodeRepository(
+  repos: unknown[],
+  scope: Awaited<ReturnType<typeof projectMcpWorkspace>> | null,
+  branch: string,
+  read: (
+    name: "get_repository_stats" | "get_query_revision",
+    args: { repo_id: string; branch: string },
+  ) => Promise<Record<string, any>>,
+): Promise<Record<string, any> | null> {
+  // This exception is confined to the app-created, exact one-member private
+  // workspace. Never adopt an arbitrary pathless row or infer membership by name.
+  if (!scope || !branch || repos.length !== 1) return null;
+  const repo = repos[0] as Record<string, any> | null;
+  if (!repo || typeof repo !== "object" || repo.ingestion_path !== "episode_only" ||
+      repo.path != null || repo.repo_path != null || typeof repo.repo_id !== "string" ||
+      !repo.repo_id.trim() || repo.repo_id.length > 500) return null;
+  const args = { repo_id: repo.repo_id, branch };
+  const stats = await read("get_repository_stats", args);
+  if (stats?.repo_in_store !== true || stats?.diagnostic?.kind === "wrong_store" ||
+      (stats.repo_id != null && stats.repo_id !== repo.repo_id)) return null;
+  for (const path of [stats.path, stats.repo_path]) {
+    if (path != null && (typeof path !== "string" || admissionPath(path) !== admissionPath(scope.directory))) return null;
+  }
+  const revision = await read("get_query_revision", args);
+  if (typeof revision?.worktree !== "string" || admissionPath(revision.worktree) !== admissionPath(scope.directory) ||
+      revision.branch !== branch || (revision.repo_id != null && revision.repo_id !== repo.repo_id)) return null;
+  // A partial revision proves only the selected source binding, never index
+  // readiness. analyze() must still verify the complete source/index certificate.
+  return repo;
+}
+
 /** The SDK merges an inherited uppercase PATH; Windows must receive one spelling. */
 export function normalizeMcpEnvironment(
   input: Record<string, string>,

@@ -1,0 +1,79 @@
+name: Private macOS engine admission diagnostic
+
+on:
+  workflow_dispatch:
+    inputs:
+      authenticated:
+        description: Use a genuine short-lived QA account proof and run real index/watch integration on reviewed staged resources
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  native-diagnostic:
+    if: github.repository == 'syncable-dev/memcode' && github.event.repository.private == true && github.ref == 'refs/heads/beta/memcode-desktop-candidate'
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - name: Check out reviewed private diagnostic
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - name: Read the reviewed Node version
+        id: runtime
+        run: |
+          node --input-type=module <<'NODE'
+          import {appendFileSync,readFileSync} from 'node:fs';
+          const manifest=JSON.parse(readFileSync('scripts/desktop-node.json','utf8'));
+          appendFileSync(process.env.GITHUB_OUTPUT,`version=${manifest.version}\n`);
+          NODE
+      - name: Set up reviewed Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: ${{ steps.runtime.outputs.version }}
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Stage and verify the pinned compiled Mac engine
+        if: inputs.authenticated != true
+        run: node --import tsx scripts/prepare-memtrace-engine.mjs
+      - name: Inspect fresh metadata without credentials or indexing
+        if: inputs.authenticated != true
+        run: node --import tsx scripts/memtrace-admission-probe.ts
+      - name: Stage reviewed Node and engine resources for the native integration probe
+        if: inputs.authenticated
+        run: |
+          node scripts/prepare-desktop-runtime.mjs
+          node --import tsx scripts/prepare-memtrace-engine.mjs
+          node --input-type=module <<'NODE'
+          import {mkdir,cp} from 'node:fs/promises';
+          import {join} from 'node:path';
+          const resources=join(process.env.RUNNER_TEMP,'memcode-reviewed-staging-resources');
+          await mkdir(resources,{mode:0o700});
+          await cp('dist-desktop-runtime',join(resources,'desktop-runtime'),{recursive:true});
+          await cp('dist-memtrace-engine',join(resources,'memtrace-engine'),{recursive:true});
+          NODE
+      - name: Run real native engine account graph and watch integration
+        if: inputs.authenticated
+        env:
+          MEMCODE_MAC_ENGINE_ACCEPTANCE_GRANT: ${{ secrets.MEMCODE_MAC_ENGINE_ACCEPTANCE_GRANT }}
+        run: |
+          node scripts/bundled-engine-acceptance.mjs --resources "$RUNNER_TEMP/memcode-reviewed-staging-resources" --output release/macos-engine-admission-live.json
+      - name: Label integration source and resource scope
+        if: always() && inputs.authenticated
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync,writeFileSync,existsSync} from 'node:fs';
+          const path='release/macos-engine-admission-live.json';
+          if(existsSync(path)){const report=JSON.parse(readFileSync(path,'utf8'));report.resourceOrigin='reviewed-staging-diagnostics';report.runtimeSourceCommit=process.env.GITHUB_SHA;report.fullRebuiltInstallerFlowTested=false;writeFileSync(path,JSON.stringify(report,null,2)+'\n');}
+          NODE
+      - name: Upload only the content-free diagnostic
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: MemCode-mac-admission-${{ github.sha }}
+          path: release/macos-engine-admission-*.json
+          if-no-files-found: error
+          retention-days: 7
