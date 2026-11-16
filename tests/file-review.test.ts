@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, writeFile, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile, symlink, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { initialState } from "../src/seed";
@@ -36,7 +36,9 @@ test("file links preserve editor locations while rejecting unsafe schemes and ne
 });
 
 test("file previews resolve project source and worker outputs without following paths out of their scope", async () => {
-  const data = await mkdtemp(join(tmpdir(), "memcode-file-review-")),
+  const data = await realpath(
+      await mkdtemp(join(tmpdir(), "memcode-file-review-")),
+    ),
     root = join(data, "project"),
     state = initialState(),
     task = state.tasks[0];
@@ -110,7 +112,9 @@ test("media range parsing covers suffix, partial, open-ended and unsatisfiable r
 });
 
 test("streaming media and viewer comments retain capabilities and never publish automatically", async () => {
-  const data = await mkdtemp(join(tmpdir(), "memcode-media-review-")),
+  const data = await realpath(
+      await mkdtemp(join(tmpdir(), "memcode-media-review-")),
+    ),
     state = initialState(),
     task = state.tasks[0],
     root = join(data, "captures", task.id);

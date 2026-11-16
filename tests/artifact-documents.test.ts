@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { initialState } from "../src/seed";
@@ -9,7 +9,9 @@ import type { NativeHost } from "../runtime/host";
 import { inspectOfficeZip } from "../artifact-viewer/zip-limits";
 
 test("document preview switches keep their asset capabilities valid and the latest native view wins", async () => {
-  const data = await mkdtemp(join(tmpdir(), "memcode-document-preview-")),
+  const data = await realpath(
+      await mkdtemp(join(tmpdir(), "memcode-document-preview-")),
+    ),
     state = initialState(),
     task = state.tasks[0];
   const root = join(data, "captures", task.id);

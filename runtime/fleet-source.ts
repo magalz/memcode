@@ -1,5 +1,5 @@
 import { readFile, realpath, stat, mkdir, writeFile } from "node:fs/promises";
-import { join, resolve, relative } from "node:path";
+import { join, resolve, relative, isAbsolute } from "node:path";
 import { createHash } from "node:crypto";
 import type { Project, WorkItem } from "../src/shared";
 import { within, now } from "./local";
@@ -7,6 +7,7 @@ import { within, now } from "./local";
 /** A Class B refresh reads the current bounded source, rather than escalating overlap. */
 export async function rereadFleetSource(project: Project, task: WorkItem) {
   if (!project.path) throw Error("The shared project folder is unavailable.");
+  const root = await realpath(project.path);
   const files = [
     ...new Set([
       ...(task.scope ?? []),
@@ -17,7 +18,10 @@ export async function rereadFleetSource(project: Project, task: WorkItem) {
   let remaining = 16000;
   for (const file of files) {
     const candidate = resolve(project.path, file);
-    if (!within(project.path, candidate))
+    if (
+      !within(project.path, candidate) &&
+      !(isAbsolute(file) && within(root, candidate))
+    )
       throw Error("Fleet source scope is outside this project.");
     let path: string;
     try {
@@ -29,7 +33,7 @@ export async function rereadFleetSource(project: Project, task: WorkItem) {
       }
       throw error;
     }
-    if (!within(project.path, path))
+    if (!within(root, path))
       throw Error("Fleet source scope resolves outside this project.");
     const info = await stat(path);
     if (!info.isFile())
@@ -46,7 +50,7 @@ export async function rereadFleetSource(project: Project, task: WorkItem) {
       text = fullText.slice(0, Math.min(12000, remaining));
     remaining -= text.length;
     records.push({
-      file: relative(project.path, path).replaceAll("\\", "/"),
+      file: relative(root, path).replaceAll("\\", "/"),
       exists: true,
       bytes: bytes.length,
       sha256: createHash("sha256").update(bytes).digest("hex"),

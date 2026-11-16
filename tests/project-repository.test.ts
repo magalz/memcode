@@ -7,6 +7,8 @@ import {
   readdir,
   mkdir,
   rm,
+  realpath,
+  symlink,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -193,6 +195,32 @@ test("linked Git worktrees use Git's common exclusion file and preserve the gitd
     await assert.rejects(readFile(join(linked, ".gitignore")), {
       code: "ENOENT",
     });
+  } finally {
+    await rm(f.directory, { recursive: true, force: true });
+  }
+});
+
+test("an explicitly selected filesystem alias identifies the same Git root without adopting nested folders or changing source", async () => {
+  const f = await existingRepository();
+  const alias = join(f.directory, "selected-alias");
+  try {
+    await symlink(
+      f.path,
+      alias,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    const item = project(alias);
+    const before = await readFile(join(f.path, "source.ts"), "utf8");
+    await ensureProjectRepository(item);
+    assert.equal(item.path, alias, "Keep the user's selected project binding");
+    assert.equal(await readFile(join(alias, "source.ts"), "utf8"), before);
+    assert.equal(await realpath(alias), await realpath(f.path));
+    const nested = join(alias, "nested");
+    await mkdir(nested);
+    await assert.rejects(
+      ensureProjectRepository(project(nested)),
+      /repository root/,
+    );
   } finally {
     await rm(f.directory, { recursive: true, force: true });
   }

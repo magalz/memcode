@@ -1,4 +1,5 @@
 import { open, realpath, stat } from "node:fs/promises";
+import { canonicalDirectories } from "./files";
 import { extname } from "node:path";
 import { unzipSync, strFromU8 } from "fflate";
 import type { Artifact } from "../src/shared";
@@ -157,7 +158,8 @@ export async function readArtifactThumbnail(
   roots: string[],
 ): Promise<ArtifactThumbnail> {
   const path = await realpath(artifact.path);
-  if (!roots.some((root) => within(root, path)))
+  const approvedRoots = await canonicalDirectories(roots);
+  if (!approvedRoots.some((root) => within(root, path)))
     throw Error("Artifact path is outside the output folders.");
   const info = await stat(path);
   if (!info.isFile()) throw Error("Artifact is not a file.");

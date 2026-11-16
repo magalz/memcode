@@ -7,7 +7,7 @@ import type { NativeHost, Emit } from "./host";
 import { within, now } from "./local";
 import { localURL } from "./urls";
 import { artifactFormat } from "../src/artifact-format";
-import { outputRoots, resolveFile } from "./files";
+import { outputRoots, canonicalArtifactRoots, resolveFile } from "./files";
 import { streamArtifact } from "./artifact-stream";
 import { selectionSchema } from "../src/review";
 
@@ -121,7 +121,9 @@ export class PreviewManager {
         const path = file.path;
         if (
           artifact &&
-          !artifactRoots(this.dataDir, task).some((root) => within(root, path))
+          !(await canonicalArtifactRoots(this.dataDir, task)).some((root) =>
+            within(root, path),
+          )
         )
           throw new Error(
             "The artifact is outside this worker’s output folders.",
@@ -140,9 +142,11 @@ export class PreviewManager {
         if (format !== "html") {
           const development = join(this.appPath, "dist-artifact-viewer");
           const packaged = join(this.appPath, "artifact-viewer");
-          const viewer = await stat(development)
-            .then(() => development)
-            .catch(() => packaged);
+          const viewer = await realpath(
+            await stat(development)
+              .then(() => development)
+              .catch(() => packaged),
+          );
           if (
             !(
               await stat(join(viewer, "index.html")).catch(() => null)
@@ -331,11 +335,11 @@ export class PreviewManager {
           resource.document?.format === "html" &&
           relative.startsWith("__review-ui/")
         ) {
-          const folder = await stat(
-              join(this.appPath, "dist-artifact-annotations"),
-            )
-              .then(() => join(this.appPath, "dist-artifact-annotations"))
-              .catch(() => join(this.appPath, "artifact-annotations")),
+          const folder = await realpath(
+              await stat(join(this.appPath, "dist-artifact-annotations"))
+                .then(() => join(this.appPath, "dist-artifact-annotations"))
+                .catch(() => join(this.appPath, "artifact-annotations")),
+            ),
             path = await realpath(
               resolve(folder, decodeURIComponent(relative.slice(12))),
             );

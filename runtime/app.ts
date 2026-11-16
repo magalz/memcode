@@ -14,7 +14,7 @@ import { registerDeletion } from "./deletion";
 import { readArtifactThumbnail } from "./artifact-thumbnail";
 import { reconcileArtifacts } from "./artifact-catalog";
 import { WorkerManager } from "./workers";
-import { PreviewManager, artifactRoots } from "./preview";
+import { PreviewManager } from "./preview";
 import { localURL } from "./urls";
 import { discoverHarnesses } from "./catalog";
 import { planDefinedStory } from "./story-route";
@@ -31,7 +31,7 @@ import { AgentBrowserManager } from "./browser/manager";
 import { TerminalManager } from "./terminals";
 import { terminalRequestSchema } from "../src/terminal";
 import { readWorkerChanges, WorkerChangeJournal } from "./changes";
-import { resolveFile } from "./files";
+import { canonicalArtifactRoots, resolveFile } from "./files";
 import { registerReview } from "./review";
 import { registerOnboarding } from "./onboarding";
 import { registerCardComments } from "./card-comments";
@@ -937,7 +937,10 @@ export async function createRuntime(
     );
     if (!artifact) throw Error("Artifact not found.");
     const item = task(artifact.taskId);
-    return readArtifactThumbnail(artifact, artifactRoots(store.dir, item));
+    return readArtifactThumbnail(
+      artifact,
+      await canonicalArtifactRoots(store.dir, item),
+    );
   });
   register("artifact:read", identifier, async (id) => {
     const artifact = store.state.artifacts.find((a) => a.id === id);
@@ -945,7 +948,7 @@ export async function createRuntime(
       throw new Error("Inline artifact not found.");
     const path = await realpath(artifact.path);
     const item = task(artifact.taskId);
-    const roots = artifactRoots(store.dir, item);
+    const roots = await canonicalArtifactRoots(store.dir, item);
     if (!roots.some((root) => within(root, path)))
       throw new Error("Artifact path is outside the output folders.");
     if (

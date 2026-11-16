@@ -42,7 +42,7 @@ async function fixture(t: TestContext) {
   );
   t.after(async () => {
     assert.ok(basename(root).startsWith("memcode-repository-test-"));
-    assert.ok(root.startsWith(resolve(tmpdir()) + sep));
+    assert.ok(root.startsWith((await realpath(tmpdir())) + sep));
     await rm(root, { recursive: true, force: true });
   });
   const command = await findCommand("git");

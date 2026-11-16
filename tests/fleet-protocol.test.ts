@@ -1,16 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  realpath,
+  symlink,
+  rm,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { initialState } from "../src/seed";
 import { FleetCoordinator, FleetBlocked } from "../runtime/fleet";
-import { git } from "../runtime/local";
+import { git, within } from "../runtime/local";
+import { rereadFleetSource } from "../runtime/fleet-source";
 import type { MemtraceEngine } from "../runtime/memtrace";
 import type { WorkItem } from "../src/shared";
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "memcode-fleet-protocol-"));
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "memcode-fleet-protocol-")),
+  );
   await git(root, ["init", "--initial-branch=main"]);
   await writeFile(
     join(root, "shared.ts"),
@@ -198,5 +208,59 @@ test("only a rejected semantic alternative creates a human decision; unrelated w
     assert.throws(() => f.fleet.assertClear(later, f.project), FleetBlocked);
   } finally {
     await f.release();
+  }
+});
+
+test("Fleet rereads a selected project alias but still rejects a source link outside its canonical root", async () => {
+  const f = await fixture(),
+    outside = await realpath(
+      await mkdtemp(join(tmpdir(), "memcode-fleet-outside-")),
+    ),
+    alias = join(f.root, "selected-alias");
+  try {
+    await symlink(
+      f.root,
+      alias,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    const result = await rereadFleetSource(
+      { ...f.project, path: alias },
+      f.tasks[0],
+    );
+    assert.equal(result.files[0].file, "shared.ts");
+    assert.match(result.files[0].text!, /first plan/);
+    const measured = await rereadFleetSource(
+      { ...f.project, path: alias },
+      { ...f.tasks[0], scope: [join(f.root, "shared.ts")] },
+    );
+    assert.equal(
+      measured.files[0].file,
+      "shared.ts",
+      "Canonical engine anchors stay inside the selected alias",
+    );
+    await writeFile(join(outside, "private.ts"), "Never share outside source");
+    await symlink(
+      outside,
+      join(f.root, "escape"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    await assert.rejects(
+      rereadFleetSource(
+        { ...f.project, path: alias },
+        { ...f.tasks[0], scope: ["escape/private.ts"] },
+      ),
+      /resolves outside/,
+    );
+    await assert.rejects(
+      rereadFleetSource(
+        { ...f.project, path: alias },
+        { ...f.tasks[0], scope: ["../outside.ts"] },
+      ),
+      /outside/,
+    );
+  } finally {
+    await f.release();
+    assert.ok(within(await realpath(tmpdir()), outside));
+    await rm(outside, { recursive: true, force: true });
   }
 });

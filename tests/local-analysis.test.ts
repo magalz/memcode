@@ -302,7 +302,10 @@ test("observed incomplete-publication metadata preserves the UI fields, null cou
   // Anonymized shape from windows-diagnostics.json. Its repository list was
   // rewrapped by the capture script; raw arrays and .repos are supported too.
   const item = project(),
-    extended = "\\\\?\\" + item.path!.replaceAll("/", "\\");
+    extended =
+      process.platform === "win32"
+        ? "\\\\?\\" + item.path!.replaceAll("/", "\\")
+        : item.path!;
   const engine = {
     call: async (_p: Project, name: string) => {
       if (name === "list_indexed_repositories")

@@ -8,7 +8,7 @@ import { applyTeamEvent, teamSessionReplySchema, teamSyncReplySchema } from "./p
 import { startTeamRelay } from "./relay";
 import { applySharedSnapshot, emptySharedProjection, projectSharedState, sharedCommands, type SharedProjection } from "./projection";
 import { replaceWorkspace } from "../persistence";
-import { outputRoots } from "../files";
+import { canonicalArtifactRoots } from "../files";
 import { within } from "../local";
 import type { TeamWorkerClaims } from "../workers";
 import { emptyTeamLocalIds, localTeamId, localTeamProjection, localTeamSnapshot, remoteTeamId, remoteTeamProjection, type TeamLocalIds } from "./identity";
@@ -809,7 +809,7 @@ export class TeamSyncClient implements TeamWorkerClaims {
     const artifact = this.state().artifacts.find((artifact) => artifact.id === input.artifactId && artifact.taskId === task?.id);
     if (!task || !artifact) throw Error("Choose a saved output from this team project.");
     const path = await realpath(artifact.path);
-    const roots = await Promise.all(outputRoots(this.dataDir, task).map((root) => realpath(root).catch(() => root)));
+    const roots = await canonicalArtifactRoots(this.dataDir, task);
     if (!roots.some((root) => within(root, path))) throw Error("Only this story’s saved outputs can be published.");
     const info = await stat(path);
     if (!info.isFile() || info.size > 5 * 1024 * 1024) throw Error("The Team preview supports individual saved outputs up to 5 MB.");

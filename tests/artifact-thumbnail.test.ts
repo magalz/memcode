@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm, truncate } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  rm,
+  truncate,
+  realpath,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { zipSync, strToU8 } from "fflate";
@@ -11,7 +18,9 @@ import { within } from "../runtime/local";
 async function fixture(
   run: (root: string, artifact: (name: string) => Artifact) => Promise<void>,
 ) {
-  const root = await mkdtemp(join(tmpdir(), "memcode-thumbnail-test-"));
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "memcode-thumbnail-test-")),
+  );
   try {
     await run(root, (name) => ({
       id: name,
@@ -25,7 +34,7 @@ async function fixture(
     }));
   } finally {
     assert.ok(
-      within(tmpdir(), root) &&
+      within(await realpath(tmpdir()), root) &&
         basename(root).startsWith("memcode-thumbnail-test-"),
     );
     await rm(root, { recursive: true, force: true });

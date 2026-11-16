@@ -4,6 +4,7 @@ import {
   mkdir,
   readFile,
   readdir,
+  realpath,
   writeFile,
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -62,7 +63,13 @@ export async function ensureProjectRepository(project: Project): Promise<void> {
     // A genuinely empty folder can be safely initialized without adopting files.
   }
   if (root) {
-    if (resolve(root).toLowerCase() !== resolve(path).toLowerCase())
+    const [canonicalRoot, canonicalPath] = await Promise.all([
+      realpath(root),
+      realpath(path),
+    ]);
+    const identity = (value: string) =>
+      process.platform === "win32" ? value.toLowerCase() : value;
+    if (identity(canonicalRoot) !== identity(canonicalPath))
       throw Error(
         `Select the Git repository root (${root}) to connect this project.`,
       );

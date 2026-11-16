@@ -1,12 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createRuntime } from "../runtime/app";
 
 test("saved image artifacts render inline while retaining the owning task's file boundary", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "memcode-artifact-inline-"));
+  const dir = await realpath(
+    await mkdtemp(join(tmpdir(), "memcode-artifact-inline-")),
+  );
   const runtime = await createRuntime(
     dir,
     dir,

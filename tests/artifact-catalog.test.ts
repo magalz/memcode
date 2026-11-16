@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm, access, stat } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  rm,
+  access,
+  stat,
+  realpath,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { initialState } from "../src/seed";
@@ -21,7 +29,9 @@ async function fixture(
     make: (name: string, taskId?: string) => Artifact;
   }) => Promise<void>,
 ) {
-  const root = await mkdtemp(join(tmpdir(), "memcode-artifact-catalog-"));
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "memcode-artifact-catalog-")),
+  );
   try {
     const state = initialState(),
       task = state.tasks[0],
@@ -47,7 +57,7 @@ async function fixture(
     await run({ root, state, dataDir, output, make });
   } finally {
     assert.ok(
-      within(tmpdir(), root) &&
+      within(await realpath(tmpdir()), root) &&
         basename(root).startsWith("memcode-artifact-catalog-"),
     );
     await rm(root, { recursive: true, force: true });
