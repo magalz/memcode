@@ -2,4 +2,4 @@
 *.png binary
 *.woff2 binary
 LICENSE -text
-third_party/** -text
+third_party/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
