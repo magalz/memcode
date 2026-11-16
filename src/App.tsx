@@ -53,6 +53,7 @@ import { Onboarding } from "./components/Onboarding";
 import { Docs } from "./components/Docs";
 import {
   firstRunGuide,
+  projectGuide,
   type OnboardingPatch,
   type GuideAction,
 } from "./onboarding";
@@ -324,8 +325,8 @@ export function App() {
   const project =
     state.projects.find((p) => p.id === state.activeProjectId) ??
     state.projects[0];
-  const guideProject =
-    state.projects.find((p) => p.id === state.onboarding?.projectId) ?? project;
+  const guideProgress = projectGuide(state, project.id);
+  const guideProject = project;
   const tasks = tasksForProject(state, project.id);
   const epics = state.epics.filter((epic) => epic.projectId === project.id);
   const selected = state.tasks.find((task) => task.id === selectedId);
@@ -345,16 +346,25 @@ export function App() {
     setDialog("task");
   };
   const updateGuide = (patch: OnboardingPatch) => {
-    void act(() => window.memcode.updateOnboarding(patch));
+    void act(() =>
+      window.memcode.updateOnboarding({
+        ...(!project.example ? { projectId: project.id } : {}),
+        ...patch,
+      }),
+    );
   };
   const startGuide = (restart = false) => {
     setSelectedId(null);
     setDialog(null);
     setProjectMenu(false);
-    const progress = state.onboarding;
+    const progress = guideProgress;
     updateGuide(
       restart || !progress || progress.completedAt
-        ? { restart: true, step: "welcome", dismissed: false }
+        ? {
+            restart: true,
+            step: project.example ? "welcome" : "context",
+            dismissed: false,
+          }
         : { dismissed: false },
     );
     const step = restart ? "welcome" : progress?.step;
@@ -376,10 +386,18 @@ export function App() {
       return;
     }
     if (action === "account") {
-      setView("workers");
+      setDialog("settings");
       return;
     }
-    const progress = state.onboarding;
+    if (action === "team") {
+      setView("team");
+      return;
+    }
+    if (action === "analyze") {
+      void act(() => window.memcode.analyzeProject(project.id));
+      return;
+    }
+    const progress = guideProgress;
     void act(async () => {
       if (progress?.projectId && progress.projectId !== project.id) {
         await window.memcode.selectProject(progress.projectId);
@@ -793,10 +811,7 @@ export function App() {
               createRequest={createEpicRequest}
               onCreateRequestConsumed={() => setCreateEpicRequest(0)}
               onEpicCreated={(epic) => {
-                if (
-                  state.onboarding?.step === "epic" &&
-                  !state.onboarding.dismissed
-                )
+                if (guideProgress?.step === "epic" && !guideProgress.dismissed)
                   updateGuide({ epicId: epic.id, step: "story" });
               }}
             />
@@ -862,8 +877,8 @@ export function App() {
                 onCreateWork={() => create()}
                 onConnected={() => {
                   if (
-                    state.onboarding?.step === "worker" &&
-                    !state.onboarding.dismissed &&
+                    guideProgress?.step === "worker" &&
+                    !guideProgress.dismissed &&
                     (account?.status === "connected" ||
                       guideProject.analysis === "ready")
                   ) {
@@ -1065,10 +1080,7 @@ export function App() {
           onCreated={(task) => {
             setDialog(null);
             setSelectedId(task.id);
-            if (
-              state.onboarding?.step === "story" &&
-              !state.onboarding.dismissed
-            )
+            if (guideProgress?.step === "story" && !guideProgress.dismissed)
               updateGuide({
                 storyId: task.id,
                 epicId: task.epicId ?? undefined,
@@ -1088,18 +1100,6 @@ export function App() {
             setDialog(null);
             setView("board");
             setSelectedId(null);
-            if (
-              state.onboarding?.step === "project" &&
-              !state.onboarding.dismissed
-            )
-              void act(async () => {
-                const current = await window.memcode.load();
-                await window.memcode.updateOnboarding({
-                  projectId: current.state.activeProjectId,
-                  step: "worker",
-                });
-                setView("workers");
-              });
           }}
           notify={notify}
         />
@@ -1122,28 +1122,26 @@ export function App() {
           create={create}
         />
       )}
-      {state.onboarding &&
-        !state.onboarding.dismissed &&
-        !state.onboarding.completedAt && (
+      {guideProgress &&
+        !guideProgress.dismissed &&
+        !guideProgress.completedAt && (
           <Onboarding
             needsEngine={
               !runtime.memtraceAvailable && betaStatus?.state !== "connected"
             }
             notify={notify}
-            progress={state.onboarding}
+            progress={guideProgress}
             state={state}
             project={guideProject}
-            epics={state.epics.filter(
-              (e) =>
-                e.projectId === (state.onboarding?.projectId ?? project.id),
+            epics={state.epics.filter((e) => e.projectId === project.id)}
+            connected={runtime.harnesses.some((adapter) =>
+              approvedRuntime(adapter, state.workerConnections),
             )}
-            connected={
-              runtime.harnesses.some((adapter) =>
-                approvedRuntime(adapter, state.workerConnections),
-              ) &&
-              (account?.status === "connected" ||
-                betaStatus?.state === "connected" ||
-                guideProject.analysis === "ready")
+            memtraceConnected={
+              betaStatus?.accessMode === "beta"
+                ? betaStatus.state === "connected"
+                : account?.status === "connected" ||
+                  guideProject.analysis === "ready"
             }
             hidden={!!dialog}
             onUpdate={updateGuide}

@@ -124,6 +124,12 @@ pub async fn host_call(app: AppHandle, method: &str, input: Value) -> Result<Val
                 .map_err(|e| e.to_string())??;
             Ok(Value::Null)
         }
+        "open_memcode_telemetry_privacy" => {
+            tauri::async_runtime::spawn_blocking(|| open_claim("https://www.memtrace.io/docs/privacy/telemetry#memcode"))
+                .await
+                .map_err(|e| e.to_string())??;
+            Ok(Value::Null)
+        }
         "open_path" => {
             let path = input["path"]
                 .as_str()

@@ -32,6 +32,7 @@ export function childEnv(
   for (const key of Object.keys(env))
     if (
       /^MEMCODE_ENGINE_/i.test(key) ||
+      /^MEMCODE_TELEMETRY_/i.test(key) ||
       (!options.engine &&
         /^(MEMCORTEX_STORE_DIR|MEMTRACE_ENGINEER)$/i.test(key))
     )

@@ -251,6 +251,8 @@ export interface AppState {
   team?: TeamWorkspaceState[];
   workerInputs?: import("./worker-input").WorkerInputRequest[];
   onboarding?: import("./onboarding").OnboardingProgress;
+  projectOnboarding?: Record<string, import("./onboarding").OnboardingProgress>;
+  onboardingPreferences?: { showForNewProjects?: boolean };
   storyComments?: import("./story-comments").StoryComment[];
   workerConnections?: Partial<
     Record<Harness, import("./connections").WorkerConnection>
@@ -333,6 +335,10 @@ export interface PreviewInput {
   bounds: { x: number; y: number; width: number; height: number };
 }
 export interface MemCodeAPI {
+  telemetryStatus(): Promise<import("./telemetry").TelemetryStatus>;
+  setTelemetryEnabled(enabled: boolean): Promise<import("./telemetry").TelemetryStatus>;
+  flushTelemetry(): Promise<import("./telemetry").TelemetryStatus>;
+  openTelemetryPrivacy(): Promise<void>;
   betaStatus(): Promise<import("./beta").MemCodeBetaStatus>;
   connectBeta(): Promise<import("./beta").MemCodeBetaStatus>;
   cancelBeta(): Promise<import("./beta").MemCodeBetaStatus>;

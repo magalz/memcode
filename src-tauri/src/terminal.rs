@@ -327,6 +327,8 @@ fn remove_engine_environment(command: &mut CommandBuilder) {
         "MEMCODE_ENGINE_ACCESS_FILE",
         "MEMCODE_ENGINE_DEVICE_ID",
         "MEMCODE_ENGINE_SESSION_ID",
+        "MEMCODE_TELEMETRY_TOKEN",
+        "MEMCODE_TELEMETRY_TEST_CHANNEL",
         "MEMCORTEX_STORE_DIR",
         "MEMTRACE_ENGINEER",
     ] {
@@ -335,6 +337,7 @@ fn remove_engine_environment(command: &mut CommandBuilder) {
     for (key, _) in std::env::vars_os() {
         let name = key.to_string_lossy().to_ascii_uppercase();
         if name.starts_with("MEMCODE_ENGINE_")
+            || name.starts_with("MEMCODE_TELEMETRY_")
             || name == "MEMCORTEX_STORE_DIR"
             || name == "MEMTRACE_ENGINEER"
         {
@@ -353,6 +356,8 @@ mod engine_environment_tests {
             "MEMCODE_ENGINE_ACCESS_FILE",
             "MEMCODE_ENGINE_DEVICE_ID",
             "MEMCODE_ENGINE_SESSION_ID",
+            "MEMCODE_TELEMETRY_TOKEN",
+            "MEMCODE_TELEMETRY_TEST_CHANNEL",
             "MEMCORTEX_STORE_DIR",
             "MEMTRACE_ENGINEER",
         ] {
@@ -364,6 +369,8 @@ mod engine_environment_tests {
             "MEMCODE_ENGINE_ACCESS_FILE",
             "MEMCODE_ENGINE_DEVICE_ID",
             "MEMCODE_ENGINE_SESSION_ID",
+            "MEMCODE_TELEMETRY_TOKEN",
+            "MEMCODE_TELEMETRY_TEST_CHANNEL",
             "MEMCORTEX_STORE_DIR",
             "MEMTRACE_ENGINEER",
         ] {

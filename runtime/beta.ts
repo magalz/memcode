@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import type { MemCodeBetaStatus } from "../src/beta";
+import { verifyTelemetryAuthorization } from "./telemetry-auth";
+import type { TelemetryAuthorization } from "./telemetry";
 import type { NativeHost } from "./host";
 import {
   BETA_TERMS,
@@ -81,6 +83,7 @@ function credential(value: unknown): BetaCredentials {
   return item as BetaCredentials;
 }
 export interface MemCodeBetaOptions {
+  telemetryOptIn?: () => boolean;
   storage: BetaStorage;
   authorization: ReturnType<typeof createBetaAuthorization>;
   loadKeys?: () => Promise<{ keys: BetaPublicKey[] }>;
@@ -96,6 +99,7 @@ export interface MemCodeBetaOptions {
 export class MemCodeBeta {
   private record?: BetaCredentials;
   private token?: string;
+  private telemetry?: TelemetryAuthorization;
   private accessFile?: string;
   private configured = false;
   private signedOut = false;
@@ -352,6 +356,20 @@ export class MemCodeBeta {
       throw Error(this.note);
     }
     this.token = tokens.access_token;
+    this.telemetry = undefined;
+    if (this.options.telemetryOptIn?.() && tokens.telemetry_token) {
+      try {
+        this.telemetry = verifyTelemetryAuthorization(
+          tokens.telemetry_token,
+          binding,
+          record.account.id,
+          verified.publicKey,
+          this.clock(),
+        );
+      } catch {
+        /* Optional diagnostics cannot invalidate ordinary engine access. */
+      }
+    }
     this.note = undefined;
     this.retryAfter = 0;
     this.emit();
@@ -468,6 +486,7 @@ export class MemCodeBeta {
         ) {
           record.reauthRequired = true;
           this.token = undefined;
+          this.telemetry = undefined;
           await this.options.storage.clearAccess().catch(() => {});
           await this.options.storage.write(record).catch(() => {});
         } else if (error instanceof BetaRequestError && error.status === 429)
@@ -476,6 +495,7 @@ export class MemCodeBeta {
           try {
             if (!(await this.options.authorization.available())) {
               this.token = undefined;
+              this.telemetry = undefined;
               await this.options.storage.clearAccess();
             }
           } catch {
@@ -484,6 +504,7 @@ export class MemCodeBeta {
         }
         if (!this.current()) {
           this.token = undefined;
+          this.telemetry = undefined;
           await this.options.storage.clearAccess().catch(() => {});
         }
         this.emit();
@@ -551,6 +572,34 @@ export class MemCodeBeta {
       MEMTRACE_ENGINEER: record.account.id,
     };
   }
+  clearTelemetryAuthorization() {
+    this.telemetry = undefined;
+  }
+  /** Host-only purpose-specific credential; never part of status, disk state or engine env. */
+  async telemetryAuthorization(): Promise<TelemetryAuthorization | null> {
+    if (!this.options.telemetryOptIn?.() || this.changing || this.closing)
+      return null;
+    await this.initialize();
+    if (!this.record || this.signedOut || this.record.reauthRequired)
+      return null;
+    const generation = this.generation;
+    await this.refreshAccess(false);
+    if (!this.telemetry || this.telemetry.expiresAt <= this.clock() + 30000)
+      await this.refreshAccess(true);
+    if (
+      generation !== this.generation ||
+      this.changing ||
+      this.closing ||
+      !this.options.telemetryOptIn?.() ||
+      !this.current()
+    )
+      return null;
+    return this.telemetry &&
+      this.telemetry.accountId === this.record?.account.id &&
+      this.telemetry.expiresAt > this.clock()
+      ? this.telemetry
+      : null;
+  }
   private retryRevocation(allowChanging = false): Promise<void> {
     if (this.revoking) return this.revoking;
     const record = this.record;
@@ -594,6 +643,7 @@ export class MemCodeBeta {
       await this.options.storage.markSignedOut();
       this.signedOut = true;
       this.token = undefined;
+      this.telemetry = undefined;
       if (this.record) {
         this.record.signedOut = true;
         await this.options.storage.write(this.record).catch(() => {});
@@ -632,6 +682,7 @@ export class MemCodeBeta {
     return this.snapshot();
   }
   close() {
+    this.telemetry = undefined;
     this.closing = true;
     ++this.generation;
     clearInterval(this.timer);

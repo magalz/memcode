@@ -39,6 +39,7 @@ import { DictationSettings } from "./DictationSettings";
 import type { MemtraceAccount } from "../connections";
 import { AppUpdates } from "./AppUpdates";
 import { BetaAccess } from "./BetaAccess";
+import { TelemetrySettings } from "./TelemetrySettings";
 
 export function Modal({
   title,
@@ -674,6 +675,7 @@ export function SettingsDialog({
             onAccountStatus={onAccountStatus}
           />
           <AppUpdates currentVersion={runtime.appVersion} />
+          <TelemetrySettings notify={notify}/>
           <div className="settings-section">
             <div>
               <GitBranch size={17} />

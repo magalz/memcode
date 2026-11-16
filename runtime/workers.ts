@@ -34,6 +34,7 @@ import { WorkerStartupQueue } from "./worker-startup";
 import { workerTurnContext } from "./worker-turn";
 import { effectivePermissionMode } from "../src/permissions";
 import type { AgentEvent } from "./agents/types";
+import type { WorkerTelemetry } from "./telemetry";
 import {
   claimReviewContext,
   releaseReviewClaims,
@@ -220,6 +221,7 @@ export class WorkerManager {
     private readonly teamClaims?: TeamWorkerClaims,
     private readonly assertAccountSession?: () => void,
     private readonly mayDispatch: (project?: Project) => boolean = () => true,
+    private readonly telemetry?: WorkerTelemetry,
   ) {
     this.inputs = new WorkerInputs(state, changed);
     for (const task of state().tasks)
@@ -486,6 +488,7 @@ export class WorkerManager {
     let preparationFailure: Error | undefined;
     let closeArtifacts: (() => Promise<void>) | undefined;
     let conversation: Message[] = [];
+    let telemetryAttempt: string | undefined;
     const cancelledPreparation = new AbortController();
     const aborted = new Promise<never>((_resolve, reject) =>
       cancelledPreparation.signal.addEventListener(
@@ -908,6 +911,18 @@ export class WorkerManager {
           };
         saveEvent();
       };
+      let publishTelemetryAttempt: (() => string | undefined) | undefined;
+      try {
+        publishTelemetryAttempt = this.telemetry?.prepare?.(
+          task,
+          project,
+          conversation.some((message) => !!message.promptedAt)
+            ? "followup"
+            : "initial",
+        );
+      } catch {
+        /* Optional reporting cannot block launch. */
+      }
       const session = this.sessionFactory(task.harness, {
         command,
         cwd: workspace,
@@ -946,6 +961,19 @@ export class WorkerManager {
       this.children.set(task.id, entry);
       task.run.state = "running";
       task.stage = "working";
+      try {
+        telemetryAttempt = this.telemetry?.prepare
+          ? publishTelemetryAttempt?.()
+          : this.telemetry?.started(
+              task,
+              project,
+              conversation.some((message) => !!message.promptedAt)
+                ? "followup"
+                : "initial",
+            );
+      } catch {
+        /* Optional reporting must never block a worker. */
+      }
       this.message(
         task,
         "system",
@@ -1055,6 +1083,11 @@ export class WorkerManager {
             );
           });
           this.children.delete(task.id);
+          try {
+            this.telemetry?.finished(telemetryAttempt, task);
+          } catch {
+            /* Optional reporting cannot change process or review outcomes. */
+          }
           finish();
           this.dispatchQueued();
         }

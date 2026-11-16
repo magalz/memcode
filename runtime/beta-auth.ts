@@ -34,6 +34,8 @@ export interface BetaPublicKey {
   d?: never;
 }
 export interface BetaTokens {
+  telemetry_token?: string;
+  telemetry_expires_in?: number;
   access_token: string;
   token_type: "Bearer";
   expires_in: number;
@@ -120,6 +122,15 @@ export function betaTokens(value: any): BetaTokens {
   )
     throw new Error("Memtrace returned an invalid beta grant. Connect again.");
   return {
+    ...(text(value.telemetry_token, 16384) &&
+    Number.isInteger(value.telemetry_expires_in) &&
+    value.telemetry_expires_in > 0 &&
+    value.telemetry_expires_in <= 900
+      ? {
+          telemetry_token: value.telemetry_token,
+          telemetry_expires_in: value.telemetry_expires_in,
+        }
+      : {}),
     access_token: value.access_token,
     token_type: "Bearer",
     expires_in: value.expires_in,
@@ -262,6 +273,7 @@ export async function verifyBetaAccess(
 }
 
 export interface BetaAuthorizationOptions {
+  telemetryOptIn?: () => boolean;
   openExternal(url: string): Promise<unknown>;
   fetcher?: typeof fetch;
   now?: () => number;
@@ -313,6 +325,7 @@ export function createBetaAuthorization(options: BetaAuthorizationOptions) {
           refresh_token: refreshToken,
           device_id: binding.deviceId,
           session_id: binding.sessionId,
+          ...(options.telemetryOptIn?.() ? { telemetry_opt_in: true } : {}),
           ...(betaClientMetadata() ? { client: betaClientMetadata() } : {}),
         }),
       ),
@@ -442,6 +455,7 @@ export function createBetaAuthorization(options: BetaAuthorizationOptions) {
               code,
               code_verifier: verifier,
               redirect_uri: redirect,
+              ...(options.telemetryOptIn?.() ? { telemetry_opt_in: true } : {}),
               ...(betaClientMetadata() ? { client: betaClientMetadata() } : {}),
             },
             abort.signal,

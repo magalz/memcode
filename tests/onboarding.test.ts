@@ -1,8 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { initialState } from "../src/seed";
-import { firstRunGuide } from "../src/onboarding";
+import {
+  activateProjectGuide,
+  beginProjectGuide,
+  firstRunGuide,
+  projectGuide,
+} from "../src/onboarding";
 import { registerOnboarding } from "../runtime/onboarding";
+import { projectSharedState, sharedCommands } from "../runtime/team/projection";
 function harness() {
   const state = initialState(),
     routes = new Map<
@@ -31,9 +37,13 @@ test("first-run guidance appears for a new workspace, without taking over an exi
     firstRunGuide({
       projects: [{ id: "example", example: true }, { id: "memcode-dogfood" }],
     }),
-    true,
+    false,
   );
   assert.equal(firstRunGuide({ projects: [{ id: "my-project" }] }), false);
+  assert.equal(
+    firstRunGuide({ projects: [{ id: "example", example: true }] }),
+    true,
+  );
   assert.equal(
     firstRunGuide({
       projects: [],
@@ -72,7 +82,10 @@ test("guide progress validates project ownership and can pause, complete and exp
   await h.call({ dismissed: true });
   assert.equal(h.state.onboarding?.step, "story");
   await h.call({ dismissed: false, storyId: story.id, step: "ready" });
-  await assert.rejects(h.call({ projectId: other.id }), /epic in this project/);
+  await assert.rejects(
+    h.call({ projectId: other.id, epicId: "guide-epic" }),
+    /epic in this project/,
+  );
   await h.call({ complete: true });
   assert.ok(h.state.onboarding?.completedAt);
   assert.equal(h.state.onboarding?.dismissed, true);
@@ -85,4 +98,99 @@ test("guide progress validates project ownership and can pause, complete and exp
   assert.equal(reset.projectId, undefined);
   assert.equal(reset.storyId, undefined);
   assert.equal(reset.dismissed, false);
+});
+
+test("each new project remembers its own guide; skip and future-project preference are separate", async () => {
+  const h = harness();
+  const projects = ["one", "two", "three"].map((id) => ({
+    ...h.state.projects[0],
+    id,
+    example: false,
+    path: `/synthetic/${id}`,
+  }));
+  h.state.projects.push(...projects);
+  beginProjectGuide(h.state, projects[0]);
+  assert.equal(projectGuide(h.state, "one")?.step, "context");
+  await h.call({ projectId: "one", step: "memtrace" });
+  await h.call({ projectId: "one", dismissed: true });
+  beginProjectGuide(h.state, projects[1]);
+  assert.equal(projectGuide(h.state, "two")?.dismissed, false);
+  assert.equal(projectGuide(h.state, "one")?.dismissed, true);
+  await h.call({
+    projectId: "two",
+    showForNewProjects: false,
+    dismissed: true,
+  });
+  beginProjectGuide(h.state, projects[2]);
+  assert.equal(projectGuide(h.state, "three")?.dismissed, true);
+  await h.call({
+    projectId: "three",
+    restart: true,
+    step: "context",
+    dismissed: false,
+  });
+  assert.equal(projectGuide(h.state, "three")?.dismissed, false);
+  assert.equal(h.state.onboardingPreferences?.showForNewProjects, false);
+  activateProjectGuide(h.state, "one");
+  assert.equal(h.state.onboarding?.step, "memtrace");
+  assert.equal(h.state.onboarding?.dismissed, true);
+  assert.equal(projectGuide(h.state, "two")?.dismissed, true);
+  const restored = JSON.parse(JSON.stringify(h.state));
+  activateProjectGuide(restored, "three");
+  assert.equal(restored.onboarding.step, "context");
+  assert.equal(restored.onboarding.dismissed, false);
+});
+
+test("finishing setup never requires or creates an epic, story or cycle", async () => {
+  const h = harness(),
+    project = { ...h.state.projects[0], id: "empty-project", example: false };
+  h.state.projects.push(project);
+  const before = {
+    tasks: structuredClone(h.state.tasks),
+    epics: structuredClone(h.state.epics),
+    cycles: structuredClone(h.state.cycles),
+  };
+  beginProjectGuide(h.state, project);
+  await h.call({ projectId: project.id, step: "epic", complete: true });
+  assert.ok(projectGuide(h.state, project.id)?.completedAt);
+  assert.equal(projectGuide(h.state, project.id)?.dismissed, true);
+  assert.deepEqual(h.state.tasks, before.tasks);
+  assert.deepEqual(h.state.epics, before.epics);
+  assert.deepEqual(h.state.cycles, before.cycles);
+});
+
+test("an existing or joined board is not taken over by another project's guide", () => {
+  const state = initialState(),
+    local = { ...state.projects[0], id: "local", example: false },
+    joined = { ...local, id: "joined", path: null };
+  state.projects.push(local, joined);
+  beginProjectGuide(state, local);
+  const tasks = structuredClone(state.tasks);
+  activateProjectGuide(state, joined.id);
+  assert.equal(state.onboarding, undefined);
+  assert.equal(projectGuide(state, joined.id), undefined);
+  assert.equal(projectGuide(state, local.id)?.step, "context");
+  assert.deepEqual(state.tasks, tasks);
+  assert.equal(firstRunGuide(state), false);
+});
+
+test("personal setup progress and future-guide preferences never become Team changes", () => {
+  const state = initialState(),
+    project = {
+      ...state.projects[0],
+      id: "shared-personal-setup",
+      example: false,
+    };
+  state.projects.push(project);
+  const before = projectSharedState(state, project.id);
+  beginProjectGuide(state, project);
+  state.projectOnboarding![project.id].dismissed = true;
+  state.onboardingPreferences = { showForNewProjects: false };
+  const after = projectSharedState(state, project.id);
+  assert.deepEqual(after, before);
+  assert.deepEqual(sharedCommands(before, after), []);
+  assert.doesNotMatch(
+    JSON.stringify(after),
+    /onboarding|showForNewProjects|dismissed/,
+  );
 });

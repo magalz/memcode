@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { guideSteps, type OnboardingProgress } from "../src/onboarding";
+import {
+  activateProjectGuide,
+  guideSteps,
+  projectGuide,
+  type OnboardingProgress,
+} from "../src/onboarding";
 import type { AppState } from "../src/shared";
 type Register = (
   method: string,
@@ -11,6 +16,7 @@ export function registerOnboarding(
   state: () => AppState,
   changed: () => Promise<void>,
 ) {
+  activateProjectGuide(state(), state().activeProjectId);
   register(
     "onboarding:update",
     z
@@ -22,14 +28,22 @@ export function registerOnboarding(
         storyId: z.string().min(1).max(250).optional(),
         complete: z.boolean().optional(),
         restart: z.boolean().optional(),
+        showForNewProjects: z.boolean().optional(),
       })
       .strict(),
     async (input) => {
-      const { complete, restart, ...patch } = input;
+      const { complete, restart, showForNewProjects, ...patch } = input;
+      const projectId =
+        patch.projectId ??
+        (restart ? undefined : state().onboarding?.projectId);
+      const previous = projectId
+        ? projectGuide(state(), projectId)
+        : state().onboarding;
       const next: OnboardingProgress = {
         version: 1,
-        step: "welcome",
-        ...(restart ? {} : state().onboarding),
+        step: projectId ? "context" : "welcome",
+        ...(restart ? {} : previous),
+        ...(projectId ? { projectId } : {}),
         ...patch,
       };
       if (
@@ -55,13 +69,16 @@ export function registerOnboarding(
       )
         throw Error("Choose a story in this epic.");
       if (complete) {
-        if (!next.storyId)
-          throw Error(
-            "Create or choose your first story before finishing the guide.",
-          );
         next.completedAt = new Date().toISOString();
         next.dismissed = true;
       }
+      if (showForNewProjects !== undefined)
+        state().onboardingPreferences = {
+          ...state().onboardingPreferences,
+          showForNewProjects,
+        };
+      if (next.projectId)
+        (state().projectOnboarding ??= {})[next.projectId] = next;
       state().onboarding = next;
       await changed();
       return next;

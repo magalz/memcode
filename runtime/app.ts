@@ -34,6 +34,7 @@ import { readWorkerChanges, WorkerChangeJournal } from "./changes";
 import { canonicalArtifactRoots, resolveFile } from "./files";
 import { registerReview } from "./review";
 import { registerOnboarding } from "./onboarding";
+import { activateProjectGuide, beginProjectGuide } from "../src/onboarding";
 import { registerCardComments } from "./card-comments";
 import { registerConnections } from "./worker-connections";
 import { TeamSyncClient } from "./team/client";
@@ -45,6 +46,7 @@ import { discoverOfficialTeamService } from "./team/discovery";
 import { createBetaAuthorization } from "./beta-auth";
 import { MemCodeBeta, nativeBetaStorage } from "./beta";
 import { ManagedMemcodeEngine } from "./managed-engine";
+import { ProductTelemetry, observeTelemetryMutation } from "./telemetry";
 import { SpeechManager, registerSpeech } from "./speech";
 import { speechSettingsSchema } from "../src/speech";
 import {
@@ -112,6 +114,16 @@ export async function createRuntime(
   let betaNeedsAnalysis = false;
   let betaReady = false;
   let requireFreshWorkerContext = false;
+  const qaProfile=process.env.MEMCODE_NATIVE_TEST_PROFILE==="1"||!!process.env.NODE_TEST_CONTEXT;
+  const telemetryTestChannel=qaProfile&&process.env.MEMCODE_TELEMETRY_TEST_CHANNEL==="1";
+  const telemetry = new ProductTelemetry(store.dir,state,{
+    authorization:()=>beta?.telemetryAuthorization()??Promise.resolve(null),
+    eligible:()=>beta?.snapshot().state==="connected",
+    clearAuthorization:()=>beta?.clearTelemetryAuthorization(),
+    channel:telemetryTestChannel?"test":"production",
+    excluded:qaProfile&&!telemetryTestChannel,
+  });
+  await telemetry.initialize();
   const managedEngine = new ManagedMemcodeEngine(store.dir, {
     progress: (note) => beta?.reportEngineProgress(note),
   });
@@ -198,6 +210,7 @@ export async function createRuntime(
         (!project ||
           !requireFreshWorkerContext ||
           (project.analysis === "ready" && !!project.repoId)),
+      telemetry,
     ),
     preview = new PreviewManager(
       host,
@@ -225,7 +238,7 @@ export async function createRuntime(
     schema: z.ZodType,
     handle: (input: any) => unknown,
   ) => {
-    handlers.set(name, { schema, handle });
+    handlers.set(name, { schema, handle:(input)=>observeTelemetryMutation(telemetry,name,input,handle) });
   };
   const teamIdentity = createMemtraceIdentityProofProvider({
     openExternal: (url) => host.call("open_memcode_identity", { url }),
@@ -507,8 +520,10 @@ export async function createRuntime(
     () => host.call("open_github_device", {}),
   );
   beta = new MemCodeBeta({
+    telemetryOptIn:()=>telemetry.requested(),
     storage: nativeBetaStorage(host),
     authorization: createBetaAuthorization({
+      telemetryOptIn:()=>telemetry.requested(),
       openExternal: (url) => host.call("open_memcode_beta", { url }),
     }),
     assertMayChange: () => {
@@ -520,6 +535,7 @@ export async function createRuntime(
         );
     },
     beforeIdentityChange: async () => {
+      await telemetry.accountChanged();
       requireFreshWorkerContext = true;
       teamIdentity.cancel();
       await team?.suspendAccount();
@@ -579,6 +595,14 @@ export async function createRuntime(
   register("beta:sign-out", z.undefined(), () => beta!.signOut());
   register("beta:refresh", z.undefined(), () => beta!.refresh());
   register("beta:resume", z.undefined(), () => beta!.resume());
+  register("telemetry:status",z.undefined(),()=>telemetry.status());
+  register("telemetry:privacy",z.undefined(),()=>host.call("open_memcode_telemetry_privacy",{}));
+  register("telemetry:set",z.object({enabled:z.boolean()}).strict(),async({enabled})=>{
+    const status=await telemetry.setEnabled(enabled);
+    if(enabled)void telemetry.flush();
+    return status;
+  });
+  register("telemetry:flush",z.undefined(),async()=>{await telemetry.flush();return telemetry.status();});
   register(
     "beta:use-cli",
     z.object({ confirmed: z.literal(true) }).strict(),
@@ -637,6 +661,7 @@ export async function createRuntime(
   register("project:select", identifier, async (id) => {
     project(id);
     store.state.activeProjectId = id;
+    activateProjectGuide(store.state, id);
     await changed();
     void resumeProjectWatch(id);
     if (beta?.usesBeta() && project(id).path && project(id).analysis === "idle")
@@ -697,6 +722,7 @@ export async function createRuntime(
       );
       if (existing) {
         store.state.activeProjectId = existing.id;
+        activateProjectGuide(store.state, existing.id);
         await changed();
         return existing;
       }
@@ -717,57 +743,9 @@ export async function createRuntime(
       };
       store.state.projects.push(item);
       store.state.activeProjectId = item.id;
-      let definedStory: string | undefined;
-      if (input.mode === "new") {
-        const brief: WorkItem = {
-          id: randomUUID(),
-          identifier: "MC-001",
-          projectId: item.id,
-          title: "Define the first working version",
-          description:
-            input.description ||
-            "Describe who this project is for and the smallest useful version to build.",
-          stage: "planned",
-          priority: "high",
-          harness: store.state.settings.defaultHarness,
-          assignment: "auto",
-          category: "Planning",
-          checklist: [
-            {
-              id: randomUUID(),
-              text: "Clarify the purpose and intended user",
-              done: !!input.description,
-            },
-            {
-              id: randomUUID(),
-              text: "Define the first useful outcome",
-              done: false,
-            },
-            {
-              id: randomUUID(),
-              text: "Build a focused first iteration",
-              done: false,
-            },
-          ],
-          messages: [
-            {
-              id: randomUUID(),
-              role: "user",
-              text: input.description || "Let’s define this new project.",
-              at: now(),
-            },
-          ],
-          run: { state: "idle" },
-          createdAt: now(),
-          updatedAt: now(),
-        };
-        ensureTaskEpic(store.state, brief);
-        store.state.tasks.push(brief);
-        definedStory = brief.id;
-      }
+      beginProjectGuide(store.state, item);
       await changed();
       void analyze(item.id).catch(() => {});
-      if (definedStory) void assignStory(definedStory).catch(() => {});
       return item;
     },
   );
@@ -1281,6 +1259,7 @@ export async function createRuntime(
         console.error("Artifact catalog check failed:", error),
       );
       await workers.close();
+      await telemetry.close();
       teamIdentity.cancel();
       await repositories.close();
       await team?.close();

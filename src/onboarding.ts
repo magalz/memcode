@@ -1,6 +1,10 @@
+import type { AppState, Project } from "./shared";
+
 export const guideSteps = [
   "welcome",
   "project",
+  "context",
+  "memtrace",
   "worker",
   "epic",
   "story",
@@ -17,18 +21,62 @@ export interface OnboardingProgress {
   storyId?: string;
 }
 export type OnboardingPatch = Partial<
-  Omit<OnboardingProgress, "version" | "completedAt">
-> & { complete?: boolean; restart?: boolean };
+  Pick<
+    OnboardingProgress,
+    "step" | "dismissed" | "projectId" | "epicId" | "storyId"
+  >
+> & { complete?: boolean; restart?: boolean; showForNewProjects?: boolean };
 export type GuideAction =
-  "project" | "worker" | "epic" | "story" | "open-story" | "account";
+  | "project"
+  | "worker"
+  | "epic"
+  | "story"
+  | "open-story"
+  | "account"
+  | "analyze"
+  | "team";
+
+/** Device-local progress; Team projection never shares setup/preferences. */
+export function projectGuide(
+  state: Pick<AppState, "onboarding" | "projectOnboarding" | "projects">,
+  projectId: string,
+) {
+  const project = state.projects.find((item) => item.id === projectId);
+  if (project?.example)
+    return state.onboarding?.projectId ? undefined : state.onboarding;
+  return (
+    state.projectOnboarding?.[projectId] ??
+    (state.onboarding?.projectId === projectId ? state.onboarding : undefined)
+  );
+}
+
+export function activateProjectGuide(state: AppState, projectId: string) {
+  const current = state.onboarding;
+  if (current?.projectId && !state.projectOnboarding?.[current.projectId])
+    (state.projectOnboarding ??= {})[current.projectId] = current;
+  state.onboarding = projectGuide(state, projectId);
+}
+
+/** Deliberate local project creation/opening only, never a Team board import. */
+export function beginProjectGuide(state: AppState, project: Project) {
+  if (project.example) return;
+  const guides = (state.projectOnboarding ??= {});
+  guides[project.id] ??= {
+    version: 1,
+    step: "context",
+    projectId: project.id,
+    dismissed: state.onboardingPreferences?.showForNewProjects === false,
+  };
+  state.onboarding = guides[project.id];
+}
 export function firstRunGuide(state: {
   onboarding?: OnboardingProgress;
+  onboardingPreferences?: { showForNewProjects?: boolean };
   projects: Array<{ id?: string; example?: boolean }>;
 }) {
   return (
     !state.onboarding &&
-    !state.projects.some(
-      (project) => !project.example && project.id !== "memcode-dogfood",
-    )
+    state.onboardingPreferences?.showForNewProjects !== false &&
+    !state.projects.some((project) => !project.example)
   );
 }
