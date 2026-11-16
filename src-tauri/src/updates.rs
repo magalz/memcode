@@ -3,6 +3,8 @@ use crate::bridge::RuntimeBridge;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
+    io::Write,
+    path::PathBuf,
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -13,6 +15,64 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 pub struct UpdateState {
     operation: tokio::sync::Mutex<()>,
     pending: Mutex<Option<Update>>,
+    downloaded: Mutex<Option<StagedDownload>>,
+}
+
+/// A verified installer waits on disk, never in the renderer or a large idle buffer.
+struct StagedDownload {
+    version: String,
+    path: PathBuf,
+    directory: PathBuf,
+    length: u64,
+}
+impl StagedDownload {
+    fn create(version: String, bytes: &[u8]) -> Result<Self, String> {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_nanos();
+        let directory =
+            std::env::temp_dir().join(format!("memcode-update-{}-{nonce}", std::process::id()));
+        let mut builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(&directory).map_err(|e| e.to_string())?;
+        let staged = Self {
+            version,
+            path: directory.join("signed-update"),
+            directory,
+            length: bytes.len() as u64,
+        };
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&staged.path).map_err(|e| e.to_string())?;
+        file.write_all(bytes)
+            .and_then(|_| file.sync_all())
+            .map_err(|e| e.to_string())?;
+        Ok(staged)
+    }
+    fn read(path: &std::path::Path, length: u64) -> Result<Vec<u8>, String> {
+        let info = std::fs::symlink_metadata(path)
+            .map_err(|_| "Download this update again before restarting.".to_owned())?;
+        if !info.is_file() || info.file_type().is_symlink() || info.len() != length {
+            return Err("The staged update changed. Download it again before restarting.".into());
+        }
+        std::fs::read(path).map_err(|e| e.to_string())
+    }
+}
+impl Drop for StagedDownload {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+        let _ = std::fs::remove_dir(&self.directory);
+    }
 }
 
 #[derive(Serialize)]
@@ -21,6 +81,7 @@ pub struct UpdateInfo {
     current_version: String,
     development: bool,
     previous_error: Option<String>,
+    ready_release: Option<Release>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -82,12 +143,32 @@ fn installed_only() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn app_update_info(webview: Webview, app: AppHandle) -> Result<UpdateInfo, String> {
+pub fn app_update_info(
+    webview: Webview,
+    app: AppHandle,
+    state: tauri::State<'_, UpdateState>,
+) -> Result<UpdateInfo, String> {
     main_only(&webview)?;
     Ok(UpdateInfo {
         current_version: app.package_info().version.to_string(),
         development: development(),
         previous_error: previous_failure(&app),
+        ready_release: {
+            let version = state
+                .downloaded
+                .lock()
+                .map_err(|_| "Update state is unavailable.")?
+                .as_ref()
+                .filter(|value| value.path.is_file())
+                .map(|value| value.version.clone());
+            state
+                .pending
+                .lock()
+                .map_err(|_| "Update state is unavailable.")?
+                .as_ref()
+                .filter(|update| Some(&update.version) == version.as_ref())
+                .map(release_summary)
+        },
     })
 }
 
@@ -130,6 +211,10 @@ pub async fn app_update_check(
         .pending
         .lock()
         .map_err(|_| "Update state is unavailable.")? = None;
+    *state
+        .downloaded
+        .lock()
+        .map_err(|_| "Update state is unavailable.")? = None;
     let runtime = runtime.inner().clone();
     let update = app
         .updater_builder()
@@ -153,7 +238,19 @@ pub async fn app_update_check(
             return Err("The release did not provide a secure download address.".into());
         }
     }
-    let release = update.as_ref().map(|update| Release {
+    let release = update.as_ref().map(release_summary);
+    *state
+        .pending
+        .lock()
+        .map_err(|_| "Update state is unavailable.")? = update;
+    if let Ok(path) = failure_path(&app) {
+        let _ = std::fs::remove_file(path);
+    }
+    Ok(release)
+}
+
+fn release_summary(update: &Update) -> Release {
+    Release {
         version: update.version.clone(),
         notes: update
             .body
@@ -167,23 +264,13 @@ pub async fn app_update_check(
             .get("pub_date")
             .and_then(Value::as_str)
             .map(str::to_owned),
-    });
-    *state
-        .pending
-        .lock()
-        .map_err(|_| "Update state is unavailable.")? = update;
-    if let Ok(path) = failure_path(&app) {
-        let _ = std::fs::remove_file(path);
     }
-    Ok(release)
 }
 
 #[tauri::command]
-pub async fn app_update_install(
+pub async fn app_update_download(
     webview: Webview,
-    app: AppHandle,
     state: tauri::State<'_, UpdateState>,
-    runtime: tauri::State<'_, RuntimeBridge>,
     version: String,
     channel: tauri::ipc::Channel<Progress>,
 ) -> Result<(), String> {
@@ -201,7 +288,10 @@ pub async fn app_update_install(
         .filter(|update| update.version == version)
         .cloned()
         .ok_or("Check for this update again before installing it.")?;
-    runtime.request("app:update-preflight", Value::Null).await?;
+    *state
+        .downloaded
+        .lock()
+        .map_err(|_| "Update state is unavailable.")? = None;
     update.timeout = Some(Duration::from_secs(300));
     let mut downloaded = 0_u64;
     let mut last = Instant::now();
@@ -234,9 +324,69 @@ pub async fn app_update_install(
         )
         .await
         .map_err(|e| e.to_string())?;
-    // A worker could have started during the download. Reserve the idle
-    // runtime only after signature verification; this also gates queued starts.
+    let length = bytes.len() as u64;
+    let staged =
+        tauri::async_runtime::spawn_blocking(move || StagedDownload::create(version, &bytes))
+            .await
+            .map_err(|e| e.to_string())??;
+    *state
+        .downloaded
+        .lock()
+        .map_err(|_| "Update state is unavailable.")? = Some(staged);
+    let _ = channel.send(Progress {
+        phase: "ready",
+        downloaded: length,
+        total: Some(length),
+    });
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn app_update_install(
+    webview: Webview,
+    app: AppHandle,
+    state: tauri::State<'_, UpdateState>,
+    runtime: tauri::State<'_, RuntimeBridge>,
+    version: String,
+    channel: tauri::ipc::Channel<Progress>,
+) -> Result<(), String> {
+    main_only(&webview)?;
+    installed_only()?;
+    let _operation = state
+        .operation
+        .try_lock()
+        .map_err(|_| "An update operation is already running.")?;
+    let update = state
+        .pending
+        .lock()
+        .map_err(|_| "Update state is unavailable.")?
+        .as_ref()
+        .filter(|update| update.version == version)
+        .cloned()
+        .ok_or("Check for this update again before installing it.")?;
+    // Re-read and re-verify private staged bytes immediately before installation.
+    let (path, length) = state
+        .downloaded
+        .lock()
+        .map_err(|_| "Update state is unavailable.")?
+        .as_ref()
+        .filter(|value| value.version == version)
+        .map(|value| (value.path.clone(), value.length))
+        .ok_or("Download this update before restarting.")?;
+    let (update, bytes) = tauri::async_runtime::spawn_blocking(move || {
+        let bytes = StagedDownload::read(&path, length)?;
+        update.verify(&bytes).map_err(|e| e.to_string())?;
+        Ok::<_, String>((update, bytes))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    // Workers can continue during the download. Reserve an idle workspace only
+    // after explicit Restart to update; never cancel a running worker.
     runtime.request("app:update-prepare", Value::Null).await?;
+    *state
+        .downloaded
+        .lock()
+        .map_err(|_| "Update state is unavailable.")? = None;
     let _ = channel.send(Progress {
         phase: "installing",
         downloaded: bytes.len() as u64,
@@ -322,6 +472,39 @@ mod tests {
             wrong_key.verify(bytes).is_err(),
             "An unrelated signing key must not be trusted"
         );
+    }
+
+    #[test]
+    fn staged_update_uses_disk_and_is_reverified_before_installation() {
+        let fixture: Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/updater-signature.json"))
+                .unwrap();
+        let bytes = fixture["payload"].as_str().unwrap().as_bytes();
+        let update = fixture_update(
+            &fixture,
+            fixture["publicKey"].as_str().unwrap(),
+            fixture["version"].as_str().unwrap(),
+        );
+        update.verify(bytes).unwrap();
+        let staged =
+            StagedDownload::create(fixture["version"].as_str().unwrap().to_owned(), bytes).unwrap();
+        let path = staged.path.clone();
+        update
+            .verify(&StagedDownload::read(&staged.path, staged.length).unwrap())
+            .unwrap();
+        let mut tampered = bytes.to_vec();
+        tampered[0] ^= 1;
+        std::fs::write(&path, tampered).unwrap();
+        assert!(
+            update
+                .verify(&StagedDownload::read(&staged.path, staged.length).unwrap())
+                .is_err(),
+            "Tampering after download must not become an installable update"
+        );
+        let directory = staged.directory.clone();
+        drop(staged);
+        assert!(!path.exists());
+        assert!(!directory.exists());
     }
 
     #[test]

@@ -9,6 +9,7 @@ import {
 } from "./source";
 import { queryScope, rowVisible, type Workflow } from "./workflow";
 import type { Row } from "./query";
+import { recordSavedReadEvidence, savedDeclarationRows } from "./saved-read";
 
 type FindRequest = Extract<ContextRequest, { capability: "find" }>;
 export async function searchRows(
@@ -28,7 +29,11 @@ export async function searchRows(
       include_dependency_checks: false,
       strict_scope: true,
     });
-    for (const row of result?.results ?? [])
+    recordSavedReadEvidence(result, context.binding, context.pack, "find_code");
+    for (const row of [
+      ...savedDeclarationRows(result, context.binding),
+      ...(result?.results ?? []),
+    ])
       if (
         rowVisible(context.binding, row) &&
         !rows.some((r) => r.file_path === row.file_path && r.name === row.name)

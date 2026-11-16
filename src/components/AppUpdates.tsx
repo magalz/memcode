@@ -59,6 +59,59 @@ function ReleaseHistoryEntry({
   );
 }
 
+/** A quiet installed-app entry point; checking never signs in or installs. */
+export function AppUpdateAction({
+  open,
+  updater = appUpdater,
+}: {
+  open: () => void;
+  updater?: AppUpdater;
+}) {
+  const state = useSyncExternalStore(updater.subscribe, updater.getSnapshot);
+  useEffect(() => {
+    void updater.start();
+    const recheck = () => {
+      if (document.visibilityState === "visible") void updater.poll();
+    };
+    const timer = setInterval(recheck, 15 * 60_000);
+    if (typeof timer === "object") timer.unref?.();
+    window.addEventListener("focus", recheck);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", recheck);
+    };
+  }, [updater]);
+  if (!state.release || state.info?.development) return null;
+  const percent = updatePercent(state.progress);
+  const label =
+    state.phase === "ready"
+      ? "Restart to update"
+      : state.phase === "downloading"
+        ? `Downloading${percent === undefined ? "…" : ` ${percent}%`}`
+        : state.phase === "verifying"
+          ? "Verifying update…"
+          : state.phase === "installing"
+            ? "Restarting…"
+            : "Download update";
+  return (
+    <button
+      className="app-update-action"
+      onClick={() => {
+        if (state.phase === "ready")
+          void updater.requestRestart().then((started) => {
+            if (!started) open();
+          });
+        else if (!updateBusy(state.phase)) void updater.download();
+        else open();
+      }}
+      title={`MemCode ${state.release.version} · ${label}`}
+    >
+      <Download size={12} />
+      <span>{label}</span>
+    </button>
+  );
+}
+
 export function AppUpdates({
   currentVersion,
   updater = appUpdater,
@@ -105,6 +158,13 @@ export function AppUpdates({
   useEffect(() => {
     setConfirm(false);
   }, [state.release?.version]);
+  useEffect(() => {
+    if (state.restartReview) {
+      setContext(state.restartReview);
+      setContextError("");
+      setConfirm(true);
+    }
+  }, [state.restartReview]);
   const busy = updateBusy(state.phase),
     percentage = updatePercent(state.progress);
   const version = state.info?.currentVersion || currentVersion;
@@ -118,13 +178,15 @@ export function AppUpdates({
           ? "Verifying the signed download…"
           : state.phase === "installing"
             ? "Installing and restarting MemCode…"
-            : state.phase === "current"
-              ? "You’re up to date."
-              : state.release
-                ? `Version ${state.release.version} is available.`
-                : development
-                  ? "Development build"
-                  : "Updates, at your pace.";
+            : state.phase === "ready"
+              ? `Version ${state.release?.version} is ready to restart.`
+              : state.phase === "current"
+                ? "You’re up to date."
+                : state.release
+                  ? `Version ${state.release.version} is available.`
+                  : development
+                    ? "Development build"
+                    : "Updates, at your pace.";
   return (
     <section
       className="settings-section app-updates"
@@ -156,14 +218,14 @@ export function AppUpdates({
           <p>
             {development
               ? "Keep this checkout current with Git. Signed app updates are available in installed beta releases."
-              : "Checks are manual. MemCode never installs an update without you."}
+              : "MemCode checks for updates while it’s open. Download and restart when you choose; your account and workspace stay with you."}
           </p>
         </div>
         {state.info && !development && (
           <button
             className="button secondary"
             type="button"
-            disabled={busy}
+            disabled={busy || state.phase === "ready"}
             onClick={() => void updater.check()}
           >
             <RefreshCw size={13} />
@@ -224,17 +286,23 @@ export function AppUpdates({
             <button
               type="button"
               className="button primary"
-              onClick={() => void reviewInstall()}
+              onClick={() =>
+                state.phase === "ready"
+                  ? void updater.requestRestart()
+                  : void updater.download()
+              }
             >
               <Download size={14} />
-              Update MemCode
+              {state.phase === "ready"
+                ? "Restart to update"
+                : "Download update"}
               <ArrowUpRight size={13} />
             </button>
           )}
           {!busy && confirm && (
             <div className="app-update-confirm">
               <p>
-                <strong>Install and restart?</strong>{" "}
+                <strong>Restart to update?</strong>{" "}
                 {contextBusy
                   ? "Checking running sessions…"
                   : context
@@ -244,7 +312,7 @@ export function AppUpdates({
                         ? `Restarting closes ${context.activeTerminals} ${context.activeTerminals === 1 ? "terminal session" : "terminal sessions"} and your open browser sessions.`
                         : "Open browser sessions will close. No terminal sessions are running."
                     : "Check session status before installing."}{" "}
-                Saved stories, comments and files stay on this machine.
+                Your account, projects, stories and files are kept.
               </p>
               {contextError && (
                 <p className="app-update-error" role="alert">
@@ -264,7 +332,10 @@ export function AppUpdates({
                 <button
                   type="button"
                   className="button secondary"
-                  onClick={() => setConfirm(false)}
+                  onClick={() => {
+                    setConfirm(false);
+                    updater.dismissRestartReview();
+                  }}
                 >
                   Not now
                 </button>
@@ -279,7 +350,7 @@ export function AppUpdates({
                     void updater.install();
                   }}
                 >
-                  Install and restart
+                  Restart to update
                 </button>
               </div>
             </div>

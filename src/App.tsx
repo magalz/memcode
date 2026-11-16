@@ -63,6 +63,7 @@ import { TeamOnboarding } from "./components/TeamOnboarding";
 import "./styles-team.css";
 import "./styles-collaboration.css";
 import { BetaAccess } from "./components/BetaAccess";
+import { AppUpdateAction } from "./components/AppUpdates";
 import type { MemCodeBetaStatus } from "./beta";
 import type { MemtraceAccount } from "./connections";
 import { approvedRuntime } from "./worker-availability";
@@ -687,6 +688,7 @@ export function App() {
               <span />
               {runtimeHealth.available ? "Local execution" : "Runtime stopped"}
             </span>
+            <AppUpdateAction open={() => setDialog("settings")} />
             <button
               className="icon-button"
               title="Search workspace"

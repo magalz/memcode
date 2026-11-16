@@ -1,4 +1,5 @@
 import type { ContextBinding, ContextPack, GraphClient } from "./contracts";
+import { recordSavedReadCoverage } from "./saved-read";
 
 export type Row = Record<string, any>;
 export type Query = (name: string, args: Row) => Promise<Row | null>;
@@ -15,6 +16,7 @@ export function scopedQuery(
       const result = await engine.call(binding.project, name, args);
       checkAdmission(result);
       recordCoverage(name, result, coverage);
+      recordSavedReadCoverage(result, binding, coverage);
       return result ?? null;
     } catch (error) {
       coverage.unknown.push(`${name}: ${(error as Error).message}`);

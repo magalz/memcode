@@ -20,7 +20,7 @@ pub struct PreviewState(
     pub std::sync::atomic::AtomicBool,
 );
 
-pub fn profile_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+pub fn profile_dir<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<std::path::PathBuf, String> {
     Ok(std::env::var_os("MEMCODE_DATA_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or(

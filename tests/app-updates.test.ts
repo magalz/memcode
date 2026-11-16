@@ -21,6 +21,7 @@ const api = (patch: Partial<AppUpdateAPI> = {}): AppUpdateAPI => ({
   history: async () => [],
   info: async () => ({ currentVersion: "0.4.0-beta.1", development: false }),
   check: async () => release,
+  download: async () => {},
   install: async () => {},
   ...patch,
 });
@@ -117,10 +118,12 @@ test("no update is a successful check; development builds never query or install
   assert.equal(development.getSnapshot().phase, "idle");
 });
 
-test("rapid clicks cannot start concurrent checks or installations, and progress never claims a running new version", async () => {
+test("rapid clicks do not duplicate downloads or restarts, and a verified download waits for an explicit restart", async () => {
   let resolveCheck!: (value: typeof release) => void,
+    finishDownload!: () => void,
     finishInstall!: () => void,
     checks = 0,
+    downloads = 0,
     installs = 0;
   const updater = new AppUpdater(
     api({
@@ -128,10 +131,16 @@ test("rapid clicks cannot start concurrent checks or installations, and progress
         checks++;
         return new Promise((resolve) => (resolveCheck = resolve));
       },
+      download: async (version, progress) => {
+        downloads++;
+        assert.equal(version, release.version);
+        progress({ phase: "downloading", downloaded: 50, total: 100 });
+        await new Promise<void>((resolve) => (finishDownload = resolve));
+        progress({ phase: "verifying", downloaded: 100, total: 100 });
+      },
       install: async (version, progress) => {
         installs++;
         assert.equal(version, release.version);
-        progress({ phase: "downloading", downloaded: 50, total: 100 });
         await new Promise<void>((resolve) => (finishInstall = resolve));
         progress({ phase: "installing", downloaded: 100, total: 100 });
       },
@@ -143,11 +152,35 @@ test("rapid clicks cannot start concurrent checks or installations, and progress
   assert.equal(checks, 1);
   resolveCheck(release);
   await first;
+  await updater.install();
+  assert.equal(
+    installs,
+    0,
+    "an available update cannot restart before a verified download",
+  );
+  const download = updater.download();
+  await tick();
+  await updater.download();
+  assert.equal(downloads, 1);
+  assert.equal(updatePercent(updater.getSnapshot().progress), 50);
+  finishDownload();
+  await download;
+  assert.equal(updater.getSnapshot().phase, "ready");
+  assert.equal(
+    installs,
+    0,
+    "download completion must never automatically install",
+  );
+  await updater.check();
+  assert.equal(
+    checks,
+    1,
+    "a recheck must not discard a prepared signed download",
+  );
   const install = updater.install();
   await tick();
   await updater.install();
   assert.equal(installs, 1);
-  assert.equal(updatePercent(updater.getSnapshot().progress), 50);
   finishInstall();
   await install;
   assert.equal(updater.getSnapshot().phase, "installing");
@@ -167,6 +200,7 @@ test("signature/install errors remain visible and do not mark the release instal
     }),
   );
   await updater.check();
+  await updater.download();
   await updater.install();
   assert.equal(updater.getSnapshot().phase, "error");
   assert.match(updater.getSnapshot().error!, /Signature/);
@@ -175,6 +209,168 @@ test("signature/install errors remain visible and do not mark the release instal
     updatePercent({ phase: "downloading", downloaded: 1, total: 0 }),
     undefined,
   );
+});
+
+test("startup checks once without downloading or restarting, and a renderer reload retains native restart readiness", async () => {
+  let checks = 0,
+    downloads = 0,
+    installs = 0;
+  const updater = new AppUpdater(
+    api({
+      check: async () => {
+        checks++;
+        return release;
+      },
+      download: async () => {
+        downloads++;
+      },
+      install: async () => {
+        installs++;
+      },
+    }),
+  );
+  await updater.start();
+  await updater.start();
+  assert.equal(checks, 1);
+  assert.equal(downloads, 0);
+  assert.equal(installs, 0);
+  assert.equal(updater.getSnapshot().phase, "available");
+  const reloaded = new AppUpdater(
+    api({
+      info: async () => ({
+        currentVersion: "0.4.0-beta.1",
+        development: false,
+        readyRelease: release,
+      }),
+      check: async () => {
+        throw Error("Do not discard the staged update");
+      },
+    }),
+  );
+  await reloaded.start();
+  assert.equal(reloaded.getSnapshot().phase, "ready");
+  assert.equal(reloaded.getSnapshot().release?.version, release.version);
+});
+
+test("passive focus and long-running checks are throttled and leave ready downloads untouched", async () => {
+  let now = 1000,
+    checks = 0;
+  const updater = new AppUpdater(
+    api({
+      check: async () => {
+        checks++;
+        return release;
+      },
+    }),
+    () => now,
+  );
+  await updater.start();
+  for (let i = 0; i < 4; i++) {
+    now += 1000;
+    await updater.poll();
+  }
+  assert.equal(checks, 1);
+  now += 15 * 60_000;
+  await updater.poll();
+  assert.equal(checks, 2, "an app kept open must discover later releases");
+  await updater.download();
+  now += 15 * 60_000;
+  await updater.poll();
+  assert.equal(
+    checks,
+    2,
+    "background checks must not discard a verified download",
+  );
+  assert.equal(updater.getSnapshot().phase, "ready");
+});
+
+test("one explicit restart click updates an idle workspace without another confirmation", async () => {
+  let installs = 0;
+  const updater = new AppUpdater(
+    api({
+      install: async () => {
+        installs++;
+      },
+    }),
+  );
+  await updater.check();
+  await updater.download();
+  assert.equal(await updater.requestRestart(), true);
+  assert.equal(installs, 1);
+  assert.equal(updater.getSnapshot().phase, "installing");
+  assert.equal(updater.getSnapshot().restartReview, undefined);
+});
+
+test("restart only requests review for running workers or terminal session loss", async () => {
+  for (const context of [
+    { activeWorkers: 1, activeTerminals: 0 },
+    { activeWorkers: 0, activeTerminals: 2 },
+  ]) {
+    let installs = 0;
+    const updater = new AppUpdater(
+      api({
+        context: async () => context,
+        install: async () => {
+          installs++;
+        },
+      }),
+    );
+    await updater.check();
+    await updater.download();
+    assert.equal(await updater.requestRestart(), false);
+    assert.equal(installs, 0, "a header click must not close active sessions");
+    assert.equal(updater.getSnapshot().phase, "ready");
+    assert.deepEqual(updater.getSnapshot().restartReview, context);
+    updater.dismissRestartReview();
+    assert.equal(updater.getSnapshot().restartReview, undefined);
+  }
+});
+
+test("a running worker can finish while an update downloads and cannot be interrupted by restart", async () => {
+  let running = true,
+    installs = 0;
+  const updater = new AppUpdater(
+    api({
+      download: async () => {},
+      install: async () => {
+        if (running)
+          throw Error(
+            "Finish or stop the running worker before updating MemCode.",
+          );
+        installs++;
+      },
+    }),
+  );
+  await updater.check();
+  await updater.download();
+  assert.equal(updater.getSnapshot().phase, "ready");
+  await updater.install();
+  assert.equal(updater.getSnapshot().phase, "ready");
+  assert.match(updater.getSnapshot().error!, /running worker/);
+  assert.equal(installs, 0);
+  running = false;
+  await updater.install();
+  assert.equal(installs, 1);
+});
+
+test("failed download verification never enables restart", async () => {
+  let installs = 0;
+  const updater = new AppUpdater(
+    api({
+      download: async () => {
+        throw Error("Signature verification failed");
+      },
+      install: async () => {
+        installs++;
+      },
+    }),
+  );
+  await updater.check();
+  await updater.download();
+  await updater.install();
+  assert.equal(updater.getSnapshot().phase, "error");
+  assert.match(updater.getSnapshot().error!, /Signature/);
+  assert.equal(installs, 0);
 });
 
 test("final update reservation rechecks workers that started during download and never stops them", () => {

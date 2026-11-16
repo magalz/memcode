@@ -5,6 +5,7 @@ export interface AppUpdateInfo {
   currentVersion: string;
   development: boolean;
   previousError?: string | null;
+  readyRelease?: AppRelease | null;
 }
 export interface AppRelease {
   version: string;
@@ -18,7 +19,7 @@ export interface PublishedAppRelease {
   publishedAt: string;
 }
 export interface UpdateProgress {
-  phase: "downloading" | "verifying" | "installing";
+  phase: "downloading" | "verifying" | "ready" | "installing";
   downloaded: number;
   total?: number | null;
 }
@@ -27,6 +28,10 @@ export interface AppUpdateAPI {
   context(): Promise<UpdateContext>;
   history(): Promise<PublishedAppRelease[]>;
   check(): Promise<AppRelease | null>;
+  download(
+    version: string,
+    progress: (value: UpdateProgress) => void,
+  ): Promise<void>;
   install(
     version: string,
     progress: (value: UpdateProgress) => void,
@@ -51,6 +56,7 @@ export interface AppUpdateSnapshot {
   checkedAt?: string;
   progress?: UpdateProgress;
   error?: string;
+  restartReview?: UpdateContext;
 }
 
 const nativeAPI: AppUpdateAPI = {
@@ -61,6 +67,11 @@ const nativeAPI: AppUpdateAPI = {
   check: () => invoke("app_update_check"),
   context: () => invoke("app_update_context"),
   history: () => invoke("app_update_history"),
+  download: (version, progress) => {
+    const channel = new Channel<UpdateProgress>();
+    channel.onmessage = progress;
+    return invoke("app_update_download", { version, channel });
+  },
   install: (version, progress) => {
     const channel = new Channel<UpdateProgress>();
     channel.onmessage = progress;
@@ -74,7 +85,13 @@ export class AppUpdater {
   private listeners = new Set<() => void>();
   private initialized?: Promise<void>;
   private busy = false;
-  constructor(private readonly api: AppUpdateAPI = nativeAPI) {}
+  private inspectingRestart = false;
+  private started = false;
+  private lastPassiveCheck?: number;
+  constructor(
+    private readonly api: AppUpdateAPI = nativeAPI,
+    private readonly clock: () => number = Date.now,
+  ) {}
   getSnapshot = () => this.snapshot;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -91,7 +108,12 @@ export class AppUpdater {
       (info) => {
         this.set({
           info,
-          phase: info.previousError ? "error" : "idle",
+          phase: info.readyRelease
+            ? "ready"
+            : info.previousError
+              ? "error"
+              : "idle",
+          release: info.readyRelease ?? undefined,
           error: info.previousError ?? undefined,
         });
       },
@@ -113,12 +135,46 @@ export class AppUpdater {
   history() {
     return this.api.history();
   }
+  async start() {
+    if (this.started) return;
+    this.started = true;
+    await this.initialize();
+    if (
+      this.snapshot.info &&
+      !this.snapshot.info.development &&
+      this.snapshot.phase === "idle"
+    )
+      await this.poll();
+  }
+  async poll() {
+    if (
+      !this.snapshot.info ||
+      this.snapshot.info.development ||
+      this.snapshot.info.previousError ||
+      this.busy ||
+      updateBusy(this.snapshot.phase) ||
+      this.snapshot.phase === "ready"
+    )
+      return;
+    if (
+      this.lastPassiveCheck !== undefined &&
+      this.clock() - this.lastPassiveCheck < 15 * 60_000
+    )
+      return;
+    await this.check();
+  }
   async check() {
-    if (this.busy || this.snapshot.phase === "installing") return;
+    if (
+      this.busy ||
+      this.snapshot.phase === "installing" ||
+      this.snapshot.phase === "ready"
+    )
+      return;
     this.busy = true;
     try {
       await this.initialize();
       if (!this.snapshot.info || this.snapshot.info.development) return;
+      this.lastPassiveCheck = this.clock();
       this.set({
         phase: "checking",
         release: undefined,
@@ -137,10 +193,11 @@ export class AppUpdater {
       this.busy = false;
     }
   }
-  async install() {
+  async download() {
     if (
       this.busy ||
       updateBusy(this.snapshot.phase) ||
+      this.snapshot.phase === "ready" ||
       !this.snapshot.release ||
       this.snapshot.info?.development
     )
@@ -149,17 +206,72 @@ export class AppUpdater {
     const version = this.snapshot.release.version;
     this.set({ phase: "downloading", error: undefined, progress: undefined });
     try {
-      await this.api.install(version, (progress) =>
+      await this.api.download(version, (progress) =>
         this.set({ phase: progress.phase, progress }),
       );
-      // Native installation restarts the app. Resolving is not evidence that
-      // this renderer is running the new version, so never report "installed".
-      this.set({ phase: "installing" });
+      this.set({ phase: "ready" });
     } catch (error) {
       this.set({ phase: "error", error: errorMessage(error) });
     } finally {
       this.busy = false;
     }
+  }
+  async install() {
+    if (
+      this.busy ||
+      this.snapshot.phase !== "ready" ||
+      !this.snapshot.release ||
+      this.snapshot.info?.development
+    )
+      return;
+    this.busy = true;
+    this.set({
+      phase: "installing",
+      error: undefined,
+      restartReview: undefined,
+    });
+    try {
+      await this.api.install(this.snapshot.release.version, (progress) =>
+        this.set({ phase: progress.phase, progress }),
+      );
+      // Native installation restarts the app; this renderer cannot claim a new version.
+      this.set({ phase: "installing" });
+    } catch (error) {
+      const message = errorMessage(error);
+      this.set({
+        phase: /running worker|running workers|workers.*before updating/i.test(
+          message,
+        )
+          ? "ready"
+          : "error",
+        error: message,
+      });
+    } finally {
+      this.busy = false;
+    }
+  }
+  /** An explicit restart click needs review only when sessions would be lost. */
+  async requestRestart() {
+    if (this.busy || this.inspectingRestart || this.snapshot.phase !== "ready")
+      return false;
+    this.inspectingRestart = true;
+    try {
+      const context = await this.inspect();
+      if (context.activeWorkers || context.activeTerminals) {
+        this.set({ restartReview: context });
+        return false;
+      }
+      await this.install();
+      return this.getSnapshot().phase === "installing";
+    } catch (error) {
+      this.set({ error: errorMessage(error) });
+      return false;
+    } finally {
+      this.inspectingRestart = false;
+    }
+  }
+  dismissRestartReview() {
+    this.set({ restartReview: undefined });
   }
 }
 

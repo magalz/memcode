@@ -499,6 +499,25 @@ mod tests {
         assert!(access_token(&json!("a.b.c")).is_ok());
     }
     #[test]
+    fn beta_store_update_keeps_profile_and_account_namespace_across_package_versions() {
+        // Resolve the real native profile path for two app package versions.
+        // MockRuntime creates no webview and this test never opens a keyring.
+        let resolve = |version: &str| {
+            let mut context = tauri::test::mock_context(tauri::test::noop_assets());
+            context.config_mut().identifier = "com.memtrace.memcode".into();
+            context.package_info_mut().version = version.parse().unwrap();
+            let app = tauri::test::mock_builder().build(context).unwrap();
+            let profile = crate::native::profile_dir(app.handle()).unwrap();
+            (profile.clone(), namespace(&profile))
+        };
+        let before = resolve("0.4.0-beta.7");
+        let after = resolve("0.4.0-beta.8");
+        assert_eq!(
+            before, after,
+            "Updating the app must retain the account and WebView profile namespace"
+        );
+    }
+    #[test]
     fn beta_store_logout_tombstone_survives_locked_keyring_and_failed_reconnect() {
         let paths = fixture();
         let backend = Fake {

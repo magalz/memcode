@@ -12,6 +12,7 @@ import type { RetrievalAssistant } from "./local-model";
 import { scopedQuery } from "./query";
 import { refreshConstraints } from "./constraints";
 import { retrieve } from "./workflow";
+import { hasSavedReadUncertainty } from "./saved-read";
 import { finishPack, initialPack, resumePack } from "./lifecycle";
 
 interface Cached {
@@ -87,13 +88,15 @@ export class ContextBroker {
       !cached &&
       pack.revision.graph &&
       pack.revision.graphReady &&
+      !hasSavedReadUncertainty(pack.coverage) &&
       !result.ambiguous
     )
       this.remember(key, pack, result);
     // Governance is refreshed on every request; it never comes from the retrieval cache.
     await refreshConstraints(this.binding, request, pack, result.files, query);
     await finishPack(this.binding, pack, query, result.ambiguous, started);
-    if (!pack.revision.stable) this.cache.delete(key);
+    if (!pack.revision.stable || hasSavedReadUncertainty(pack.coverage))
+      this.cache.delete(key);
     await this.diagnostic?.({ request, pack });
     this.prunePages();
     return fitPack(pack, request.budgetChars, this.pages);

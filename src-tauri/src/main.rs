@@ -79,6 +79,7 @@ fn main() {
             updates::app_update_context,
             updates::app_update_history,
             updates::app_update_check,
+            updates::app_update_download,
             updates::app_update_install
         ])
         .setup(|app| {

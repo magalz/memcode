@@ -34,6 +34,18 @@ engine binaries. Keep managed engines separate from a user's global CLI setup.
 - Run `npm run typecheck`, `npm test`, `npm run build` and the Tauri smoke
   check for relevant changes. Inspect the actual desktop UI for visual changes.
 
+## Updates and release verification
+
+- Normal app updates preserve the profile, approved account and projects. Offer
+  download progress and an explicit restart action; never require a new account
+  approval merely because the app or bundled engine version changed.
+- Reuse an already approved, isolated QA profile for release verification. Refresh
+  its session through the native credential store. CI receives only a temporary
+  signed engine proof, never a refresh credential or the user's normal profile.
+- Remove temporary proof files and CI secrets after a run. Keep a persistent QA
+  account approved across releases; revoke it when explicitly disposable or when
+  the user asks. Do not create fresh browser-approval loops for routine updates.
+
 ## Iteration
 
 Use this app's own dogfood backlog to improve it. Keep a clear distinction

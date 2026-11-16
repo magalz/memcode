@@ -118,6 +118,10 @@
 .app-update-notes p {
   margin: 8px 0;
 }
+.app-updates .app-update-notes strong {
+  display: inline;
+  font-size: inherit;
+}
 .app-update-notes ul,
 .app-update-notes ol {
   padding-left: 20px;
@@ -244,4 +248,19 @@
   .app-update-status .button {
     margin-left: 45px;
   }
+}
+.app-update-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper, #fafcf9);
+  color: var(--mint-ink);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.app-update-action:hover {
+  background: #eaf4ed;
 }

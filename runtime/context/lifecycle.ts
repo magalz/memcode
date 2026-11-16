@@ -10,6 +10,7 @@ import type { Query, Row } from "./query";
 import { hash, sourceRevision } from "./source";
 import { evidenceFiles, loadConstraints } from "./constraints";
 import { fitPack, type PendingPage } from "./budget";
+import { hasSavedReadUncertainty } from "./saved-read";
 
 export function initialPack(
   binding: ContextBinding,
@@ -39,7 +40,7 @@ export function initialPack(
       ...source,
       graph,
       graphSource: before?.source_revision ?? null,
-      graphReady: before?.ready === true,
+      graphReady: before?.ready === true && !hasSavedReadUncertainty(coverage),
       stable: false,
       constraintsDigest: "",
     },
@@ -80,6 +81,10 @@ export async function finishPack(
     after?.requested_revision_matches !== false &&
     after?.source_unchanged_during_observation !== false;
   const { coverage } = pack;
+  if (hasSavedReadUncertainty(coverage)) {
+    pack.revision.graphReady = false;
+    coverage.canAct = false;
+  }
   if (!pack.revision.stable) {
     coverage.unknown.push(
       "Source or graph changed during retrieval, or revision is unknown. Refresh before acting.",
@@ -134,6 +139,13 @@ export async function resumePack(
       "Governance changed during continuation; repeat the original request to refresh every constraint.",
     );
   await verifyPageRevision(binding, pack, query);
+  if (hasSavedReadUncertainty(pack.coverage)) {
+    readyPage.pack.revision.graphReady = false;
+    readyPage.pack.coverage.canAct = false;
+    for (const reason of pack.coverage.unknown)
+      if (!readyPage.pack.coverage.unknown.includes(reason))
+        readyPage.pack.coverage.unknown.push(reason);
+  }
   readyPage.pack.telemetry.cacheHit = false;
   readyPage.pack.telemetry.backendCalls = pack.telemetry.backendCalls;
   return fitPack(readyPage.pack, request.budgetChars, pages, readyPage.offset);

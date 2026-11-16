@@ -7,6 +7,7 @@ import {
   type Workflow,
 } from "./workflow";
 import type { Row } from "./query";
+import { recordSavedReadEvidence } from "./saved-read";
 
 type TargetRequest = Exclude<ContextRequest, { capability: "find" }>;
 export async function targetRows(
@@ -45,6 +46,7 @@ async function resolveTarget(
     limit: 12,
     viewer_agent_id: binding.workerId,
   });
+  recordSavedReadEvidence(result, binding, pack, "get_symbol_context");
   if (result?.ambiguous || (result?.candidates?.length && !result?.symbol)) {
     for (const c of result.candidates ?? [])
       pack.candidates.push({
