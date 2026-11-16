@@ -148,19 +148,34 @@ try {
     const normalize = (path: string) => path.replace(/^\\\\\?\\/, '').replaceAll('\\', '/').replace(/\/$/, '').toLowerCase();
     const matches = (path: unknown) => typeof path === 'string' ? normalize(path) === normalize(directory) : null;
     const enumValue = (value: unknown, allowed: string[]) => typeof value === 'string' && allowed.includes(value) ? value : value == null ? null : 'other';
+    const fieldNames = (value: unknown) => value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value).filter(key => /^[A-Za-z_][A-Za-z0-9_]{0,60}$/.test(key)).slice(0, 30) : [];
+    const valueType = (value: unknown) => value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
+    const errorClass = (value: unknown) => {
+      if (typeof value !== 'string') return null;
+      return /no workspace owner|attaches when memtrace start|ClientPending/i.test(value) ? 'owner-not-started' : /license|credentials|auth login|not authenticated/i.test(value) ? 'auth-refused' : /scope|workspace.*include|membership/i.test(value) ? 'scope-admission' : /timeout|timed out/i.test(value) ? 'operation-timeout' : 'other';
+    };
     const observe = (name: string, args: Record<string, any>, response: Record<string, any> | undefined, rejected = false) => {
       try {
         if (!['list_indexed_repositories', 'get_repository_stats', 'get_query_revision'].includes(name) || report.nativeMcpMetadata.length >= 32) return;
         const values = (response?.content ?? []).flatMap((entry: Record<string, any>) => { if (entry.type !== 'text') return []; try { return [JSON.parse(entry.text)]; } catch { return []; } });
         const value = values.at(-1);
-        const row: Record<string, any> = { tool: name, elapsedMs: Date.now() - startedAt, rejected, isError: response?.isError === true, hasJsonBody: value !== undefined };
+        const row: Record<string, any> = { tool: name, elapsedMs: Date.now() - startedAt, rejected, isError: response?.isError === true, hasJsonBody: value !== undefined, topLevelType: valueType(value), topLevelKeys: fieldNames(value), jsonBlockCount: values.length, structuredContentType: valueType(response?.structuredContent) };
         if (name === 'list_indexed_repositories') {
           const repos = Array.isArray(value) ? value : Array.isArray(value?.repos) ? value.repos : [];
           row.rowCount = repos.length;
-          row.pathMatchingRows = repos.filter((item: Record<string, any>) => matches(item.repo_path ?? item.path) === true).length;
-          row.pathlessEpisodeRows = repos.filter((item: Record<string, any>) => item.ingestion_path === 'episode_only' && item.repo_path == null && item.path == null).length;
-          row.foreignPathRows = repos.filter((item: Record<string, any>) => typeof (item.repo_path ?? item.path) === 'string' && matches(item.repo_path ?? item.path) === false).length;
-          row.rows = repos.slice(0, 5).map((item: Record<string, any>) => ({ pathPresent: typeof item.path === 'string', repoPathPresent: typeof item.repo_path === 'string', pathMatches: matches(item.path), repoPathMatches: matches(item.repo_path), episodeOnly: item.ingestion_path === 'episode_only' }));
+          row.pathMatchingRows = repos.filter((item: Record<string, any>) => matches(item?.repo_path ?? item?.path) === true).length;
+          row.pathlessEpisodeRows = repos.filter((item: Record<string, any>) => item?.ingestion_path === 'episode_only' && item?.repo_path == null && item?.path == null).length;
+          row.foreignPathRows = repos.filter((item: Record<string, any>) => typeof (item?.repo_path ?? item?.path) === 'string' && matches(item?.repo_path ?? item?.path) === false).length;
+          row.rows = repos.slice(0, 5).map((item: Record<string, any>) => ({
+            valueType: valueType(item), keys: fieldNames(item),
+            pathPresent: typeof item?.path === 'string', repoPathPresent: typeof item?.repo_path === 'string',
+            pathMatches: matches(item?.path), repoPathMatches: matches(item?.repo_path), episodeOnly: item?.ingestion_path === 'episode_only',
+            repoIdPresent: typeof item?.repo_id === 'string',
+            type: enumValue(item?.type, ['text', 'image', 'resource', 'error']),
+            status: enumValue(item?.status, ['client_pending', 'pending', 'warming', 'ready', 'starting', 'metadata_only', 'catching_up', 'error']),
+            errorType: valueType(item?.error), errorKeys: fieldNames(item?.error), errorClass: errorClass(item?.error ?? item?.message ?? item?.text),
+            errorCode: enumValue(item?.error_code ?? item?.code ?? item?.error?.code, ['ClientPending', 'client_pending', 'repo_not_in_store', 'NoCredentials', 'not_authenticated', 'unknown_workspace', 'busy']),
+          }));
         } else if (name === 'get_repository_stats') {
           row.repoInStore = typeof value?.repo_in_store === 'boolean' ? value.repo_in_store : null;
           row.errorCode = enumValue(value?.error_code, ['repo_not_in_store', 'repo_busy', 'busy', 'unindexed', 'indexing_in_progress']);
