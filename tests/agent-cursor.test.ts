@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import {
   startCursorSession,
   cursorModelValue,
+  cursorSessionModel,
 } from "../runtime/agents/cursor.ts";
 import type { AgentEvent } from "../runtime/agents/types.ts";
 import type { PermissionMode } from "../src/permissions";
@@ -76,6 +77,16 @@ test("Cursor CLI aliases resolve only to advertised ACP model and effort variant
   );
   assert.equal(cursorModelValue("grok-4.7-xhigh", choices), undefined);
   assert.equal(cursorModelValue("different-model", choices), undefined);
+});
+
+test("Cursor reports its acknowledged model selection and leaves Auto identity unknown", () => {
+  assert.equal(cursorSessionModel([{category:"model",currentValue:"default[fast=true]"}]), undefined);
+  assert.equal(cursorSessionModel([{category:"model",currentValue:"Auto"}]), undefined);
+  assert.deepEqual(cursorSessionModel([{category:"model",currentValue:"grok-4.7[reasoning_effort=high,fast=true]"}]), {
+    type:"measurement",model:{id:"grok-4.7",source:"cursor-session",effort:"high"},models:["grok-4.7"],
+  });
+  assert.equal(cursorSessionModel([], undefined), undefined);
+  assert.equal(cursorSessionModel([], "composer-2.5")?.model?.id, "composer-2.5");
 });
 
 async function fixture(kind = "normal") {

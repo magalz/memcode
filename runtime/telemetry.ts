@@ -4,6 +4,8 @@ import { join } from "node:path";
 import type { AppState, Project, WorkItem } from "../src/shared";
 import { appVersion } from "../src/version";
 import type { BoundEvidence } from "./qualification";
+import { modelFamily, publicModelId } from "../src/public-models";
+import type { WorkerCheckResult } from "../src/measurements";
 import {
   telemetryBatchSchema,
   telemetryEventSchema,
@@ -41,6 +43,7 @@ interface Attempt {
   localKey: string;
   runRef?: string;
   revision?: string;
+  finish?: Finished;
 }
 interface DiskState {
   version: 1;
@@ -553,7 +556,7 @@ export class ProductTelemetry implements WorkerTelemetry {
           : task.run.state === "blocked"
             ? "blocked"
             : "failed";
-    this.record({
+    const finished: Finished = {
       ...this.common(),
       projectRef: attempt.event.projectRef,
       type: "attempt.finished",
@@ -571,12 +574,57 @@ export class ProductTelemetry implements WorkerTelemetry {
         task.run.exitCode <= 2147483647
           ? task.run.exitCode
           : null,
-      reportedHarness: null,
-      reportedModel: null,
-      reportedEffort: null,
-      usage: null,
+      reportedHarness: task.run.measurements?.modelSource
+        ? attempt.event.harness
+        : null,
+      reportedModel: task.run.measurements?.modelId
+        ? (modelFamily(
+            task.run.measurements.modelId,
+          ) as Finished["reportedModel"])
+        : null,
+      reportedModelId: publicModelId(task.run.measurements?.modelId),
+      reportedModelIds: [
+        ...new Set(
+          task.run.measurements?.modelIds
+            .map(publicModelId)
+            .filter((id): id is NonNullable<typeof id> => id !== null) ?? [],
+        ),
+      ],
+      reportedModels: [
+        ...new Set(task.run.measurements?.modelIds.map(modelFamily) ?? []),
+      ] as NonNullable<Finished["reportedModels"]>,
+      reportedModelSource: task.run.measurements?.modelSource ?? null,
+      reportedEffort: task.run.measurements?.effort ?? null,
+      usage: task.run.measurements?.usage ?? null,
       verification: null,
+    };
+    attempt.finish = finished;
+    this.record(finished);
+  }
+  /** A later controlled check is an immutable enrichment, not another coding attempt. */
+  verified(task: WorkItem, result: WorkerCheckResult): boolean {
+    if (!this.enabled() || !result.linked) return false;
+    const attempt = this.disk.last[key("story", task.id)];
+    if (
+      !attempt?.finish ||
+      attempt.runRef !== result.runId ||
+      attempt.runRef !== task.run.changeRunId ||
+      attempt.revision !== result.revision ||
+      task.changesRevision !== result.revision
+    )
+      return false;
+    this.record({
+      ...attempt.finish,
+      eventId: randomUUID(),
+      occurredAt: new Date(this.clock()).toISOString(),
+      verification: {
+        passed: result.passed,
+        failed: result.failed,
+        source: "memcode_check",
+        exitCode: result.exitCode,
+      },
     });
+    return true;
   }
   tracks(method: string, input?: unknown) {
     if (!this.enabled() || !mutations.has(method)) return false;

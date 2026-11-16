@@ -18,6 +18,7 @@ const send=p=>process.stdout.write(JSON.stringify(p)+'\\n');
 const notify=(method,params)=>send({method,params});
 let index=0,initialized=false,threadSettings,turnSettings; const replies=[];
 const requests=JSON.parse(process.env.REQUESTS||'[]');
+const notifications=JSON.parse(process.env.NOTIFICATIONS||'[]');
 function next(){
  if(index<requests.length){const r=requests[index++]; send({id:r.id,method:r.method,params:{threadId:'thread-native',turnId:'turn-native',...r.params}});}
  else if(process.env.WAIT!=='yes'){
@@ -37,11 +38,12 @@ rl.on('line',line=>{const p=JSON.parse(line);
   threadSettings=p.params;
   const full=process.env.MODE==='full-access';
   if(!initialized||p.params.approvalPolicy!==(full?'never':'on-request')||p.params.sandbox!==(full?'danger-full-access':'workspace-write')||p.params.approvalsReviewer!==(process.env.MODE==='auto'?'auto_review':'user')||p.params.allowProviderModelFallback!==false||p.params.model!=='chosen-model')process.exit(12);
-  send({id:p.id,result:{thread:{id:'thread-native'},approvalPolicy:p.params.approvalPolicy,approvalsReviewer:process.env.DOWNGRADE==='yes'?'user':p.params.approvalsReviewer,sandbox:{type:full?'dangerFullAccess':'workspaceWrite'}}});
+  send({id:p.id,result:{thread:{id:'thread-native'},...(process.env.NO_MODEL_METADATA==='yes'?{}:{model:'resolved-model',reasoningEffort:'medium'}),approvalPolicy:p.params.approvalPolicy,approvalsReviewer:process.env.DOWNGRADE==='yes'?'user':p.params.approvalsReviewer,sandbox:{type:full?'dangerFullAccess':'workspaceWrite'}}});
  }else if(p.method==='turn/start'){
   turnSettings=p.params;
   if(p.params.effort!=='high'||p.params.input[0].text!=='The exact prompt')process.exit(13);
   send({id:p.id,result:{turn:{id:'turn-native',status:'inProgress'}}});
+  for(const event of notifications)notify(event.method,event.params);
   notify('item/started',{threadId:'thread-native',item:{id:'tool-1',type:'commandExecution',command:'npm test'}});
   notify('turn/plan/updated',{threadId:'thread-native',plan:[{step:'Check the code',status:'inProgress'}]});
   if(process.env.MALFORMED==='yes')process.stdout.write('{bad json\\n'); else next();
@@ -221,6 +223,318 @@ test("Codex setup failure never marks queued context as sent to the model", asyn
     );
   } finally {
     await f.cleanup();
+  }
+});
+
+test("Codex reports resolved/rerouted models and whole-thread usage snapshots without counting the last response or foreign turns", async () => {
+  const total = {
+    inputTokens: 250,
+    outputTokens: 78,
+    cachedInputTokens: 200,
+    cacheWriteInputTokens: 0,
+    reasoningOutputTokens: 20,
+    totalTokens: 328,
+  };
+  const usage = (values: Record<string, number>) => ({
+    total: values,
+    last: { inputTokens: 7, outputTokens: 3, cachedInputTokens: 0 },
+  });
+  const notifications = [
+    {
+      method: "item/started",
+      params: {
+        threadId: "thread-native",
+        turnId: "foreign-turn",
+        item: {
+          type: "collabAgentToolCall",
+          tool: "spawnAgent",
+          model: "foreign-child",
+        },
+      },
+    },
+    {
+      method: "model/rerouted",
+      params: {
+        threadId: "foreign",
+        turnId: "turn-native",
+        fromModel: "wrong",
+        toModel: "foreign-model",
+      },
+    },
+    {
+      method: "model/rerouted",
+      params: {
+        threadId: "thread-native",
+        turnId: "foreign-turn",
+        fromModel: "wrong",
+        toModel: "foreign-turn-model",
+      },
+    },
+    {
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-native",
+        turnId: "foreign-turn",
+        tokenUsage: usage({ ...total, inputTokens: 999999 }),
+      },
+    },
+    {
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-native",
+        turnId: "turn-native",
+        tokenUsage: usage({
+          ...total,
+          inputTokens: 100,
+          cachedInputTokens: 70,
+          totalTokens: 178,
+        }),
+      },
+    },
+    {
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-native",
+        turnId: "turn-native",
+        tokenUsage: usage({
+          ...total,
+          inputTokens: 100,
+          cachedInputTokens: 70,
+          totalTokens: 178,
+        }),
+      },
+    },
+    {
+      method: "model/rerouted",
+      params: {
+        threadId: "thread-native",
+        turnId: "turn-native",
+        fromModel: "resolved-model",
+        toModel: "reported-rerouted-model",
+      },
+    },
+    {
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-native",
+        turnId: "turn-native",
+        tokenUsage: usage(total),
+      },
+    },
+  ];
+  const f = await runFixture({ NOTIFICATIONS: JSON.stringify(notifications) });
+  try {
+    assert.equal((await f.session.completion).exitCode, 0);
+    const measurements = f.events.filter(
+      (event) => event.type === "measurement",
+    );
+    const models = measurements.filter((event) => !!event.model);
+    assert.deepEqual(
+      models.map((event) => event.model),
+      [
+        { id: "resolved-model", source: "codex-thread", effort: "medium" },
+        {
+          id: "reported-rerouted-model",
+          source: "codex-rerouted",
+        },
+      ],
+    );
+    assert.deepEqual(models.at(-1)?.models, [
+      "resolved-model",
+      "reported-rerouted-model",
+    ]);
+    const usages = measurements.filter((event) => !!event.usage);
+    assert.equal(usages.length, 3);
+    assert.deepEqual(usages.at(-1)?.usage, {
+      inputTokens: 250,
+      outputTokens: 78,
+      cachedInputTokens: 200,
+      cacheCreationInputTokens: 0,
+      reasoningOutputTokens: 20,
+      totalTokens: 328,
+      scope: "attempt",
+      source: "codex-thread-total",
+    });
+    assert.equal(JSON.stringify(measurements).includes("foreign-model"), false);
+    assert.equal(
+      JSON.stringify(measurements).includes("foreign-turn-model"),
+      false,
+    );
+    assert.equal(JSON.stringify(measurements).includes("999999"), false);
+    const nativeAudits = f.events
+      .filter((event) => event.type === "raw")
+      .map((event) => event.event);
+    assert.equal(nativeAudits.length, 3);
+    assert.deepEqual(nativeAudits.at(-1), {
+      type: "native-token-usage",
+      harness: "codex",
+      ...total,
+    });
+    assert.equal(JSON.stringify(nativeAudits).includes("threadId"), false);
+    assert.equal(JSON.stringify(nativeAudits).includes("turnId"), false);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("Codex does not invent missing model/counter fields or accept another turn's completion", async () => {
+  const notifications = [
+    {
+      method: "turn/completed",
+      params: {
+        threadId: "thread-native",
+        turn: {
+          id: "foreign-turn",
+          status: "failed",
+          error: { message: "wrong turn" },
+        },
+      },
+    },
+    {
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-native",
+        tokenUsage: { total: { inputTokens: 999 } },
+      },
+    },
+    {
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-native",
+        turnId: "turn-native",
+        tokenUsage: {
+          total: {
+            inputTokens: -1,
+            outputTokens: 55,
+            cachedInputTokens: "42",
+            cacheWriteInputTokens: 1.5,
+            reasoningOutputTokens: 1e12,
+          },
+        },
+      },
+    },
+    {
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-native",
+        turnId: "turn-native",
+        tokenUsage: { total: { inputTokens: -1, outputTokens: "45" } },
+      },
+    },
+  ];
+  const f = await runFixture({
+    NO_MODEL_METADATA: "yes",
+    NOTIFICATIONS: JSON.stringify(notifications),
+  });
+  try {
+    assert.equal((await f.session.completion).exitCode, 0);
+    const measurements = f.events.filter(
+      (event) => event.type === "measurement",
+    );
+    assert.equal(
+      measurements.some((event) => !!event.model),
+      false,
+    );
+    assert.deepEqual(
+      measurements.map((event) => event.usage),
+      [
+        {
+          inputTokens: null,
+          outputTokens: 55,
+          cachedInputTokens: null,
+          cacheCreationInputTokens: null,
+          reasoningOutputTokens: null,
+          totalTokens: null,
+          scope: "attempt",
+          source: "codex-thread-total",
+        },
+      ],
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("Codex marks thread counters as main-loop coverage when native collaboration frames reveal child work", async () => {
+  const counter = {
+    method: "thread/tokenUsage/updated",
+    params: {
+      threadId: "thread-native",
+      turnId: "turn-native",
+      tokenUsage: {
+        total: {
+          inputTokens: 75,
+          outputTokens: 25,
+          cachedInputTokens: 10,
+          cacheWriteInputTokens: 0,
+          reasoningOutputTokens: 5,
+          totalTokens: 100,
+        },
+      },
+    },
+  };
+  const collaboration = {
+    method: "item/started",
+    params: {
+      threadId: "thread-native",
+      turnId: "turn-native",
+      item: {
+        type: "collabAgentToolCall",
+        tool: "spawnAgent",
+        model: "unconfirmed-requested-child-model",
+      },
+    },
+  };
+  const child = {
+    method: "item/completed",
+    params: {
+      threadId: "thread-native",
+      turnId: "turn-native",
+      item: { type: "subAgentActivity", kind: "spawn", model: "gpt-6-luna" },
+    },
+  };
+  for (const notifications of [
+    [collaboration, child, counter],
+    [counter, collaboration, child],
+  ]) {
+    const f = await runFixture({
+      NOTIFICATIONS: JSON.stringify(notifications),
+    });
+    try {
+      assert.equal((await f.session.completion).exitCode, 0);
+      const measurements = f.events.filter(
+        (event) => event.type === "measurement",
+      );
+      const lastUsage = measurements
+        .filter((event) => event.usage)
+        .at(-1)?.usage;
+      assert.deepEqual(lastUsage, {
+        inputTokens: 75,
+        outputTokens: 25,
+        cachedInputTokens: 10,
+        cacheCreationInputTokens: 0,
+        reasoningOutputTokens: 5,
+        totalTokens: 100,
+        scope: "main_loop",
+        source: "codex-thread-total",
+      });
+      assert.equal(
+        measurements.filter((event) => event.model).at(-1)?.model?.id,
+        "resolved-model",
+      );
+      assert.deepEqual(
+        measurements.filter((event) => event.models).at(-1)?.models,
+        ["resolved-model", "gpt-6-luna"],
+      );
+      assert.equal(
+        JSON.stringify(measurements).includes(
+          "unconfirmed-requested-child-model",
+        ),
+        false,
+      );
+    } finally {
+      await f.cleanup();
+    }
   }
 });
 

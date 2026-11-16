@@ -176,6 +176,9 @@ export interface WorkItem extends TaskPlanningFields {
     error?: string;
     sessionId?: string;
     changeRunId?: string;
+    measurements?: import("./measurements").WorkerMeasurements;
+    checks?: import("./measurements").WorkerCheckResult;
+    finishedSourceBinding?: string | null;
   };
   evidence?: Evidence;
   diff?: string;
@@ -336,7 +339,9 @@ export interface PreviewInput {
 }
 export interface MemCodeAPI {
   telemetryStatus(): Promise<import("./telemetry").TelemetryStatus>;
-  setTelemetryEnabled(enabled: boolean): Promise<import("./telemetry").TelemetryStatus>;
+  setTelemetryEnabled(
+    enabled: boolean,
+  ): Promise<import("./telemetry").TelemetryStatus>;
   flushTelemetry(): Promise<import("./telemetry").TelemetryStatus>;
   openTelemetryPrivacy(): Promise<void>;
   betaStatus(): Promise<import("./beta").MemCodeBetaStatus>;

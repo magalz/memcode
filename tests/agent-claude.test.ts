@@ -38,6 +38,10 @@ for await(const line of createInterface({input:process.stdin})){
   if(scenario==='mode-downgrade')continue;
   process.stderr.write('A live diagnostic before completion.\n');
   if(scenario==='early')process.exit(0);
+  if(scenario==='measurements'){
+   send({type:'assistant',message:{id:'native-response',model:'claude-sonnet-5-5',usage:{input_tokens:1,output_tokens:9999},content:[{type:'text',text:'Completed the fixture.'}]}});
+   send({type:'result',subtype:'success',is_error:false,result:'Completed the fixture.',usage:{input_tokens:10,output_tokens:20,cache_read_input_tokens:30,cache_creation_input_tokens:40},modelUsage:{'claude-sonnet-5-5':{inputTokens:10,outputTokens:20,cacheReadInputTokens:30,cacheCreationInputTokens:40}}});continue;
+  }
   if(scenario==='hang'){finish();continue;}
   if(scenario==='cancel'){
    request('cancel-me','Bash',bash);
@@ -362,6 +366,35 @@ test("a logical result completes and cleans up a CLI that keeps stdin/process op
       run.session.child.exitCode !== null ||
         run.session.child.signalCode !== null,
       "completion waits for owned process termination",
+    );
+  } finally {
+    await run.cleanup();
+  }
+});
+
+test("Claude adapter forwards actual response identity and final cumulative usage from its real native protocol boundary", async () => {
+  const run = await setup("measurements", async () => {
+    throw Error("Unexpected input request");
+  });
+  try {
+    assert.deepEqual(await run.session.completion, { exitCode: 0 });
+    const measurements = run.events.filter(
+      (event) => event.type === "measurement",
+    );
+    assert.equal(measurements.at(-1)?.model?.id, "claude-sonnet-5-5");
+    assert.deepEqual(measurements.at(-1)?.usage, {
+      inputTokens: 80,
+      outputTokens: 20,
+      cachedInputTokens: 30,
+      cacheCreationInputTokens: 40,
+      scope: "attempt",
+      source: "claude-model-total",
+      totalTokens: 100,
+    });
+    assert.equal(
+      measurements.at(-1)?.usage?.outputTokens === 9999,
+      false,
+      "partial assistant placeholders are not final usage",
     );
   } finally {
     await run.cleanup();

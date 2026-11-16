@@ -6,10 +6,13 @@ import {
   copyFile,
   stat,
   symlink,
+  lstat,
+  readlink,
+  rm,
   chmod,
 } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { Harness } from "../src/shared";
 import type { PermissionMode } from "../src/permissions";
 import { allowCursorGateway, cursorDenyAliases } from "./cursor-permissions";
@@ -100,12 +103,27 @@ export async function workerToolProfile(
       : join(homedir(), ".cursor"));
   const profile = join(dirname(configPath), "cursor-profile");
   await mkdir(profile, { recursive: true });
+  // Configuration is inherited, but native session stores and caches belong to
+  // this worker. In particular ACP persists its SQLite store under CONFIG_DIR,
+  // not DATA_DIR. Linking acp-sessions would expose unrelated session history.
+  const privateDirectories = new Set([
+    "acp-sessions", "projects", "chats", "agent-transcripts", "logs",
+    "cache", "Cache", "CachedData", "Code Cache", "GPUCache",
+    "blob_storage", "workspaceStorage",
+  ]);
   for (const entry of await readdir(original, { withFileTypes: true }).catch(
     () => [],
   )) {
     if (["cli-config.json", "mcp.json"].includes(entry.name)) continue;
     const from = join(original, entry.name),
       to = join(profile, entry.name);
+    if (privateDirectories.has(entry.name)) {
+      const existing = await lstat(to).catch(() => undefined);
+      if (existing?.isSymbolicLink() &&
+          resolve(await readlink(to)) === resolve(from))
+        await rm(to); // Detach only an inherited link; never delete stored data.
+      continue;
+    }
     if ((await stat(from)).isDirectory())
       await symlink(
         from,
@@ -163,6 +181,9 @@ export async function workerToolProfile(
   });
   return {
     args: ["--approve-mcps", "--plugin-dir", plugin],
-    env: { CURSOR_CONFIG_DIR: profile },
+    env: {
+      CURSOR_CONFIG_DIR: profile,
+      CURSOR_DATA_DIR: join(profile, "data"),
+    },
   };
 }

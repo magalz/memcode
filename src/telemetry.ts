@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { publicModelIds } from "./public-models";
 
 /** A versioned allowlist, never a channel for custom-model names or project text. */
 export const telemetryModels = [
@@ -88,11 +89,49 @@ export const telemetryEventSchema = z.discriminatedUnion("type", [
       reportedHarness: harness.nullable(),
       reportedModel: model.nullable(),
       reportedEffort: effort.nullable(),
+      reportedModelId: z.enum(publicModelIds).nullable().optional(),
+      reportedModelIds: z.array(z.enum(publicModelIds)).max(16).optional(),
+      reportedModels: z.array(model).max(16).optional(),
+      reportedModelSource: z
+        .enum([
+          "codex-thread",
+          "codex-rerouted",
+          "claude-assistant",
+          "cursor-stop-hook",
+          "cursor-session",
+        ])
+        .nullable()
+        .optional(),
       usage: z
         .object({
           inputTokens: z.number().int().min(0).max(1e9).nullable(),
           outputTokens: z.number().int().min(0).max(1e9).nullable(),
           cachedInputTokens: z.number().int().min(0).max(1e9).nullable(),
+          cacheCreationInputTokens: z
+            .number()
+            .int()
+            .min(0)
+            .max(1e9)
+            .nullable()
+            .optional(),
+          reasoningOutputTokens: z
+            .number()
+            .int()
+            .min(0)
+            .max(1e9)
+            .nullable()
+            .optional(),
+          totalTokens: z.number().int().min(0).max(2e9).nullable().optional(),
+          scope: z.enum(["attempt", "main_loop"]).optional(),
+          source: z
+            .enum([
+              "codex-thread-total",
+              "claude-model-total",
+              "claude-main-loop",
+              "cursor-stop-hook",
+              "cursor-acp",
+            ])
+            .optional(),
         })
         .strict()
         .nullable(),
@@ -100,7 +139,14 @@ export const telemetryEventSchema = z.discriminatedUnion("type", [
         .object({
           passed: nullableCount,
           failed: nullableCount,
-          source: z.literal("tool_reported"),
+          source: z.enum(["tool_reported", "memcode_check"]),
+          exitCode: z
+            .number()
+            .int()
+            .min(-2147483648)
+            .max(2147483647)
+            .nullable()
+            .optional(),
         })
         .strict()
         .nullable(),

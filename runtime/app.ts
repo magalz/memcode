@@ -47,6 +47,7 @@ import { createBetaAuthorization } from "./beta-auth";
 import { MemCodeBeta, nativeBetaStorage } from "./beta";
 import { ManagedMemcodeEngine } from "./managed-engine";
 import { ProductTelemetry, observeTelemetryMutation } from "./telemetry";
+import { runTaskVerification } from "./verification";
 import { SpeechManager, registerSpeech } from "./speech";
 import { speechSettingsSchema } from "../src/speech";
 import {
@@ -114,14 +115,18 @@ export async function createRuntime(
   let betaNeedsAnalysis = false;
   let betaReady = false;
   let requireFreshWorkerContext = false;
-  const qaProfile=process.env.MEMCODE_NATIVE_TEST_PROFILE==="1"||!!process.env.NODE_TEST_CONTEXT;
-  const telemetryTestChannel=qaProfile&&process.env.MEMCODE_TELEMETRY_TEST_CHANNEL==="1";
-  const telemetry = new ProductTelemetry(store.dir,state,{
-    authorization:()=>beta?.telemetryAuthorization()??Promise.resolve(null),
-    eligible:()=>beta?.snapshot().state==="connected",
-    clearAuthorization:()=>beta?.clearTelemetryAuthorization(),
-    channel:telemetryTestChannel?"test":"production",
-    excluded:qaProfile&&!telemetryTestChannel,
+  const qaProfile =
+    process.env.MEMCODE_NATIVE_TEST_PROFILE === "1" ||
+    !!process.env.NODE_TEST_CONTEXT;
+  const telemetryTestChannel =
+    qaProfile && process.env.MEMCODE_TELEMETRY_TEST_CHANNEL === "1";
+  const telemetry = new ProductTelemetry(store.dir, state, {
+    authorization: () =>
+      beta?.telemetryAuthorization() ?? Promise.resolve(null),
+    eligible: () => beta?.snapshot().state === "connected",
+    clearAuthorization: () => beta?.clearTelemetryAuthorization(),
+    channel: telemetryTestChannel ? "test" : "production",
+    excluded: qaProfile && !telemetryTestChannel,
   });
   await telemetry.initialize();
   const managedEngine = new ManagedMemcodeEngine(store.dir, {
@@ -238,7 +243,11 @@ export async function createRuntime(
     schema: z.ZodType,
     handle: (input: any) => unknown,
   ) => {
-    handlers.set(name, { schema, handle:(input)=>observeTelemetryMutation(telemetry,name,input,handle) });
+    handlers.set(name, {
+      schema,
+      handle: (input) =>
+        observeTelemetryMutation(telemetry, name, input, handle),
+    });
   };
   const teamIdentity = createMemtraceIdentityProofProvider({
     openExternal: (url) => host.call("open_memcode_identity", { url }),
@@ -520,10 +529,10 @@ export async function createRuntime(
     () => host.call("open_github_device", {}),
   );
   beta = new MemCodeBeta({
-    telemetryOptIn:()=>telemetry.requested(),
+    telemetryOptIn: () => telemetry.requested(),
     storage: nativeBetaStorage(host),
     authorization: createBetaAuthorization({
-      telemetryOptIn:()=>telemetry.requested(),
+      telemetryOptIn: () => telemetry.requested(),
       openExternal: (url) => host.call("open_memcode_beta", { url }),
     }),
     assertMayChange: () => {
@@ -595,14 +604,23 @@ export async function createRuntime(
   register("beta:sign-out", z.undefined(), () => beta!.signOut());
   register("beta:refresh", z.undefined(), () => beta!.refresh());
   register("beta:resume", z.undefined(), () => beta!.resume());
-  register("telemetry:status",z.undefined(),()=>telemetry.status());
-  register("telemetry:privacy",z.undefined(),()=>host.call("open_memcode_telemetry_privacy",{}));
-  register("telemetry:set",z.object({enabled:z.boolean()}).strict(),async({enabled})=>{
-    const status=await telemetry.setEnabled(enabled);
-    if(enabled)void telemetry.flush();
-    return status;
+  register("telemetry:status", z.undefined(), () => telemetry.status());
+  register("telemetry:privacy", z.undefined(), () =>
+    host.call("open_memcode_telemetry_privacy", {}),
+  );
+  register(
+    "telemetry:set",
+    z.object({ enabled: z.boolean() }).strict(),
+    async ({ enabled }) => {
+      const status = await telemetry.setEnabled(enabled);
+      if (enabled) void telemetry.flush();
+      return status;
+    },
+  );
+  register("telemetry:flush", z.undefined(), async () => {
+    await telemetry.flush();
+    return telemetry.status();
   });
-  register("telemetry:flush",z.undefined(),async()=>{await telemetry.flush();return telemetry.status();});
   register(
     "beta:use-cli",
     z.object({ confirmed: z.literal(true) }).strict(),
@@ -789,6 +807,30 @@ export async function createRuntime(
     await workers.start(item, project(item.projectId));
   });
   register("worker:stop", identifier, (id) => workers.stop(id));
+  register(
+    "task:verify",
+    z
+      .object({
+        id: identifier,
+        program: nonempty.max(2000),
+        args: z.array(z.string().max(8000)).max(80),
+        format: z.enum(["tap", "memcode-json", "exit-code"]),
+        timeoutMs: z.number().int().min(1000).max(300000).default(60000),
+        cwd: z.string().max(2000).optional(),
+      })
+      .strict(),
+    async (input) => {
+      const result = await runTaskVerification(state, terminals, input);
+      if (result.linked)
+        try {
+          telemetry.verified(task(input.id), result);
+        } catch {
+          /* Reporting cannot change the completed check result. */
+        }
+      await changed();
+      return result;
+    },
+  );
   register(
     "worker:respond",
     z

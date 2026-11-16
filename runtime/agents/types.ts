@@ -7,6 +7,7 @@ import type {
 } from "../../src/worker-input";
 
 export type AgentEvent =
+  | import("../../src/measurements").AgentMeasurement
   | { type: "prompted" }
   | {
       type: "message";

@@ -10,6 +10,7 @@ import type {
 } from "../../src/worker-input";
 import type { AgentSession, AgentSessionOptions } from "./types";
 import { withoutPermissionArgs } from "./permissions";
+import { ClaudeMeasurements } from "./claude-measurements";
 
 type Frame = Record<string, any>;
 const bounded = (value: unknown, limit = 16000): string =>
@@ -106,6 +107,7 @@ export function startClaudeSession(options: AgentSessionOptions): AgentSession {
     },
   );
   const emit = options.onEvent;
+  const measurements = new ClaudeMeasurements();
   const activity = (
     label: string,
     phase: "working" | "tool" | "waiting" | "finishing",
@@ -326,6 +328,8 @@ export function startClaudeSession(options: AgentSessionOptions): AgentSession {
   };
   const observe = (frame: Frame) => {
     emit({ type: "raw", event: frame });
+    const measurement = measurements.observe(frame);
+    if (measurement) emit(measurement);
     if (typeof frame.session_id === "string")
       emit({ type: "session", sessionId: frame.session_id });
     if (frame.type === "control_request") {

@@ -34,6 +34,9 @@ import { WorkerStartupQueue } from "./worker-startup";
 import { workerTurnContext } from "./worker-turn";
 import { effectivePermissionMode } from "../src/permissions";
 import type { AgentEvent } from "./agents/types";
+import { applyAgentMeasurement } from "./agents/measurements";
+import { createMeasurementAudit } from "./measurement-audit";
+import { checkSourceBinding } from "./verification";
 import type { WorkerTelemetry } from "./telemetry";
 import {
   claimReviewContext,
@@ -472,6 +475,9 @@ export class WorkerManager {
       finishedAt: undefined,
       exitCode: undefined,
       sessionId: undefined,
+      measurements: undefined,
+      checks: undefined,
+      finishedSourceBinding: undefined,
       activity: {
         phase: "working",
         label: "Preparing worker context",
@@ -851,9 +857,27 @@ export class WorkerManager {
             void this.changed();
           }, 100);
       };
+      const launchedHarness = task.harness;
+      const measurementAudit = createMeasurementAudit(
+        workspace,
+        task.id,
+        task.run.changeRunId,
+      );
       const onEvent = (event: AgentEvent) => {
         if (settled) return;
-        if (event.type === "raw") return;
+        if (event.type === "raw") {
+          measurementAudit.observe(event.event);
+          return;
+        }
+        if (event.type === "measurement") {
+          task.run.measurements = applyAgentMeasurement(
+            task.run.measurements,
+            event,
+            launchedHarness,
+          );
+          saveEvent();
+          return;
+        }
         if (event.type === "prompted") {
           markReviewContext(task.messages, conversation, now());
           saveEvent();
@@ -923,7 +947,7 @@ export class WorkerManager {
       } catch {
         /* Optional reporting cannot block launch. */
       }
-      const session = this.sessionFactory(task.harness, {
+      const session = this.sessionFactory(launchedHarness, {
         command,
         cwd: workspace,
         model: task.route.model,
@@ -1063,6 +1087,7 @@ export class WorkerManager {
                 ? "Worker finished. Review the actual changes and checks before marking this work done."
                 : "Worker needs attention. Shared changes and worker logs have been preserved.",
           );
+          task.run.finishedSourceBinding = await checkSourceBinding(workspace);
           await this.changed();
         } catch (failure) {
           task.run.state = task.run.state === "stopping" ? "stopped" : "failed";
@@ -1083,6 +1108,7 @@ export class WorkerManager {
             );
           });
           this.children.delete(task.id);
+          await measurementAudit.flush();
           try {
             this.telemetry?.finished(telemetryAttempt, task);
           } catch {

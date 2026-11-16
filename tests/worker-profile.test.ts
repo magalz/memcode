@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, lstat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { workerToolProfile } from "../runtime/worker-profile";
@@ -10,6 +10,8 @@ test("worker overlays connect both MemCode gateways without changing the user's 
   const original = join(root, "original"),
     worker = join(root, "worker");
   await mkdir(join(original, "skills"), { recursive: true });
+  await mkdir(join(original, "acp-sessions"));
+  await mkdir(join(original, "projects"));
   await mkdir(worker);
   await writeFile(join(original, "skills", "example.md"), "Existing skill");
   const settings = JSON.stringify({
@@ -50,6 +52,13 @@ test("worker overlays connect both MemCode gateways without changing the user's 
   try {
     const cursor = await workerToolProfile("cursor", config);
     const profile = cursor.env!.CURSOR_CONFIG_DIR!;
+    assert.equal(await lstat(join(profile,"acp-sessions")).catch(()=>null),null);
+    assert.equal(await lstat(join(profile,"projects")).catch(()=>null),null);
+    // Reusing a pre-fix profile detaches only the exact inherited junction.
+    await symlink(join(original,"acp-sessions"),join(profile,"acp-sessions"),process.platform === "win32" ? "junction" : "dir");
+    await workerToolProfile("cursor",config);
+    assert.equal(await lstat(join(profile,"acp-sessions")).catch(()=>null),null);
+    assert.ok((await lstat(join(original,"acp-sessions"))).isDirectory());
     const overlaid = JSON.parse(
       await readFile(join(profile, "cli-config.json"), "utf8"),
     );

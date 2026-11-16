@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { join } from "node:path";
 import type { AgentSession, AgentSessionOptions } from "./types";
 import { withoutPermissionArgs } from "./permissions";
+import type { AgentMeasurement } from "../../src/measurements";
 import type {
   WorkerInputOption,
   WorkerInputPrompt,
@@ -87,6 +88,41 @@ export function cursorModelValue(
     );
   });
   return matches.length === 1 ? text(matches[0].value) : undefined;
+}
+
+/** Use only Cursor's acknowledged selection, never our routing request. Auto
+ * names a routing policy and does not identify the model that served a task. */
+export function cursorSessionModel(
+  config: Json[],
+  legacyModel?: unknown,
+): AgentMeasurement | undefined {
+  const selected = config.find(
+    (option) => option.category === "model" || option.id === "model",
+  );
+  const value = text(selected?.currentValue ?? legacyModel);
+  if (!value || value.length > 256 || /^(auto|default)(\[.*\])?$/i.test(value))
+    return;
+  const variant = /^([^\[]+)\[([^\]]*)\]$/.exec(value);
+  const parameters = Object.fromEntries(
+    (variant?.[2] ?? "")
+      .split(",")
+      .filter(Boolean)
+      .map((entry) => entry.split("=")),
+  );
+  const effort = config.find(
+    (option) => option.category === "thought_level" || /effort|reasoning/i.test(text(option.id)),
+  )?.currentValue ?? parameters.effort ?? parameters.reasoning ?? parameters.reasoning_effort;
+  return {
+    type: "measurement",
+    model: {
+      id: variant?.[1] ?? value,
+      source: "cursor-session",
+      ...(["low", "medium", "high", "xhigh"].includes(effort)
+        ? { effort }
+        : {}),
+    },
+    models: [variant?.[1] ?? value],
+  };
 }
 
 async function sessionServers(path?: string): Promise<Json[]> {
@@ -600,6 +636,7 @@ export function startCursorSession(options: AgentSessionOptions): AgentSession {
       if (!sessionId) throw Error("Cursor did not return a session identity.");
       emit({ type: "session", sessionId });
       let config = array(session.configOptions);
+      let legacyModel = session.models?.currentModelId;
       const model = config.find(
         (option) => option.category === "model" || option.id === "model",
       );
@@ -623,11 +660,14 @@ export function startCursorSession(options: AgentSessionOptions): AgentSession {
             value: requestedModel,
           });
           config = array(selected.configOptions);
-        } else if (session.models)
+        } else if (session.models) {
           await request("session/set_model", {
             sessionId,
             modelId: options.model,
           });
+          // The legacy setter's empty success response acknowledges this ID.
+          legacyModel = options.model;
+        }
       }
       const effort = config.find(
         (option) =>
@@ -640,12 +680,16 @@ export function startCursorSession(options: AgentSessionOptions): AgentSession {
       const choice = effortChoices.find(
         (choice) => String(choice.value).toLowerCase() === options.effort,
       );
-      if (effort && choice && effort.currentValue !== choice.value)
-        await request("session/set_config_option", {
+      if (effort && choice && effort.currentValue !== choice.value) {
+        const selected = await request("session/set_config_option", {
           sessionId,
           configId: effort.id,
           value: choice.value,
         });
+        config = array(selected.configOptions);
+      }
+      const modelMeasurement = cursorSessionModel(config, legacyModel);
+      if (modelMeasurement) emit(modelMeasurement);
       if (
         session.modes?.currentModeId !== "agent" &&
         array(session.modes?.availableModes).some((mode) => mode.id === "agent")
@@ -658,6 +702,8 @@ export function startCursorSession(options: AgentSessionOptions): AgentSession {
         { sessionId, prompt: [{ type: "text", text: options.prompt }] },
         0,
       );
+      // Installed Cursor ACP reports logical completion but omits native token
+      // usage. Do not substitute context occupancy or requested-model estimates.
       const reason = text(result.stopReason);
       if (reason && !["end_turn", "cancelled"].includes(reason)) {
         emit({

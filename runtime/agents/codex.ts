@@ -2,6 +2,8 @@ import { spawn } from "node:child_process";
 import { appVersion } from "../../src/version";
 import { createInterface } from "node:readline";
 import type { AgentSession, AgentSessionOptions } from "./types";
+import type { ReasoningEffort } from "../../src/shared";
+import type { ReportedTokenUsage } from "../../src/measurements";
 import { withoutPermissionArgs } from "./permissions";
 import type {
   WorkerInputOption,
@@ -54,6 +56,11 @@ export function startCodexSession(options: AgentSessionOptions): AgentSession {
   const inputs = new Map<Id, AbortController>();
   const resolvedInputs = new Set<Id>();
   const messageText = new Map<string, string>();
+  const reportedModels = new Set<string>();
+  const earlyTurnMeasurements: { method: string; params: Json }[] = [];
+  let reportedEffort: ReasoningEffort | undefined;
+  let threadOnlyUsage = false,
+    latestUsage: ReportedTokenUsage | undefined;
   let settle!: (result: { exitCode: number | null; error?: string }) => void;
   const completion = new Promise<{ exitCode: number | null; error?: string }>(
     (resolve) => {
@@ -61,6 +68,29 @@ export function startCodexSession(options: AgentSessionOptions): AgentSession {
     },
   );
   const emit = options.onEvent;
+  const modelMeasurement = (
+    id: unknown,
+    source: "codex-thread" | "codex-rerouted",
+  ) => {
+    if (typeof id !== "string" || !id.length || id.length > 256) return;
+    if (reportedModels.size < 32) reportedModels.add(id);
+    emit({
+      type: "measurement",
+      model: {
+        id,
+        source,
+        ...(reportedEffort ? { effort: reportedEffort } : {}),
+      },
+      models: [...reportedModels],
+    });
+  };
+  const counter = (value: unknown): number | null =>
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= 1e9
+      ? value
+      : null;
   const write = (packet: Json) => {
     if (child.stdin?.writable && !child.stdin.destroyed)
       child.stdin.write(JSON.stringify(packet) + "\n");
@@ -374,11 +404,104 @@ export function startCodexSession(options: AgentSessionOptions): AgentSession {
   };
   const notification = (method: string, params: Json) => {
     if (params.threadId && threadId && params.threadId !== threadId) return;
+    if (params.turnId && turnId && params.turnId !== turnId) return;
+    const collaborationItem =
+      ["item/started", "item/completed"].includes(method) &&
+      ["collabAgentToolCall", "collabToolCall", "subAgentActivity"].includes(
+        params.item?.type,
+      );
+    if (
+      [
+        "thread/tokenUsage/updated",
+        "model/rerouted",
+        "turn/completed",
+      ].includes(method) ||
+      collaborationItem
+    ) {
+      const scopedTurnId =
+        method === "turn/completed" ? params.turn?.id : params.turnId;
+      if (
+        !threadId ||
+        params.threadId !== threadId ||
+        typeof scopedTurnId !== "string" ||
+        !scopedTurnId
+      )
+        return;
+      // A response and following notifications can arrive in one stdout chunk,
+      // before the turn/start promise continuation sets the authoritative ID.
+      if (!turnId) {
+        if (earlyTurnMeasurements.length < 64)
+          earlyTurnMeasurements.push({ method, params });
+        return;
+      }
+      if (scopedTurnId !== turnId) return;
+    }
+    if (collaborationItem) {
+      // Thread counters are not proof of tokens spent by separately spawned
+      // agents. Keep the measured numbers and downgrade their coverage.
+      if (!threadOnlyUsage) {
+        threadOnlyUsage = true;
+        if (latestUsage) {
+          latestUsage = { ...latestUsage, scope: "main_loop" };
+          emit({ type: "measurement", usage: latestUsage });
+        }
+      }
+      if (
+        params.item.type === "subAgentActivity" &&
+        typeof params.item.model === "string" &&
+        params.item.model.length <= 256 &&
+        reportedModels.size < 32
+      ) {
+        reportedModels.add(params.item.model);
+        emit({ type: "measurement", models: [...reportedModels] });
+      }
+    }
     if (method === "thread/started" && params.thread?.id) {
       threadId = params.thread.id;
       emit({ type: "session", sessionId: threadId });
-    } else if (method === "turn/started") turnId = params.turn?.id || turnId;
-    else if (method === "serverRequest/resolved") {
+    } else if (method === "turn/started") {
+      // turn/start's response, rather than an unrelated notification, owns turnId.
+    } else if (method === "model/rerouted") {
+      if (
+        typeof params.fromModel === "string" &&
+        params.fromModel.length <= 256 &&
+        reportedModels.size < 32
+      )
+        reportedModels.add(params.fromModel);
+      // The reroute event confirms the model, but does not report its effort.
+      reportedEffort = undefined;
+      modelMeasurement(params.toModel, "codex-rerouted");
+    } else if (method === "thread/tokenUsage/updated") {
+      const total = params.tokenUsage?.total;
+      if (!total || typeof total !== "object" || Array.isArray(total)) return;
+      emit({
+        type: "raw",
+        event: {
+          type: "native-token-usage",
+          harness: "codex",
+          inputTokens: counter(total.inputTokens),
+          outputTokens: counter(total.outputTokens),
+          cachedInputTokens: counter(total.cachedInputTokens),
+          cacheWriteInputTokens: counter(total.cacheWriteInputTokens),
+          reasoningOutputTokens: counter(total.reasoningOutputTokens),
+          totalTokens: counter(total.totalTokens),
+        },
+      });
+      const usage: ReportedTokenUsage = {
+        inputTokens: counter(total.inputTokens),
+        outputTokens: counter(total.outputTokens),
+        cachedInputTokens: counter(total.cachedInputTokens),
+        cacheCreationInputTokens: counter(total.cacheWriteInputTokens),
+        reasoningOutputTokens: counter(total.reasoningOutputTokens),
+        totalTokens: counter(total.totalTokens),
+        scope: threadOnlyUsage ? "main_loop" : "attempt",
+        source: "codex-thread-total" as const,
+      };
+      if (usage.inputTokens !== null || usage.outputTokens !== null) {
+        latestUsage = usage;
+        emit({ type: "measurement", usage });
+      }
+    } else if (method === "serverRequest/resolved") {
       resolvedInputs.add(params.requestId);
       inputs.get(params.requestId)?.abort();
       inputs.delete(params.requestId);
@@ -536,6 +659,9 @@ export function startCodexSession(options: AgentSessionOptions): AgentSession {
         );
       threadId = thread.thread?.id;
       if (!threadId) throw new Error("Codex did not return a thread ID.");
+      if (["low", "medium", "high", "xhigh"].includes(thread.reasoningEffort))
+        reportedEffort = thread.reasoningEffort;
+      modelMeasurement(thread.model, "codex-thread");
       emit({ type: "session", sessionId: threadId });
       emit({ type: "prompted" });
       const turn = await request("turn/start", {
@@ -548,6 +674,11 @@ export function startCodexSession(options: AgentSessionOptions): AgentSession {
         cwd: options.cwd,
       });
       turnId = turn.turn?.id || turnId;
+      if (!turnId) throw new Error("Codex did not return a turn ID.");
+      for (const event of earlyTurnMeasurements.splice(0)) {
+        if (finished) break;
+        notification(event.method, event.params);
+      }
     } catch (error) {
       if (!finished) {
         const message =

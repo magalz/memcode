@@ -702,3 +702,70 @@ test("an old account's pending local mutation cannot become the next account's r
     await f.close();
   }
 });
+
+test("native model/token measurements reach the wire and later checks enrich the same immutable attempt", async () => {
+  const f = await fixture();
+  try {
+    await f.telemetry.setEnabled(true);
+    const handle = f.telemetry.started(f.task, f.state.projects[0], "initial");
+    f.task.run.measurements = {
+      modelId: "gpt-6.1-terra",
+      modelIds: ["gpt-6.1-terra", "private/SECRET-model"],
+      modelSource: "codex-thread",
+      effort: "medium",
+      usage: {
+        inputTokens: 1200,
+        outputTokens: 240,
+        cachedInputTokens: 800,
+        cacheCreationInputTokens: 40,
+        reasoningOutputTokens: 100,
+        totalTokens: 1440,
+        scope: "attempt",
+        source: "codex-thread-total",
+      },
+    };
+    f.advance(1500);
+    f.task.run.state = "finished";
+    f.task.run.exitCode = 0;
+    f.task.changesRevision = "SECRET verified revision";
+    f.telemetry.finished(handle, f.task);
+    f.advance(5000);
+    const result = {
+      runId: f.task.run.changeRunId!,
+      revision: f.task.changesRevision,
+      sessionId: "SECRET-terminal",
+      passed: 19,
+      failed: 0,
+      exitCode: 0,
+      source: "memcode_check" as const,
+      startedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      linked: true,
+      timedOut: false,
+    };
+    assert.equal(f.telemetry.verified(f.task, result), true);
+    f.task.run.changeRunId = "different-run";
+    assert.equal(f.telemetry.verified(f.task, result), false);
+    await f.telemetry.flush();
+    const body = telemetryBatchSchema.parse(f.bodies[0]),
+      finishes = body.events.filter((e) => e.type === "attempt.finished");
+    assert.equal(finishes.length, 2);
+    assert.equal(finishes[0].attemptRef, finishes[1].attemptRef);
+    assert.notEqual(finishes[0].eventId, finishes[1].eventId);
+    assert.equal(finishes[0].reportedModelId, "gpt-6.1-terra");
+    assert.deepEqual(finishes[0].reportedModelIds, ["gpt-6.1-terra"]);
+    assert.deepEqual(finishes[0].reportedModels, ["gpt-6.1-terra", "other"]);
+    assert.deepEqual(finishes[0].usage, finishes[1].usage);
+    assert.equal(finishes[1].durationMs, 1500);
+    assert.equal(finishes[0].verification, null);
+    assert.deepEqual(finishes[1].verification, {
+      passed: 19,
+      failed: 0,
+      source: "memcode_check",
+      exitCode: 0,
+    });
+    assert.equal(JSON.stringify(body).includes("SECRET"), false);
+  } finally {
+    await f.close();
+  }
+});
