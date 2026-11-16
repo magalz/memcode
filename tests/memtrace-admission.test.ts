@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
-import { admitPrivateEpisodeRepository } from "../runtime/memtrace-workspace";
+import { admitPrivateEpisodeRepository, waitForPrivateRepositoryDiscovery } from "../runtime/memtrace-workspace";
 import { verifiedIndexRevision } from "../runtime/memtrace-peer-index";
 import { MemtraceEngine } from "../runtime/memtrace";
 import { git } from "../runtime/local";
@@ -31,6 +31,44 @@ function reads(membership: any = stats, binding: any = revision) {
     },
   };
 }
+
+test("private unidentified discovery waits read-only for a real row, while foreign or typed episode records are never reinterpreted", async () => {
+  const initial = [{ status: "initializing" }], actual = [{ repo_id: "selected-repo", path: directory }];
+  let time = 0, calls = 0;
+  const notes: string[] = [];
+  assert.equal(await waitForPrivateRepositoryDiscovery(initial, scope, async () => { calls++; return actual; }, note => notes.push(note), {
+    now: () => time, sleep: async ms => { time += ms; },
+  }), actual);
+  assert.equal(calls, 1); assert.equal(time, 250); assert.equal(notes.length, 1);
+  for (const value of [[{ repo_id: "foreign", path: "/foreign" }], [episode], [initial[0], initial[0]]]) {
+    assert.equal(await waitForPrivateRepositoryDiscovery(value, scope, async () => { throw Error("unexpected retry"); }, () => {}), value);
+  }
+  assert.equal(await waitForPrivateRepositoryDiscovery(initial, null, async () => { throw Error("ordinary CLI scope must not retry"); }, () => {}), initial);
+});
+
+test("an identified private pathless startup row may settle but is never itself adopted or assigned a path", async () => {
+  const initial = [{ repo_id: "selected-repo", index_state: "catching_up", path: null, repo_path: null }];
+  const ready = [{ repo_id: "selected-repo", path: directory, repo_path: directory }];
+  let time = 0, reads = 0;
+  assert.equal(await waitForPrivateRepositoryDiscovery(initial, scope, async () => { reads++; return ready; }, () => {}, {
+    now: () => time, sleep: async ms => { time += ms; },
+  }), ready);
+  assert.equal(reads, 1); assert.equal(time, 250);
+  assert.equal(initial[0].path, null); assert.equal(initial[0].repo_path, null);
+});
+
+test("unidentified private discovery has a ten-second budget and cannot continue after cancellation", async () => {
+  const initial = [{ status: "initializing" }]; let time = 0, calls = 0;
+  await assert.rejects(waitForPrivateRepositoryDiscovery(initial, scope, async () => { calls++; return initial; }, () => {}, {
+    now: () => time, sleep: async ms => { time += ms; },
+  }), /discovery is not ready.*no repository was adopted or indexed/);
+  assert.equal(time, 10_000); assert.equal(calls, 39);
+  let cancelled = false, readsAfterCancel = 0;
+  await assert.rejects(waitForPrivateRepositoryDiscovery(initial, scope, async () => { readsAfterCancel++; return initial; }, () => {}, {
+    isCancelled: () => cancelled, sleep: async () => { cancelled = true; },
+  }), /connection is closing/);
+  assert.equal(readsAfterCancel, 0);
+});
 
 test("single private native episode-only row requires positive membership followed by exact source/branch binding", async () => {
   const f = reads();
@@ -103,16 +141,18 @@ test("a stats path when present must agree, and a failed binding read cannot be 
   assert.deepEqual(calls, ["get_repository_stats", "get_query_revision"]);
 });
 
-test("real MCP transport admits the certified cold source binding and rejects wrong-store analysis before any index submission", async () => {
-  for (const wrongStore of [false, true]) {
+test("real MCP transport waits for unidentified discovery and rejects foreign/wrong-store analysis before any index submission", async () => {
+  for (const scenario of ["episode", "wrong-store", "unknown-ready", "unknown-foreign"]) {
     const root = await mkdtemp(join(tmpdir(), "memcode-admission-protocol-"));
     const requestedPath = join(root, "project"); await mkdir(requestedPath);
     const path = await realpath(requestedPath), callsPath = join(root, "calls.jsonl"), executable = join(root, "protocol-fixture.mjs");
     await git(path, ["init", "-b", "main"]);
-    const values = { wrongStore, path, callsPath };
+    const wrongStore = scenario === "wrong-store", foreign = scenario === "unknown-foreign", unknown = scenario.startsWith("unknown-");
+    const values = { wrongStore, foreign, unknown, path, callsPath };
     await writeFile(executable, `import {createInterface} from 'node:readline';
 import {appendFileSync} from 'node:fs';
 const fixture=${JSON.stringify(values)};
+let discoveries=0;
 const input=createInterface({input:process.stdin});
 input.on('line',line=>{
  const message=JSON.parse(line);if(message.id===undefined)return;
@@ -120,7 +160,9 @@ input.on('line',line=>{
  if(message.method==='initialize')result={protocolVersion:message.params.protocolVersion,capabilities:{tools:{}},serverInfo:{name:'synthetic-cold-admission',version:'1'}};
  else if(message.method==='tools/call'){
   const {name,arguments:args}=message.params;appendFileSync(fixture.callsPath,JSON.stringify({name,args})+'\\n');
-  const value=name==='list_indexed_repositories'?[{repo_id:'fixture-repo',ingestion_path:'episode_only',path:null,repo_path:null}]
+  const value=name==='list_indexed_repositories'?(fixture.unknown&&++discoveries===1?[{status:'initializing'}]
+    :fixture.unknown?[{repo_id:'fixture-repo',path:fixture.foreign?fixture.path+'-foreign':fixture.path,repo_path:fixture.foreign?fixture.path+'-foreign':fixture.path}]
+    :[{repo_id:'fixture-repo',ingestion_path:'episode_only',path:null,repo_path:null}])
     :name==='get_repository_stats'?{repo_in_store:!fixture.wrongStore,nodes:0,edges:0}
     :name==='get_query_revision'?{repo_id:'fixture-repo',worktree:fixture.path,branch:'main',ready:false,status:'partial'}
     :{unexpected:true};
@@ -131,7 +173,7 @@ input.on('line',line=>{
     const selected = { id: "cold-admission", name: "Synthetic project", path, branch: "main", description: "", createdAt: "2026-11-16T00:00:00Z", analysis: "idle" } as Project;
     const engine = new MemtraceEngine(() => executable, { privateProject: () => true });
     try {
-      if (wrongStore) {
+      if (wrongStore || foreign) {
         await assert.rejects(engine.analyze(selected, () => {}), /workspace does not include/);
         assert.equal(engine.scopeFor(selected.id), null, "a rejected store must never be attached");
       } else {
@@ -141,8 +183,9 @@ input.on('line',line=>{
         assert.equal(selected.analysis, "idle", "connecting does not declare an index ready");
       }
       const calls = (await readFile(callsPath, "utf8")).trim().split("\n").map(line => JSON.parse(line));
-      assert.deepEqual(calls.map(call => call.name), wrongStore
-        ? ["list_indexed_repositories", "get_repository_stats"]
+      assert.deepEqual(calls.map(call => call.name), unknown
+        ? foreign ? ["list_indexed_repositories", "list_indexed_repositories"] : ["list_indexed_repositories", "list_indexed_repositories", "get_repository_stats"]
+        : wrongStore ? ["list_indexed_repositories", "get_repository_stats"]
         : ["list_indexed_repositories", "get_repository_stats", "get_query_revision"]);
       assert.ok(calls.every(call => call.name !== "index_directory"));
     } finally { await engine.close(); await rm(root, { recursive: true, force: true }); }

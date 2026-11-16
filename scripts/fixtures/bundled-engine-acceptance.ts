@@ -145,7 +145,10 @@ try {
     // metadata booleans and fixed enums enter the report.
     report.nativeMcpMetadata = [];
     const originalCallTool = Client.prototype.callTool;
-    const normalize = (path: string) => path.replace(/^\\\\\?\\/, '').replaceAll('\\', '/').replace(/\/$/, '').toLowerCase();
+    const normalize = (path: string) => {
+      const normalized = path.replaceAll('\\', '/').replace(/^\/\/\?\//, '').replace(/\/$/, '');
+      return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+    };
     const matches = (path: unknown) => typeof path === 'string' ? normalize(path) === normalize(directory) : null;
     const enumValue = (value: unknown, allowed: string[]) => typeof value === 'string' && allowed.includes(value) ? value : value == null ? null : 'other';
     const fieldNames = (value: unknown) => value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value).filter(key => /^[A-Za-z_][A-Za-z0-9_]{0,60}$/.test(key)).slice(0, 30) : [];

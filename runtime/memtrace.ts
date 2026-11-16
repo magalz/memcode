@@ -12,6 +12,7 @@ import {
   projectMcpWorkspace,
   MemtraceAdmissionError,
   admitPrivateEpisodeRepository,
+  waitForPrivateRepositoryDiscovery,
   normalizeMcpEnvironment,
   type MemtraceScopeBinding,
 } from "./memtrace-workspace";
@@ -22,7 +23,7 @@ import {
   pendingMemtraceOwner,
   disconnectedMemtraceClient,
 } from "./memtrace-owner";
-import { verifiedIndexRevision, waitForPeerIndex } from "./memtrace-peer-index";
+import { verifiedIndexRevision, waitForIndexPublication, waitForPeerIndex } from "./memtrace-peer-index";
 import { appVersion } from "../src/version";
 
 type Json = Record<string, any>;
@@ -479,6 +480,11 @@ export class MemtraceEngine {
           { timeout: 15_000 },
         ),
       );
+    const reportProgress = (note: string) => {
+      for (const listener of this.connectionProgress.get(project.id) ?? []) {
+        try { listener(note); } catch { /* Progress cannot change connection ownership. */ }
+      }
+    };
     try {
       let discovered: any;
       try {
@@ -502,18 +508,10 @@ export class MemtraceEngine {
             await attach();
             discovered = await discover();
           },
-          (note) => {
-            for (const listener of this.connectionProgress.get(project.id) ??
-              []) {
-              try {
-                listener(note);
-              } catch {
-                /* Keep connection ownership independent of UI. */
-              }
-            }
-          },
+          reportProgress,
         );
       }
+      discovered = await waitForPrivateRepositoryDiscovery(discovered, local, discover, reportProgress, { isCancelled: () => this.closing });
       const repos: Json[] = Array.isArray(discovered)
         ? discovered
         : (discovered?.repos ?? []);
@@ -739,19 +737,7 @@ export class MemtraceEngine {
           throw new Error(
             "The index completed without a verified repository identity. Reconnect before planning workers.",
           );
-        let revision: Json | undefined;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          revision = await this.call(project, "get_query_revision", {
-            repo_id: repoId,
-          });
-          assertActive();
-          if (verifiedIndexRevision(revision, project, repoId)) return repoId;
-          if (attempt < 2)
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
-        throw new Error(
-          `Memtrace job ${job.job_id} completed, but source on branch ${project.branch} is not verified${revision?.reason ? ` (${revision.reason})` : ""}. Check local engine diagnostics before starting a worker.`,
-        );
+        return waitForIndexPublication(this, project, repoId, update, { isCancelled });
       }
     }
     throw new Error(

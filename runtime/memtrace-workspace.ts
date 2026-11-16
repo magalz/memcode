@@ -71,6 +71,45 @@ export async function projectMcpWorkspace(projectPath: string) {
 
 export class MemtraceAdmissionError extends Error {}
 
+/** Wait for an unbound startup record; never reinterpret it as a repo. */
+export async function waitForPrivateRepositoryDiscovery(
+  initial: any,
+  scope: Awaited<ReturnType<typeof projectMcpWorkspace>> | null,
+  read: () => Promise<any>,
+  update: (note: string) => void,
+  options: { now?: () => number; sleep?: (ms: number) => Promise<void>; isCancelled?: () => boolean; timeoutMs?: number; pollMs?: number } = {},
+): Promise<any> {
+  const pending = (value: any) => {
+    const rows = Array.isArray(value) ? value : value?.repos;
+    if (!scope || !Array.isArray(rows) || rows.length !== 1) return false;
+    const row = rows[0];
+    return row && typeof row === "object" && !Array.isArray(row) && row.path == null && row.repo_path == null &&
+      !(row.ingestion_path === "episode_only" && typeof row.repo_id === "string" && row.repo_id.trim());
+  };
+  const now = options.now ?? Date.now,
+    sleep = options.sleep ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))),
+    deadline = now() + (options.timeoutMs ?? 10_000);
+  const active = () => { if (options.isCancelled?.()) throw Error("The Memtrace connection is closing."); };
+  let value = initial;
+  while (pending(value)) {
+    active();
+    if (now() >= deadline) throw new MemtraceAdmissionError("Memtrace's local project discovery is not ready. Retry when preparation completes; no repository was adopted or indexed.");
+    update("Preparing local code context · waiting for project discovery…");
+    await sleep(Math.min(options.pollMs ?? 250, Math.max(0, deadline - now())));
+    active();
+    if (now() >= deadline) continue;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      value = await Promise.race([
+        read(),
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new MemtraceAdmissionError("Memtrace's local project discovery did not respond before its deadline. No repository was adopted or indexed.")), Math.max(1, deadline - now())); }),
+      ]);
+    } finally { clearTimeout(timer); }
+    active();
+  }
+  return value;
+}
+
 const admissionPath = (value: string) => {
   const normalized = value.replaceAll("\\", "/").replace(/^\/\/\?\//, "").replace(/\/$/, "");
   return process.platform === "win32" ? normalized.toLowerCase() : normalized;
