@@ -107,7 +107,7 @@ export async function workerToolProfile(
   // this worker. In particular ACP persists its SQLite store under CONFIG_DIR,
   // not DATA_DIR. Linking acp-sessions would expose unrelated session history.
   const privateDirectories = new Set([
-    "acp-sessions", "projects", "chats", "agent-transcripts", "logs",
+    "acp-sessions", "projects", "chats", "agent-transcripts", "logs", "data",
     "cache", "Cache", "CachedData", "Code Cache", "GPUCache",
     "blob_storage", "workspaceStorage",
   ]);

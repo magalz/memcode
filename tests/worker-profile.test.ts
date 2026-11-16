@@ -12,6 +12,7 @@ test("worker overlays connect both MemCode gateways without changing the user's 
   await mkdir(join(original, "skills"), { recursive: true });
   await mkdir(join(original, "acp-sessions"));
   await mkdir(join(original, "projects"));
+  await mkdir(join(original, "data"));
   await mkdir(worker);
   await writeFile(join(original, "skills", "example.md"), "Existing skill");
   const settings = JSON.stringify({
@@ -54,6 +55,7 @@ test("worker overlays connect both MemCode gateways without changing the user's 
     const profile = cursor.env!.CURSOR_CONFIG_DIR!;
     assert.equal(await lstat(join(profile,"acp-sessions")).catch(()=>null),null);
     assert.equal(await lstat(join(profile,"projects")).catch(()=>null),null);
+    assert.equal(await lstat(join(profile,"data")).catch(()=>null),null);
     // Reusing a pre-fix profile detaches only the exact inherited junction.
     await symlink(join(original,"acp-sessions"),join(profile,"acp-sessions"),process.platform === "win32" ? "junction" : "dir");
     await workerToolProfile("cursor",config);
