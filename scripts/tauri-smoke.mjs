@@ -146,7 +146,7 @@ try {
       !result.state.onboarding.dismissed)
   ) {
     const skip = page.getByRole("button", {
-      name: "Explore on my own",
+      name: "Skip for now",
       exact: true,
     });
     await expect(skip).toBeVisible();
