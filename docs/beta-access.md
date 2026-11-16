@@ -31,8 +31,12 @@ credentials are never overwritten by beta sign-in or engine installation.
 ## Credential boundary
 
 Refresh credentials stay in the operating system's protected credential store,
-scoped to this MemCode profile. The local engine receives only an owner-readable
-short-lived proof file and opaque device/session identifiers. The proof file
+scoped to this MemCode profile. The local engine receives an owner-readable
+short-lived proof file and opaque device/session identifiers. Its Cortex store
+is scoped to the protected MemCode profile and a hash of the verified account;
+its Fleet engineer identity comes from that same verified account. These values
+are supplied only to engine children. An explicit Cortex opt-out remains off.
+The proof file
 resides outside project folders. No refresh secret or access token is sent to
 the renderer, coding harnesses, terminal children, shared boards or Git.
 

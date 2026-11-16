@@ -180,6 +180,7 @@ fn operate(
                 }
             }
         }
+        remove_engine_environment(&mut command);
         let mut child = pair
             .slave
             .spawn_command(command)
@@ -318,6 +319,60 @@ fn operate(
             Ok(Value::Null)
         }
         _ => Err("Unknown terminal operation.".into()),
+    }
+}
+
+fn remove_engine_environment(command: &mut CommandBuilder) {
+    for key in [
+        "MEMCODE_ENGINE_ACCESS_FILE",
+        "MEMCODE_ENGINE_DEVICE_ID",
+        "MEMCODE_ENGINE_SESSION_ID",
+        "MEMCORTEX_STORE_DIR",
+        "MEMTRACE_ENGINEER",
+    ] {
+        command.env_remove(key);
+    }
+    for (key, _) in std::env::vars_os() {
+        let name = key.to_string_lossy().to_ascii_uppercase();
+        if name.starts_with("MEMCODE_ENGINE_")
+            || name == "MEMCORTEX_STORE_DIR"
+            || name == "MEMTRACE_ENGINEER"
+        {
+            command.env_remove(key);
+        }
+    }
+}
+
+#[cfg(test)]
+mod engine_environment_tests {
+    use super::*;
+    #[test]
+    fn terminal_does_not_inherit_engine_account_store_or_proof_but_preserves_cortex_opt_out() {
+        let mut command = CommandBuilder::new("synthetic-not-executed");
+        for key in [
+            "MEMCODE_ENGINE_ACCESS_FILE",
+            "MEMCODE_ENGINE_DEVICE_ID",
+            "MEMCODE_ENGINE_SESSION_ID",
+            "MEMCORTEX_STORE_DIR",
+            "MEMTRACE_ENGINEER",
+        ] {
+            command.env(key, "private");
+        }
+        command.env("MEMTRACE_CORTEX", "off");
+        remove_engine_environment(&mut command);
+        for key in [
+            "MEMCODE_ENGINE_ACCESS_FILE",
+            "MEMCODE_ENGINE_DEVICE_ID",
+            "MEMCODE_ENGINE_SESSION_ID",
+            "MEMCORTEX_STORE_DIR",
+            "MEMTRACE_ENGINEER",
+        ] {
+            assert_eq!(command.get_env(key), None);
+        }
+        assert_eq!(
+            command.get_env("MEMTRACE_CORTEX"),
+            Some(std::ffi::OsStr::new("off"))
+        );
     }
 }
 fn all_session(state: &TerminalState, input: &Value) -> Result<Arc<Session>, String> {

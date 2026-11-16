@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { dirname, join } from "node:path";
 import type { MemCodeBetaStatus } from "../src/beta";
 import type { NativeHost } from "./host";
 import {
@@ -542,6 +543,12 @@ export class MemCodeBeta {
       MEMCODE_ENGINE_ACCESS_FILE: this.accessFile!,
       MEMCODE_ENGINE_DEVICE_ID: record.deviceId,
       MEMCODE_ENGINE_SESSION_ID: record.sessionId,
+      MEMCORTEX_STORE_DIR: join(
+        dirname(this.accessFile!),
+        "cortex",
+        createHash("sha256").update(record.account.id).digest("hex"),
+      ),
+      MEMTRACE_ENGINEER: record.account.id,
     };
   }
   private retryRevocation(allowChanging = false): Promise<void> {

@@ -81,6 +81,28 @@ jobs:
           grep -q 'Signature=adhoc' "$RUNNER_TEMP/memcode-codesign.txt"
           env -u MEMCODE_NODE_PATH -u NODE_PATH PATH=/usr/bin:/bin "$APP/Contents/Resources/desktop-runtime/node" --version > "$RUNNER_TEMP/memcode-bundled-node.txt"
           test "$(cat "$RUNNER_TEMP/memcode-bundled-node.txt")" = "v${{ steps.runtime.outputs.version }}"
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          import { join } from 'node:path';
+          const app = 'src-tauri/target/release/bundle/macos/MemCode.app';
+          const minimum = binary => {
+            const output = execFileSync('/usr/bin/otool', ['-l', binary], { encoding: 'utf8' });
+            const value = output.match(/cmd LC_BUILD_VERSION[\s\S]*?\bminos\s+([\d.]+)/)?.[1] ?? output.match(/cmd LC_VERSION_MIN_MACOSX[\s\S]*?\bversion\s+([\d.]+)/)?.[1];
+            if (!value) throw Error('Missing Mach-O minimum macOS version: ' + binary);
+            return value;
+          };
+          const compare = (a, b) => { const l=a.split('.').map(Number), r=b.split('.').map(Number); for(let i=0;i<3;i++){const delta=(l[i]??0)-(r[i]??0);if(delta)return delta;}return 0; };
+          const native = minimum(join(app, 'Contents/MacOS/memcode'));
+          const node = minimum(join(app, 'Contents/Resources/desktop-runtime/node'));
+          const configured = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8')).bundle.macOS.minimumSystemVersion;
+          const declared = execFileSync('/usr/libexec/PlistBuddy', ['-c', 'Print :LSMinimumSystemVersion', join(app, 'Contents/Info.plist')], { encoding: 'utf8' }).trim();
+          const effectiveMinimum = [native, node, configured].sort(compare).at(-1);
+          if (compare(declared,effectiveMinimum)<0 || compare(configured,effectiveMinimum)<0) throw Error('Declared macOS support is older than a bundled binary requires');
+          const compatibility={architecture:'aarch64',nativeMinimum:native,bundledNodeMinimum:node,configuredMinimum:configured,infoPlistMinimum:declared,effectiveMinimum};
+          writeFileSync(join(process.env.RUNNER_TEMP,'memcode-macos-compatibility.json'),JSON.stringify(compatibility,null,2));
+          console.log(JSON.stringify(compatibility));
+          NODE
 
       - name: Verify the updater and collect bounded candidate files
         run: |
@@ -111,7 +133,7 @@ jobs:
             target: 'aarch64-apple-darwin',
             published: false,
             updaterSignatureVerified: true,
-            macOS: { signing: 'ad-hoc', developerIdSigned: false, notarized: false, gatekeeperAcceptance: 'not-established' },
+            macOS: { ...JSON.parse(readFileSync(join(process.env.RUNNER_TEMP, 'memcode-macos-compatibility.json'), 'utf8')), signing: 'ad-hoc', developerIdSigned: false, notarized: false, gatekeeperAcceptance: 'not-established' },
             packagedRuntime: JSON.parse(readFileSync('dist-desktop-runtime/provenance.json', 'utf8')),
             files,
           };

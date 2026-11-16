@@ -1,5 +1,12 @@
 # Private macOS desktop candidate
 
+The declared minimum is **macOS 13.5 on Apple Silicon**. The bundled Node
+24.22.3 [release build requirements](https://github.com/nodejs/node/blob/v24.22.3/BUILDING.md#platform-list)
+set that minimum. Packaging records the actual Mach-O minimum versions of both
+MemCode and bundled Node, compares them with Tauri's configuration and the app's
+Info.plist, and fails if the declared support is older than either binary needs.
+This static compatibility check does not replace physical Mac acceptance.
+
 The `Private macOS desktop candidate` workflow builds an Apple Silicon app,
 DMG and version-bound Tauri updater. It uploads a private Actions artifact;
 it does not create a release, change repository visibility, update the download

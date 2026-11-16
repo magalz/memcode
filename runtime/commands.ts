@@ -19,7 +19,9 @@ export async function exists(path: string): Promise<boolean> {
   }
 }
 
-export function childEnv(): NodeJS.ProcessEnv {
+export function childEnv(
+  options: { engine?: boolean } = {},
+): NodeJS.ProcessEnv {
   const env = { ...process.env };
   // A standalone worker does not inherit the desktop parent's package identity.
   // Keeping these hints makes Codex reject shell launches and sandboxed writes.
@@ -28,7 +30,12 @@ export function childEnv(): NodeJS.ProcessEnv {
   // Beta engine proofs belong only to MemCode's explicitly scoped engine.
   // Provider workers, terminals and tools never inherit these file/binding hints.
   for (const key of Object.keys(env))
-    if (/^MEMCODE_ENGINE_/i.test(key)) delete env[key];
+    if (
+      /^MEMCODE_ENGINE_/i.test(key) ||
+      (!options.engine &&
+        /^(MEMCORTEX_STORE_DIR|MEMTRACE_ENGINEER)$/i.test(key))
+    )
+      delete env[key];
   const key =
     Object.keys(env).find((k) => k.toLowerCase() === "path") ?? "PATH";
   const parts = [

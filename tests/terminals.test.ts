@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { tmpdir } from "node:os";
 import { initialState } from "../src/seed";
@@ -52,7 +52,10 @@ test("native terminal starts retain the prepared PATH without forwarding the ser
     const start = calls.find((call) => call.method === "terminal_start")!.input;
     const paths = start.env.PATH.split(delimiter);
     assert.equal(paths[0], preparedBin);
-    assert.equal(paths.filter((path: string) => path === preparedBin).length, 1);
+    assert.equal(
+      paths.filter((path: string) => path === preparedBin).length,
+      1,
+    );
     assert.ok(start.env.PATH.length < 7000);
     assert.deepEqual(Object.keys(start.env).sort(), [
       "MEMCODE_HARNESS",
@@ -132,7 +135,7 @@ test("persistent terminal identity and folder are bound by the host, with argv a
   );
   assert.deepEqual(calls[0].input.args, ["server.mjs", "a b", "$(literal)"]);
   assert.equal(calls[0].input.taskId, task.id);
-  assert.equal(calls[0].input.cwd, join(root, "app"));
+  assert.equal(calls[0].input.cwd, await realpath(join(root, "app")));
   const id = started.session!.id;
   await manager.execute(task.id, {
     action: "write",

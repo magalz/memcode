@@ -24,6 +24,8 @@ import {
   type BetaStoredState,
 } from "../runtime/beta";
 import { childEnv } from "../runtime/commands";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 
 const pair = generateKeyPairSync("ed25519");
 const publicKey = {
@@ -225,14 +227,17 @@ test("cancel before readiness cannot open a browser or leave a callback listener
 });
 
 function storageFixture(initial?: {
-  credentials: BetaCredentials;
-  accessToken: string;
+  credentials?: BetaCredentials;
+  accessToken?: string;
+  accessFile?: string;
 }) {
   let state: BetaStoredState = {
-    configured: !!initial,
+    configured: !!initial?.credentials,
     credentials: initial?.credentials ?? null,
     accessToken: initial?.accessToken,
-    accessFile: "C:/private-appdata/beta/access.jwt",
+    accessFile:
+      initial?.accessFile ??
+      join(tmpdir(), "memcode-beta-fixture", "access.jwt"),
   };
   const calls: string[] = [];
   const storage: BetaStorage = {
@@ -359,8 +364,19 @@ test("browser approval stores refresh before publishing proof and exposes only s
       "MEMCODE_ENGINE_ACCESS_FILE",
       "MEMCODE_ENGINE_DEVICE_ID",
       "MEMCODE_ENGINE_SESSION_ID",
+      "MEMCORTEX_STORE_DIR",
+      "MEMTRACE_ENGINEER",
     ]);
     assert.equal(env.MEMCODE_ENGINE_DEVICE_ID, fixture.lastBinding?.deviceId);
+    assert.equal(env.MEMTRACE_ENGINEER, account.id);
+    assert.equal(
+      env.MEMCORTEX_STORE_DIR,
+      join(
+        dirname(fixture.disk.state.accessFile!),
+        "cortex",
+        createHash("sha256").update(account.id).digest("hex"),
+      ),
+    );
     const encoded = JSON.stringify(status);
     assert.ok(
       !encoded.includes(
@@ -510,21 +526,87 @@ test("workers and ordinary tools never inherit beta engine proof locations or bi
     "MEMCODE_ENGINE_ACCESS_FILE",
     "MEMCODE_ENGINE_DEVICE_ID",
     "MEMCODE_ENGINE_SESSION_ID",
+    "MEMCORTEX_STORE_DIR",
+    "MEMTRACE_ENGINEER",
+    "MEMTRACE_CORTEX",
   ];
   const old = keys.map((key) => process.env[key]);
   process.env.MEMCODE_ENGINE_ACCESS_FILE = "private-proof-file";
   process.env.MEMCODE_ENGINE_DEVICE_ID = "private-device";
   process.env.MEMCODE_ENGINE_SESSION_ID = "private-session";
+  process.env.MEMCORTEX_STORE_DIR = "private-cortex-store";
+  process.env.MEMTRACE_ENGINEER = "private-engine-account";
+  process.env.MEMTRACE_CORTEX = "off";
   try {
     const env = childEnv();
     assert.equal(env.MEMCODE_ENGINE_ACCESS_FILE, undefined);
     assert.equal(env.MEMCODE_ENGINE_DEVICE_ID, undefined);
     assert.equal(env.MEMCODE_ENGINE_SESSION_ID, undefined);
+    assert.equal(env.MEMCORTEX_STORE_DIR, undefined);
+    assert.equal(env.MEMTRACE_ENGINEER, undefined);
+    assert.equal(env.MEMTRACE_CORTEX, "off");
+    const legacy = childEnv({ engine: true });
+    assert.equal(legacy.MEMCORTEX_STORE_DIR, "private-cortex-store");
+    assert.equal(legacy.MEMTRACE_ENGINEER, "private-engine-account");
+    assert.equal(legacy.MEMCODE_ENGINE_ACCESS_FILE, undefined);
   } finally {
     keys.forEach((key, index) => {
       if (old[index] === undefined) delete process.env[key];
       else process.env[key] = old[index];
     });
+  }
+});
+
+test("beta Cortex namespace is profile/account bound, stable across refresh, and Fleet identity follows only the verified account", async () => {
+  const f = managerFixture();
+  let otherProfile: MemCodeBeta | undefined;
+  try {
+    await f.manager.connect();
+    const first = await f.manager.environment();
+    assert.equal(first.MEMTRACE_ENGINEER, account.id);
+    assert.equal(
+      first.MEMTRACE_CORTEX,
+      undefined,
+      "Beta does not force Cortex on",
+    );
+    f.advance(14 * 60000);
+    const renewed = await f.manager.environment();
+    assert.equal(renewed.MEMCORTEX_STORE_DIR, first.MEMCORTEX_STORE_DIR);
+    const disk = storageFixture({
+      accessFile: join(tmpdir(), "other-memcode-profile", "access.jwt"),
+    });
+    otherProfile = new MemCodeBeta({ ...f.options, storage: disk.storage });
+    await otherProfile.connect();
+    const other = await otherProfile.environment();
+    assert.notEqual(other.MEMCORTEX_STORE_DIR, first.MEMCORTEX_STORE_DIR);
+    const nextAccount = { id: "verified-second-user", name: "Second member" };
+    f.authorization.authorize = async (bound) => ({
+      ...tokens(bound, f.now),
+      account: nextAccount,
+      access_token: issue(bound, f.now, {
+        sub: nextAccount.id,
+        name: nextAccount.name,
+      }),
+    });
+    const changes = f.changes;
+    await f.manager.connect();
+    const switched = await f.manager.environment();
+    assert.equal(
+      f.changes,
+      changes + 1,
+      "Switch closes/rebinds owned engine contexts before new proof publication",
+    );
+    assert.equal(switched.MEMTRACE_ENGINEER, nextAccount.id);
+    assert.notEqual(switched.MEMCORTEX_STORE_DIR, first.MEMCORTEX_STORE_DIR);
+    assert.equal(
+      dirname(switched.MEMCORTEX_STORE_DIR),
+      dirname(first.MEMCORTEX_STORE_DIR),
+    );
+    await f.manager.signOut();
+    await assert.rejects(f.manager.environment(), /paid CLI/);
+  } finally {
+    otherProfile?.close();
+    f.manager.close();
   }
 });
 

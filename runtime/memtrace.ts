@@ -417,7 +417,7 @@ export class MemtraceEngine {
     const env = normalizeMcpEnvironment(
       Object.fromEntries(
         Object.entries({
-          ...childEnv(),
+          ...childEnv({ engine: true }),
           ...command.env,
           ...authentication,
         }).filter(
