@@ -1,6 +1,8 @@
 # App updates
 
-Installed MemCode releases use Tauri's signed updater. Open **Settings → MemCode updates** to check for a release, read its notes, and choose **Update MemCode**. The final confirmation shows running workers and the number of local terminal sessions that restarting will close. Running workers prevent installation. Queued follow-ups are retained.
+Installed MemCode releases use Tauri's signed updater. When a release is available, choose **Download update** in the app header or open **Settings → MemCode updates**. Follow download progress, keep working, then choose **Restart to update** when ready. An idle workspace restarts directly; active workers prevent installation, and open terminal sessions get a clear review before restart. Queued follow-ups are retained.
+
+Updates keep the same local profile, approved Memtrace account and projects. A routine app or bundled-engine update does not require another browser approval. An already-running account refresh finishes saving its replacement credential during shutdown.
 
 Development checkouts use Git and `npm run dev`; the updater does not replace a running development build.
 

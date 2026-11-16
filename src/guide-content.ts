@@ -410,6 +410,7 @@ export const guideArticles: GuideArticle[] = [
       "Choose Change account to approve a different account. Cancel stops a pending sign-in. Finish active workers before changing their engine access.",
       "Sign out of Memtrace beta pauses analysis until you reconnect or explicitly choose Use existing CLI setup. Local projects and coding-provider sign-ins stay saved; MemCode never silently falls back to a paid CLI plan.",
       "Approve coding adapters separately in Workers. Memtrace access and a coding provider’s authentication serve different roles.",
+      "App updates keep your approved account and projects. Choose Download update in the header or Settings → MemCode updates, then Restart to update when ready.",
     ],
     note: "Existing Memtrace CLI setup is an advanced, explicit choice with its own account and plan. Normal beta use needs no separate CLI or global Node installation. Verified Team membership uses its own Memtrace browser approval; CLI license status alone does not identify a person.",
     destination: "account",
