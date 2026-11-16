@@ -137,7 +137,12 @@ export async function createRuntime(
         ? managedEngine.executable()
         : store.state.settings.memtracePath,
     {
-      environment: () => beta?.environment() ?? Promise.resolve({}),
+      environment: async () => {
+        const environment = await (beta?.environment() ?? Promise.resolve({}));
+        return beta?.usesBeta()
+          ? { ...managedEngine.executionEnvironment(), ...environment }
+          : environment;
+      },
       privateProject: () => beta?.usesBeta() === true,
     },
   );

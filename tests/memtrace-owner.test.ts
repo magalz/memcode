@@ -267,3 +267,30 @@ test("native recovery progress reaches the connection observer before readiness"
   assert.match(notes.at(-1)!, /engine is ready/);
   await f.owners.close();
 });
+
+test("first model download and embedding setup progress is visible, bounded and redacted before readiness", async () => {
+  const f = fixture(), notes: string[] = [];
+  const progress = [
+    'Downloading model files token=private-download-token',
+    'Loading embedding model password=private-model-password',
+    'Compiling CoreML api_key=private-coreml-key',
+    'Creating ONNX session Authorization: Bearer private-onnx-token ' + 'x'.repeat(700),
+  ];
+  let probes = 0;
+  try {
+    await f.owners.ready(scope, command, {}, async () => {
+      probes++;
+      if (probes === 1) throw pending();
+      if (probes <= progress.length + 1) {
+        f.child.stderr!.emit('data', Buffer.from('\u001b[32m' + progress[probes - 2] + '\u001b[0m\n'));
+        throw pending();
+      }
+    }, note => notes.push(note));
+    for (const label of ['Downloading model files', 'Loading embedding model', 'Compiling CoreML', 'Creating ONNX session']) {
+      assert.ok(notes.some(note => note.includes(label)), label + ' must reach the user during setup');
+    }
+    assert.ok(notes.every(note => note.length <= 512));
+    assert.doesNotMatch(notes.join('\n'), /private-download-token|private-model-password|private-coreml-key|private-onnx-token|\u001b/);
+    assert.equal(notes.at(-1), 'The local Memtrace engine is ready.');
+  } finally { await f.owners.close(); }
+});

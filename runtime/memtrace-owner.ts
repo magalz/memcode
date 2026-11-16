@@ -186,7 +186,7 @@ export class ManagedMemtraceOwners {
         const latest = lines
           .reverse()
           .find((line) =>
-            /start|recover|migrat|restor|wait|ready|backoff|paused|fail|error/i.test(
+            /start|recover|migrat|restor|wait|ready|backoff|paused|fail|error|download|embedding|model|coreml|onnx/i.test(
               line,
             ),
           );

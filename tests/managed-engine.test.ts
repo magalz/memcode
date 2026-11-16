@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { zipSync, strToU8 } from 'fflate';
 import { ManagedMemcodeEngine, type MemcodeEngineBundle } from '../runtime/managed-engine';
+import { childEnv } from '../runtime/commands';
 
 const sha = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const fixture = (platform: 'windows' | 'macos' = 'windows') => {
@@ -18,6 +19,27 @@ const fixture = (platform: 'windows' | 'macos' = 'windows') => {
   return { archive, bundle };
 };
 const offline = (async () => { throw Error('Network must not be contacted'); }) as typeof fetch;
+
+test('managed Mac engine uses CPU embeddings by default and preserves explicit CoreML settings without mutating any inherited environment', () => {
+  const profile = join(tmpdir(), 'memcode-environment-no-files-created');
+  const mac = new ManagedMemcodeEngine(profile, { platform: 'darwin', arch: 'arm64' });
+  const baseline = { ...process.env }, workerEnvironment = childEnv();
+  const inherited: NodeJS.ProcessEnv = Object.freeze({ PATH: '/synthetic/user/path' });
+  assert.deepEqual(mac.executionEnvironment(inherited), { MEMTRACE_DISABLE_COREML: '1' });
+  assert.deepEqual(inherited, { PATH: '/synthetic/user/path' });
+  for (const explicit of [
+    { MEMTRACE_DISABLE_COREML: '0' }, { MEMTRACE_DISABLE_COREML: '1' },
+    { MEMTRACE_DISABLE_COREML: '' }, { MEMTRACE_ENABLE_COREML: '1' },
+    { MEMTRACE_ENABLE_COREML: '0' }, { MEMTRACE_ENABLE_COREML: '' },
+    { MEMTRACE_ENABLE_COREML: '1', MEMTRACE_DISABLE_COREML: '0' },
+  ]) assert.deepEqual(mac.executionEnvironment(Object.freeze(explicit)), {});
+  for (const platform of ['win32', 'linux'] as const) {
+    assert.deepEqual(new ManagedMemcodeEngine(profile, { platform, arch: 'x64' }).executionEnvironment({}), {});
+  }
+  assert.deepEqual({ ...process.env }, baseline, 'the global CLI environment must stay unchanged');
+  assert.deepEqual(childEnv(), workerEnvironment, 'provider workers and terminals must not inherit the managed-engine-only default');
+});
+
 async function resources(directory: string, data: ReturnType<typeof fixture>) {
   const path = join(directory, 'resources', 'memtrace-engine');
   await mkdir(path, { recursive: true });

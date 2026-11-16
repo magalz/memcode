@@ -2,7 +2,7 @@
 // It never fabricates an account, license, graph, watch or successful query.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { ChildProcess, execFileSync } from 'node:child_process';
 import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { ManagedMemcodeEngine } from '../../runtime/managed-engine';
@@ -104,6 +104,7 @@ try {
     report.accountApprovalOrigin = 'dedicated-browser-approved-session';
     report.nativeMacTokenRefresh = process.platform === 'darwin';
     const authentication = {
+      ...managed.executionEnvironment(),
       MEMCODE_ENGINE_ACCESS_FILE: proof,
       MEMCODE_ENGINE_DEVICE_ID: grant.deviceId,
       MEMCODE_ENGINE_SESSION_ID: grant.sessionId,
@@ -180,10 +181,27 @@ try {
   }
   await rm(proof, { force: true });
   if (engine) await bounded(engine.close(), 15000).catch(() => { report.engineCleanupFailed = true; process.exitCode = 1; report.passed = false; });
+  await pause(250);
+  report.activeResourceCountsAtEnd = process.getActiveResourcesInfo().reduce<Record<string, number>>((counts, name) => { counts[name] = (counts[name] ?? 0) + 1; return counts; }, {});
+  const activeHandles = (process as typeof process & { _getActiveHandles?: () => unknown[] })._getActiveHandles?.();
+  report.liveNodeChildProcessesAtEnd = activeHandles ? activeHandles.filter(handle => handle instanceof ChildProcess && handle.exitCode === null && handle.signalCode === null).length : null;
+  report.nativeGrandchildCleanupVerified = false;
+  if (report.liveNodeChildProcessesAtEnd !== 0) {
+    report.engineCleanupFailed = true;
+    report.failedStage ??= 'owned-engine-cleanup';
+    report.passed = false;
+    process.exitCode = 1;
+  }
+  // This CLI coordinator is not the desktop runtime. Once logic, grant revoke,
+  // proof deletion and bounded owned-engine close have completed, do not let an
+  // SDK request timer keep a failed CI test hanging for twenty minutes.
+  report.coordinatorExitAfterCleanup = true;
   report.checkedAt = new Date().toISOString();
   setStage('finished');
   await persist();
-  console.log(JSON.stringify(report));
+  await new Promise<void>((done, reject) => process.stdout.write(JSON.stringify(report) + '\n', error => error ? reject(error) : done()));
 }
 }
-void run().catch(() => { console.error('Bundled engine acceptance could not initialize.'); process.exitCode = 1; });
+void run().then(() => process.exit(process.exitCode ?? 0), () => {
+  process.stderr.write('Bundled engine acceptance could not initialize.\n', () => process.exit(1));
+});

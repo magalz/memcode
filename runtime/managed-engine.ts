@@ -145,6 +145,12 @@ export class ManagedMemcodeEngine {
     if (!this.ready) throw Error('Prepare the MemCode beta engine before connecting code context. The installed CLI has been left unchanged.');
     return this.ready;
   }
+  executionEnvironment(inherited: NodeJS.ProcessEnv = process.env): Record<string, string> {
+    // CPU uses the same embedding model without the first-run CoreML compile.
+    // Apply only to this managed engine, and preserve explicit advanced choices.
+    return this.platform === 'macos' && inherited.MEMTRACE_DISABLE_COREML === undefined && inherited.MEMTRACE_ENABLE_COREML === undefined
+      ? { MEMTRACE_DISABLE_COREML: '1' } : {};
+  }
   prepare(): Promise<string> {
     if (this.ready) return Promise.resolve(this.ready);
     if (this.preparing) return this.preparing;

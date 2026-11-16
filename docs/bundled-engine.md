@@ -25,9 +25,16 @@ release service. Archive and file checksums, platform and architecture must
 match the release pin. Invalid content cannot become an active engine.
 
 This removes an engine-download dependency from installer first use and cached
-startup. It does not make sign-in, account renewal, cloud coding models or every
-optional model download work offline. MemCode reuses a current project graph and
+startup. First analysis can still download its local embedding model; later use
+reuses that model cache. Sign-in, account renewal, cloud coding models and initial
+model setup need network access. MemCode reuses a current project graph and
 starts an incremental watch rather than rebuilding every time.
+
+The managed Mac engine uses CPU embeddings by default to avoid a lengthy first
+CoreML compilation. The model and semantic search remain enabled. Advanced users
+can explicitly set `MEMTRACE_ENABLE_COREML` or `MEMTRACE_DISABLE_COREML` before
+launching MemCode; those choices are respected. This policy is passed only to
+the managed engine, without changing the global CLI or coding workers.
 
 ## Distribution boundary
 
