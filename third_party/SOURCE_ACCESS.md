@@ -40,7 +40,7 @@ their own applicable terms.
 
 The separately supplied local inference resources retain their own original
 licenses and notices. Exact upstream sources are available for
-[Transformers.js 4.3.2](https://github.com/huggingface/transformers.js/tree/4.3.2)
+[Transformers.js 4.3.2](https://registry.npmjs.org/@huggingface/transformers/-/transformers-4.3.2.tgz)
 and [ONNX Runtime 1.23.2](https://github.com/microsoft/onnxruntime/tree/v1.23.2).
 The text-only Transformers.js build is identified as modified in the runtime
 provenance; it excludes Sharp and libvips. The staged runtime's notice inventory
