@@ -53,8 +53,13 @@ pub fn fatal(error: &str) {
     let report_message = report
         .map(|path| format!("Startup report: {}", path.display()))
         .unwrap_or_else(|| "A startup report could not be saved.".into());
+    let guidance = if error.starts_with("MemCode could not prepare its webview data folder") {
+        "Ensure this path is a writable folder. If a file occupies this path, keep it as a backup and move it aside, then reopen MemCode. Your projects and settings have not been deleted."
+    } else {
+        "Run the MemCode installer again to repair the application. Your projects and settings are kept separately."
+    };
     let message = format!(
-        "MemCode could not open its desktop window.\n\n{}\n\nRun the MemCode installer again to repair the application. Your projects and settings are kept separately.\n\n{report_message}",
+        "MemCode could not open its desktop window.\n\n{}\n\n{guidance}\n\n{report_message}",
         error.chars().take(1200).collect::<String>()
     );
     rfd::MessageDialog::new()

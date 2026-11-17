@@ -100,7 +100,12 @@ fn main() {
                 // dialog when a stale file or an inaccessible path obstructs data.
                 let webview_data =
                     native::profile_dir(app.handle()).map_err(std::io::Error::other)?;
-                std::fs::create_dir_all(&webview_data)?;
+                std::fs::create_dir_all(&webview_data).map_err(|error| {
+                    format!(
+                        "MemCode could not prepare its webview data folder at {}. A writable directory is required. Windows reported: {error}",
+                        webview_data.display()
+                    )
+                })?;
                 let mut window = tauri::WebviewWindowBuilder::from_config(app, &config)?
                     .focused(!verification)
                     .skip_taskbar(verification);
