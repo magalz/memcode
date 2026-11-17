@@ -1,0 +1,34 @@
+name: Private macOS speech runtime
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos-speech-runtime:
+    if: github.repository == 'syncable-dev/memcode' && github.event.repository.private == true
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - name: Check out reviewed builder
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked build dependencies
+        run: npm ci
+      - name: Compile pinned CPU runtime and transcribe real audio
+        run: node scripts/build-macos-speech-runtime.mjs
+      - name: Upload bounded native candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: MemCode-macos-speech-runtime-${{ github.sha }}
+          path: release/macos-speech-runtime/*
+          if-no-files-found: error
+          retention-days: 7
