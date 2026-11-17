@@ -1,12 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod bridge;
 mod beta_store;
+mod bridge;
 mod browser;
 #[cfg(windows)]
 mod browser_capture;
-mod native;
 mod install_location;
+mod native;
 #[cfg(windows)]
 mod startup;
 mod state_patch;
@@ -86,51 +86,62 @@ fn main() {
             updates::app_update_install
         ])
         .setup(|app| {
-            let handle = app.handle().clone();
-            let config = app
-                .config()
-                .app
-                .windows
-                .first()
-                .ok_or("Missing main window configuration")?
-                .clone();
-            let verification = std::env::var_os("MEMCODE_NATIVE_TEST_PROFILE").is_some();
-            // Fail before WebView2 can open its own blocking initialization
-            // dialog when a stale file or an inaccessible path obstructs data.
-            let webview_data = native::profile_dir(app.handle()).map_err(std::io::Error::other)?;
-            std::fs::create_dir_all(&webview_data)?;
-            let mut window = tauri::WebviewWindowBuilder::from_config(app, &config)?
-                .focused(!verification)
-                .skip_taskbar(verification);
-            if std::env::var("MEMCODE_NATIVE_TEST_PROFILE").as_deref() == Ok("1")
-                && std::env::var("MEMCODE_UPDATER_ACL_TEST").as_deref() == Ok("1")
-                && std::env::var_os("MEMCODE_DATA_DIR")
-                    .map(std::path::PathBuf::from)
-                    .is_some_and(|path| path.is_absolute())
-            {
-                window = window.initialization_script(include_str!("updater_acl_probe.js"));
-            }
-            if verification {
-                window = window.title("MemCode — verification");
-            }
-            window
-                .data_directory(webview_data)
-                .on_navigation(native::main_origin)
-                .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
-                .disable_drag_drop_handler()
-                .build()?;
-            let runtime = app.state::<RuntimeBridge>().inner().clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(error) = runtime.launch(handle.clone()).await {
-                    #[cfg(windows)]
-                    startup::record("local-runtime", &error);
-                    runtime.fail(error).await;
+            let result: Result<(), Box<dyn std::error::Error>> = (|| {
+                let handle = app.handle().clone();
+                let config = app
+                    .config()
+                    .app
+                    .windows
+                    .first()
+                    .ok_or("Missing main window configuration")?
+                    .clone();
+                let verification = std::env::var_os("MEMCODE_NATIVE_TEST_PROFILE").is_some();
+                // Fail before WebView2 can open its own blocking initialization
+                // dialog when a stale file or an inaccessible path obstructs data.
+                let webview_data =
+                    native::profile_dir(app.handle()).map_err(std::io::Error::other)?;
+                std::fs::create_dir_all(&webview_data)?;
+                let mut window = tauri::WebviewWindowBuilder::from_config(app, &config)?
+                    .focused(!verification)
+                    .skip_taskbar(verification);
+                if std::env::var("MEMCODE_NATIVE_TEST_PROFILE").as_deref() == Ok("1")
+                    && std::env::var("MEMCODE_UPDATER_ACL_TEST").as_deref() == Ok("1")
+                    && std::env::var_os("MEMCODE_DATA_DIR")
+                        .map(std::path::PathBuf::from)
+                        .is_some_and(|path| path.is_absolute())
+                {
+                    window = window.initialization_script(include_str!("updater_acl_probe.js"));
                 }
-                if let Some(window) = handle.get_window("main") {
-                    let _ = window.show();
+                if verification {
+                    window = window.title("MemCode — verification");
                 }
-            });
-            Ok(())
+                window
+                    .data_directory(webview_data)
+                    .on_navigation(native::main_origin)
+                    .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
+                    .disable_drag_drop_handler()
+                    .build()?;
+                let runtime = app.state::<RuntimeBridge>().inner().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) = runtime.launch(handle.clone()).await {
+                        #[cfg(windows)]
+                        startup::record("local-runtime", &error);
+                        runtime.fail(error).await;
+                    }
+                    if let Some(window) = handle.get_window("main") {
+                        let _ = window.show();
+                    }
+                });
+                Ok(())
+            })();
+            // Tauri turns a returned setup error into a panic during its Ready
+            // event. Handle it here so release panic=abort cannot hide the error.
+            #[cfg(windows)]
+            if let Err(error) = &result {
+                startup::fatal(&error.to_string());
+                std::process::exit(1);
+            }
+            result
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
