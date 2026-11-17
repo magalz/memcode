@@ -179,10 +179,12 @@ export function advancePlanningHistory(history: TeamPlanningHistory, before: Tea
   history.through = event.sequence;
 }
 
-export function updatePlanningMetadata(history: TeamPlanningHistory, board: TeamSnapshot, metadata: TeamPlanningMetadata, event: TeamEvent): void {
+export function updatePlanningMetadata(history: TeamPlanningHistory, board: TeamSnapshot, metadata: TeamPlanningMetadata, event: TeamEvent, preserveUnchangedTimestamps = true): void {
   for (const value of metadata.stories) {
     const story = board.stories.find((item) => item.id === value.id), meta = history.stories.find((item) => item.id === value.id);
     if (!story || !meta) throw Error("The shared story no longer exists.");
+    const {createdAt: _createdAt, updatedAt: _updatedAt, ...current} = meta;
+    if (preserveUnchangedTimestamps && planningValueHash(current) === planningValueHash(value)) continue;
     const before = observation(story, !!meta.archivedAt);
     Object.assign(meta, structuredClone(value), { updatedAt: event.at });
     const after = observation(story, !!meta.archivedAt);
@@ -190,6 +192,35 @@ export function updatePlanningMetadata(history: TeamPlanningHistory, board: Team
   }
   if (metadata.planning) history.planning = structuredClone(metadata.planning);
   advancePlanningHistory(history, board, board, event);
+}
+
+export function planningMetadataHasChanges(history: TeamPlanningHistory, metadata: TeamPlanningMetadata): boolean {
+  const current = planningMetadata(history);
+  return metadata.stories.some((value) => {
+    const prior = current.stories.find((item) => item.id === value.id);
+    return !prior || planningValueHash(prior) !== planningValueHash(value);
+  }) || !!(metadata.planning && planningValueHash(metadata.planning) !== planningValueHash(current.planning));
+}
+
+export function planningHistorySeed(history: TeamPlanningHistory): TeamPlanningSeed {
+  const {version: _version,workspaceId: _workspaceId,through: _through,import: _import,...seed} = history;
+  return seed;
+}
+
+export const planningTimestampRepairSchema = z.object({
+  workspaceId:id,opId:id,expectedHead:count,
+  expectedImportHash:z.string().regex(/^[a-f0-9]{64}$/),
+  expectedHistoryHash:z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+
+/** Only recover original dates from the immutable import, never replace accepted planning. */
+export function originalTimestampRepairs(history: TeamPlanningHistory, imported: TeamPlanningSeed): Array<{id:string;from:string;to:string}> {
+  const withoutUpdated = (seed:TeamPlanningSeed) => ({...seed,stories:seed.stories.map(({updatedAt: _updatedAt,...story})=>story)});
+  if (planningValueHash(withoutUpdated(planningHistorySeed(history))) !== planningValueHash(withoutUpdated(imported))) throw Error("Accepted planning differs from its original import. Automatic timestamp recovery cannot replace those changes.");
+  const originals = new Map(imported.stories.map((story)=>[story.id,story.updatedAt]));
+  const changes = history.stories.filter((story)=>story.updatedAt!==originals.get(story.id)).map((story)=>({id:story.id,from:story.updatedAt,to:originals.get(story.id)!}));
+  if (changes.some((change)=>Date.parse(change.to)>Date.parse(change.from))) throw Error("Timestamp recovery cannot move original dates forward.");
+  return changes;
 }
 
 /** Replace this shared project's canonical history only; all other projects and local execution survive. */

@@ -19,7 +19,7 @@ import { TeamSpaceStore } from "./spaces";
 import { createMemtraceIdentityVerifier, teamIdentityAudience, type TeamIdentityChallenge, type TeamIdentityProofVerifier } from "../team-identity";
 import { sanitizeRepositoryURL } from "../repository-onboarding";
 import { teamInvitationLanding } from "./landing";
-import { advancePlanningHistory, emptyPlanningHistory, planningImportSchema, planningMetadataSchema, planningMetadata, planningValueHash, validatePlanningImport, updatePlanningMetadata, type TeamPlanningHistory, type TeamPlanningMetadata, type TeamPlanningSeed } from "./history";
+import { advancePlanningHistory, emptyPlanningHistory, planningImportSchema, planningMetadataSchema, planningMetadata, planningMetadataHasChanges, planningTimestampRepairSchema, planningHistorySeed, originalTimestampRepairs, planningValueHash, validatePlanningImport, updatePlanningMetadata, type TeamPlanningHistory, type TeamPlanningMetadata, type TeamPlanningSeed } from "./history";
 import type {
   TeamCredential,
   TeamEvent,
@@ -57,10 +57,14 @@ type RecordEntry =
     }
   | { kind: "command"; dedup: string; commandHash: string; event: TeamEvent }
   | { kind: "planning_import"; dedup: string; commandHash: string; event: TeamEvent; history: TeamPlanningSeed; importedAt: string; opId: string }
-  | { kind: "planning_metadata"; dedup: string; commandHash: string; event: TeamEvent; metadata: TeamPlanningMetadata };
+  | { kind: "planning_metadata"; dedup: string; commandHash: string; event: TeamEvent; metadata: TeamPlanningMetadata; preserveUnchangedTimestamps?: true }
+  | { kind: "planning_timestamps_repair"; dedup: string; commandHash: string; event: TeamEvent; sourceImportOpId: string; sourceImportHash: string; corrections: Array<{id:string;from:string;to:string}> };
 interface Room {
   snapshot: TeamSnapshot;
   history: TeamPlanningHistory;
+  /** Retained only until a genuine post-import edit; used for constrained recovery. */
+  importedPlanning?: TeamPlanningSeed;
+  timestampRepairs: Map<string,number>;
   events: TeamEvent[];
   credentials: Map<string, Actor>;
   invitations: Map<string, { expiresAt: string; used: boolean }>;
@@ -177,7 +181,7 @@ function applyRecord(room: Room, record: RecordEntry) {
     room.snapshot = applyTeamEvent(room.snapshot, record.event);
     room.events.push(record.event);
   }
-  if (record.kind === "command" || record.kind === "planning_import" || record.kind === "planning_metadata") {
+  if (record.kind === "command" || record.kind === "planning_import" || record.kind === "planning_metadata" || record.kind === "planning_timestamps_repair") {
     room.operations.set(record.dedup, {
       commandHash: record.commandHash,
       event: record.event,
@@ -187,13 +191,33 @@ function applyRecord(room: Room, record: RecordEntry) {
   }
   if (record.kind === "planning_import") {
     room.history = { ...structuredClone(record.history), version: 1, workspaceId: room.snapshot.workspaceId, through: record.event.sequence, import: { opId: record.opId, hash: record.commandHash, at: record.importedAt } };
-  } else if (record.kind === "planning_metadata") updatePlanningMetadata(room.history, room.snapshot, record.metadata, record.event);
-  else if (record.kind === "command" || record.kind === "join") advancePlanningHistory(room.history, before, room.snapshot, record.event);
+    room.importedPlanning = structuredClone(record.history);
+  } else if (record.kind === "planning_metadata") {
+    if (planningMetadataHasChanges(room.history,record.metadata)) room.importedPlanning = undefined;
+    // Old journal entries retain their original interpretation. Corrections
+    // use a separate durable, authenticated record instead of rewriting replay.
+    updatePlanningMetadata(room.history, room.snapshot, record.metadata, record.event, record.preserveUnchangedTimestamps === true);
+  } else if (record.kind === "planning_timestamps_repair") {
+    if (room.history.import?.opId !== record.sourceImportOpId || room.history.import.hash !== record.sourceImportHash || !room.importedPlanning) throw Error("Timestamp recovery journal provenance is invalid.");
+    const original = new Map(room.importedPlanning.stories.map((story)=>[story.id,story.updatedAt]));
+    for (const correction of record.corrections) {
+      const story = room.history.stories.find((story)=>story.id===correction.id);
+      if (!story || story.updatedAt !== correction.from || original.get(story.id) !== correction.to) throw Error("Timestamp recovery journal does not match its immutable import.");
+      story.updatedAt=correction.to;
+    }
+    room.history.through=record.event.sequence;
+    room.timestampRepairs.set(record.dedup,record.corrections.length);
+    room.importedPlanning=undefined;
+  } else if (record.kind === "command" || record.kind === "join") {
+    if (record.event.changes.some((change)=>change.collection!=="members"&&change.collection!=="readCursors")) room.importedPlanning=undefined;
+    advancePlanningHistory(room.history, before, room.snapshot, record.event);
+  }
 }
 function roomFrom(record: Extract<RecordEntry, { kind: "create" }>): Room {
   return {
     snapshot: teamSnapshotSchema.parse(record.snapshot),
     history: emptyPlanningHistory(record.snapshot.workspaceId, record.snapshot.members[0]?.joinedAt ?? new Date(0).toISOString()),
+    timestampRepairs:new Map(),
     events: [],
     credentials: new Map([[record.credentialHash, record.actor]]),
     invitations: new Map(),
@@ -733,8 +757,30 @@ export async function startTeamRelay(
               if (metadata.planning && input.expected.planningHash !== planningValueHash(current.planning)) return error("PLANNING_CONFLICT", "Project workflow or saved views changed on another computer. Its accepted version was preserved; review your saved local edit.", 409);
             }
             const at = new Date().toISOString(), event = teamEvent(room.snapshot, actor, input.opId, at, [], "Story runbooks and planning updated", "planning.updated");
-            await commit(room, { kind: "planning_metadata", dedup: key, commandHash: hash, event, metadata });
+            await commit(room, { kind: "planning_metadata", dedup: key, commandHash: hash, event, metadata, preserveUnchangedTimestamps:true });
             return reply(response, 200, { history: room.history, replayed: false });
+          });
+        }
+        if (url.pathname === "/v1/planning-history/repair-timestamps" && request.method === "POST") {
+          const input = planningTimestampRepairSchema.parse(await json(request));
+          const {room,actor}=authenticate(request,input.workspaceId);
+          return await serialized(room,async()=>{
+            authenticate(request,input.workspaceId);
+            if(memberFor(room,actor).role!=="owner")return error("FORBIDDEN","Only this project's owner can recover original import timestamps.",403);
+            const key=`timestamp-repair/${actor.memberId}/${actor.deviceId}/${input.opId}`,hash=planningValueHash(input),prior=room.operations.get(key);
+            if(prior){
+              if(prior.commandHash!==hash)return error("OP_ID_REUSE","This recovery operation ID was used for a different boundary.",409);
+              return reply(response,200,{history:room.history,corrected:room.timestampRepairs.get(key)??0,replayed:true});
+            }
+            if(room.snapshot.head!==input.expectedHead||room.history.through!==input.expectedHead)return error("HISTORY_HEAD","The project changed since this recovery was prepared. No timestamps were changed.",409);
+            if(!room.importedPlanning||room.history.import?.hash!==input.expectedImportHash)return error("HISTORY_RECOVERY","A genuine post-import change occurred, or the immutable import does not match. No timestamps were changed.",409);
+            if(planningValueHash(planningHistorySeed(room.history))!==input.expectedHistoryHash)return error("HISTORY_RECOVERY","The saved history changed since this recovery was prepared. No timestamps were changed.",409);
+            let corrections:Array<{id:string;from:string;to:string}>;
+            try{corrections=originalTimestampRepairs(room.history,room.importedPlanning);}catch(failure){return error("HISTORY_RECOVERY",(failure as Error).message,409);}
+            if(!corrections.length)return error("HISTORY_RECOVERY","Original import timestamps already match; no recovery is needed.",409);
+            const event=teamEvent(room.snapshot,actor,input.opId,new Date().toISOString(),[],`Recovered ${corrections.length} original story timestamps from the immutable planning import`,"planning.timestamps-recovered");
+            await commit(room,{kind:"planning_timestamps_repair",dedup:key,commandHash:hash,event,sourceImportOpId:room.history.import!.opId,sourceImportHash:room.history.import!.hash,corrections});
+            return reply(response,200,{history:room.history,corrected:corrections.length,replayed:false});
           });
         }
         if (request.method === "GET" && url.pathname === "/v1/sync") {

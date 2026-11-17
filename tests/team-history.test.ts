@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { initialState } from "../src/seed";
 import type { AppState, Cycle, Project, WorkItem } from "../src/shared";
 import type { TeamSnapshot } from "../src/team";
@@ -13,13 +14,14 @@ import { observePlanning } from "../src/planning/history";
 import { TeamSyncClient } from "../runtime/team/client";
 import { startTeamRelay } from "../runtime/team/relay";
 import type { TeamIdentityChallenge } from "../runtime/team-identity";
-import { teamSnapshotSchema, teamSyncReplySchema } from "../runtime/team/protocol";
-import { projectPlanningHistory, applyPlanningHistory, advancePlanningHistory, type TeamPlanningHistory } from "../runtime/team/history";
+import { teamSnapshotSchema, teamSyncReplySchema, teamEvent } from "../runtime/team/protocol";
+import { projectPlanningHistory, applyPlanningHistory, advancePlanningHistory, planningMetadata, planningHistorySeed, planningSeedSchema, planningValueHash, type TeamPlanningHistory, type TeamPlanningSeed } from "../runtime/team/history";
 import { projectSharedState } from "../runtime/team/projection";
 import { emptyTeamLocalIds, localTeamId } from "../runtime/team/identity";
 
 const START = "2026-11-01T09:00:00.000Z";
 const date = (minute: number) => new Date(Date.parse(START) + minute * 60_000).toISOString();
+const createSeedDigest=(seed:TeamPlanningSeed)=>createHash("sha256").update(JSON.stringify(planningSeedSchema.parse(seed))).digest("hex");
 
 /** Synthetic planning at the size of our real dogfood board; never load a user's profile. */
 function board(projectId = "dogfood-owner"): AppState {
@@ -88,7 +90,7 @@ async function fixture(options: { oldServer?: boolean; loseHistoryAck?: boolean 
     return { issuer: "memtrace" as const, subject: identity.subject, name: identity.subject.toUpperCase(), email: `${identity.subject}@example.test` };
   };
   let relay = await startTeamRelay({ dataDir: join(root, "relay"), port: 0, verifyIdentity });
-  const aState = board(), bState = personal(), bodies: string[] = [], requests: string[] = [];
+  const aState = JSON.parse(JSON.stringify(board())) as AppState, bState = personal(), bodies: string[] = [], requests: string[] = [];
   let lost = false, offline = false, bOffline = false, historyAvailable = !options.oldServer;
   const transport: typeof fetch = async (input, init) => {
     const url = new URL(String(input)); requests.push(`${init?.method ?? "GET"} ${url.pathname}`);
@@ -105,9 +107,12 @@ async function fixture(options: { oldServer?: boolean; loseHistoryAck?: boolean 
     return response;
   };
   const clientOptions = (subject: string) => ({ background: false, fetch: (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => subject === "bob" && bOffline ? Promise.reject(Error("Fixture Mac offline")) : transport(input, init), identityProof: async (challenge: TeamIdentityChallenge) => JSON.stringify({ ...challenge, subject }) });
-  const changed = (state: AppState) => async () => observePlanning(state, "2026-11-17T12:00:00.000Z");
-  let a = new TeamSyncClient(() => aState, join(root, "a"), changed(aState), clientOptions("alice"));
-  let b = new TeamSyncClient(() => bState, join(root, "b"), changed(bState), clientOptions("bob"));
+  // Match runtime/app.ts: persistence first captures Team changes, then the
+  // store observes planning. A no-op callback misses bootstrap echo bugs.
+  const changed = (state: AppState,client:()=>TeamSyncClient) => async () => { await client().capture(); observePlanning(state, "2026-11-17T12:00:00.000Z"); };
+  let a:TeamSyncClient,b:TeamSyncClient;
+  a = new TeamSyncClient(() => aState, join(root, "a"), changed(aState,()=>a), clientOptions("alice"));
+  b = new TeamSyncClient(() => bState, join(root, "b"), changed(bState,()=>b), clientOptions("bob"));
   await a.initialize(); await b.initialize();
   await mkdir(join(root, "a", "team"), { recursive: true });
   await writeFile(join(root, "a", "team", "service.private.json"), JSON.stringify({ endpoint: relay.url, bootstrapSecret: relay.adminCapability }));
@@ -124,12 +129,12 @@ async function fixture(options: { oldServer?: boolean; loseHistoryAck?: boolean 
     },
     async restart(beforeOpen?: () => Promise<void>) {
       await b.close(); await a.close();
-      await beforeOpen?.();
       const port = Number(new URL(relay.url).port);
       await relay.close();
+      await beforeOpen?.();
       relay = await startTeamRelay({ dataDir: join(root, "relay"), port, verifyIdentity });
-      a = new TeamSyncClient(() => aState, join(root, "a"), changed(aState), clientOptions("alice"));
-      b = new TeamSyncClient(() => bState, join(root, "b"), changed(bState), clientOptions("bob"));
+      a = new TeamSyncClient(() => aState, join(root, "a"), changed(aState,()=>a), clientOptions("alice"));
+      b = new TeamSyncClient(() => bState, join(root, "b"), changed(bState,()=>b), clientOptions("bob"));
       await a.initialize(); await b.initialize();
     },
     async close() { await b.close(); await a.close(); await relay.close(); await rm(root, { recursive: true, force: true }); },
@@ -144,6 +149,88 @@ test("history projection keeps original planning chronology and excludes executi
   assert.equal(seed.comments.length, 4);
   assert.equal(seed.startedAt, START);
   assert.doesNotMatch(JSON.stringify(seed), /PRIVATE|projectId|sessionId|messages|memtracePath|workspace|permission/);
+});
+
+test("native capture-before-save lifecycle does not echo bootstrap metadata or reset original story timestamps",async()=>{
+  const f=await fixture();
+  try{
+    const original=projectPlanningHistory(f.aState,"dogfood-owner"),shared=await f.share();
+    assert.deepEqual(projectPlanningHistory(f.aState,"dogfood-owner"),original);
+    assert.equal(f.requests.filter((request)=>request==="POST /v1/planning-history/metadata").length,0,"Zod key normalization and missing optional fields are not edits");
+    const saved=JSON.parse(await readFile(join(f.root,"a","team","connections.json"),"utf8")),connection=saved.connections.find((item:{projectId:string})=>item.projectId==="dogfood-owner");
+    const post=async(path:string,body:unknown)=>{
+      const response=await fetch(f.relay.url+path,{method:"POST",headers:{"content-type":"application/json",authorization:`Bearer ${connection.credential.capability}`},body:JSON.stringify(body)});
+      return {status:response.status,body:await response.json()};
+    };
+    const noOp=await post("/v1/planning-history/metadata",{workspaceId:shared.workspace.workspaceId,opId:"noop-key-reordered",stories:planningMetadata(original).stories.map((story)=>Object.fromEntries(Object.entries(story).reverse())),planning:original.planning});
+    assert.equal(noOp.status,200);
+    assert.equal(planningValueHash(planningHistorySeed(noOp.body.history)),planningValueHash(original),"The relay also defends identical metadata from older clients");
+    await f.a.synchronize("dogfood-owner");
+    assert.deepEqual(projectPlanningHistory(f.aState,"dogfood-owner"),original);
+  }finally{await f.close();}
+});
+
+async function legacyTimestampDamage(f:Awaited<ReturnType<typeof fixture>>,workspaceId:string){
+  await f.a.synchronize("dogfood-owner");
+  const saved=JSON.parse(await readFile(join(f.root,"a","team","connections.json"),"utf8")),connection=saved.connections.find((item:{projectId:string})=>item.projectId==="dogfood-owner");
+  const metadata=planningMetadata(projectPlanningHistory(f.aState,"dogfood-owner"));
+  const at=new Date().toISOString(),opId="legacy-metadata-noop",actor={memberId:connection.credential.memberId,deviceId:connection.credential.deviceId};
+  const event=teamEvent(connection.snapshot,actor,opId,at,[],"Story runbooks and planning updated","planning.updated");
+  await f.restart(async()=>{
+    // Synthetic pre-fix journal only. Never touch a user's workspace or journal.
+    const record={kind:"planning_metadata",dedup:`planning/${actor.memberId}/${actor.deviceId}/${opId}`,commandHash:planningValueHash({metadata}),event,metadata};
+    await appendFile(join(f.root,"relay","workspaces",workspaceId+".jsonl"),JSON.stringify(record)+"\n");
+  });
+  await f.a.synchronize("dogfood-owner");
+  return connection.credential;
+}
+
+test("owner timestamp recovery is narrow, durable and hash-bound to a no-op-only import journal",async()=>{
+  const f=await fixture();
+  try{
+    const original=projectPlanningHistory(f.aState,"dogfood-owner"),shared=await f.share(),workspaceId=shared.workspace.workspaceId;
+    await f.join(workspaceId);
+    const credential=await legacyTimestampDamage(f,workspaceId);
+    const get=async()=>{
+      const response=await fetch(f.relay.url+`/v1/planning-history?workspaceId=${workspaceId}`,{headers:{authorization:`Bearer ${credential.capability}`}});
+      assert.equal(response.status,200);return await response.json() as TeamPlanningHistory;
+    };
+    const broken=await get();
+    assert.equal(new Set(broken.stories.map((story)=>story.updatedAt)).size,1,"Legacy records retain their original replay interpretation until corrected explicitly");
+    assert.equal(broken.import?.hash,createSeedDigest(original));
+    const body={workspaceId,opId:"restore-original-timestamps",expectedHead:broken.through,expectedImportHash:broken.import!.hash,expectedHistoryHash:planningValueHash(planningHistorySeed(broken))};
+    const post=async(input:unknown,capability=credential.capability)=>{
+      const response=await fetch(f.relay.url+"/v1/planning-history/repair-timestamps",{method:"POST",headers:{"content-type":"application/json",authorization:`Bearer ${capability}`},body:JSON.stringify(input)});
+      return {status:response.status,body:await response.json()};
+    };
+    const recipient=JSON.parse(await readFile(join(f.root,"b","team","connections.json"),"utf8")).connections[0].credential;
+    assert.equal((await post(body,recipient.capability)).status,403);
+    assert.equal((await post({...body,expectedHead:broken.through-1})).status,409);
+    assert.equal((await post({...body,expectedImportHash:"0".repeat(64)})).status,409);
+    assert.equal((await post({...body,expectedHistoryHash:"0".repeat(64)})).status,409);
+    const repaired=await post(body);
+    assert.equal(repaired.status,200);assert.equal(repaired.body.corrected,76);
+    assert.equal(planningValueHash(planningHistorySeed(repaired.body.history)),planningValueHash(original));
+    assert.equal(repaired.body.history.import.hash,broken.import!.hash,"The original immutable import receipt is preserved");
+    const replay=await post(body);assert.equal(replay.status,200);assert.equal(replay.body.replayed,true);assert.equal(replay.body.corrected,76);
+    assert.equal((await post({...body,expectedHead:body.expectedHead+1})).body.error.code,"OP_ID_REUSE");
+    await f.restart();
+    const afterRestart=await get();assert.equal(planningValueHash(planningHistorySeed(afterRestart)),planningValueHash(original));
+    const replayAfterRestart=await post(body);assert.equal(replayAfterRestart.body.replayed,true);assert.equal(replayAfterRestart.body.corrected,76);
+  }finally{await f.close();}
+});
+
+test("timestamp recovery refuses a genuine post-import planning edit instead of replacing later work",async()=>{
+  const f=await fixture();
+  try{
+    const shared=await f.share(),workspaceId=shared.workspace.workspaceId,credential=await legacyTimestampDamage(f,workspaceId);
+    f.aState.tasks[0].checklist[0].text="A genuine edit made after the import";
+    await f.a.synchronize("dogfood-owner");
+    const history=await (await fetch(f.relay.url+`/v1/planning-history?workspaceId=${workspaceId}`,{headers:{authorization:`Bearer ${credential.capability}`}})).json() as TeamPlanningHistory;
+    const response=await fetch(f.relay.url+"/v1/planning-history/repair-timestamps",{method:"POST",headers:{"content-type":"application/json",authorization:`Bearer ${credential.capability}`},body:JSON.stringify({workspaceId,opId:"refuse-late-repair",expectedHead:history.through,expectedImportHash:history.import!.hash,expectedHistoryHash:planningValueHash(planningHistorySeed(history))})});
+    assert.equal(response.status,409);assert.equal((await response.json()).error.code,"HISTORY_RECOVERY");
+    assert.equal(f.aState.tasks[0].checklist[0].text,"A genuine edit made after the import");
+  }finally{await f.close();}
 });
 
 test("joining a member does not invent cycle progress even when the last captured counts differ from the current board", () => {

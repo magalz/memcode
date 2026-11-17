@@ -219,8 +219,8 @@ export class TeamSyncClient implements TeamWorkerClaims {
       const previousPlanning = connection.planningBaseline;
       if (previousPlanning) {
         const priorStories = new Map(previousPlanning.stories.map((item) => [item.id, item]));
-        const stories = nextPlanning.stories.filter((item) => JSON.stringify(item) !== JSON.stringify(priorStories.get(item.id)));
-        const planning = JSON.stringify(nextPlanning.planning) !== JSON.stringify(previousPlanning.planning) ? nextPlanning.planning : undefined;
+        const stories = nextPlanning.stories.filter((item) => !priorStories.has(item.id) || planningValueHash(item) !== planningValueHash(priorStories.get(item.id)));
+        const planning = planningValueHash(nextPlanning.planning) !== planningValueHash(previousPlanning.planning) ? nextPlanning.planning : undefined;
         if (stories.length || planning) {
           (connection.historyOutbox ??= []).push({ opId: randomUUID(), metadata: { stories, ...(planning ? { planning } : {}) }, expected: { stories: stories.map((item) => ({id:item.id,hash:priorStories.has(item.id) ? planningValueHash(priorStories.get(item.id)) : null})), ...(planning ? {planningHash:planningValueHash(previousPlanning.planning)} : {}) } });
           dirty = true;
