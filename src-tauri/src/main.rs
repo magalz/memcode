@@ -95,6 +95,10 @@ fn main() {
                 .ok_or("Missing main window configuration")?
                 .clone();
             let verification = std::env::var_os("MEMCODE_NATIVE_TEST_PROFILE").is_some();
+            // Fail before WebView2 can open its own blocking initialization
+            // dialog when a stale file or an inaccessible path obstructs data.
+            let webview_data = native::profile_dir(app.handle()).map_err(std::io::Error::other)?;
+            std::fs::create_dir_all(&webview_data)?;
             let mut window = tauri::WebviewWindowBuilder::from_config(app, &config)?
                 .focused(!verification)
                 .skip_taskbar(verification);
@@ -110,7 +114,7 @@ fn main() {
                 window = window.title("MemCode — verification");
             }
             window
-                .data_directory(native::profile_dir(app.handle()).map_err(std::io::Error::other)?)
+                .data_directory(webview_data)
                 .on_navigation(native::main_origin)
                 .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
                 .disable_drag_drop_handler()
