@@ -91,7 +91,7 @@ fn volume_is_read_only(bundle: &Path) -> Option<bool> {
     }
     let url = CFURL::from_path(bundle, true)?;
     let mut value = std::ptr::null();
-    let mut error = std::ptr::null();
+    let mut error: CFErrorRef = std::ptr::null_mut();
     unsafe {
         let success = CFURLCopyResourcePropertyForKey(
             url.as_concrete_TypeRef(),
