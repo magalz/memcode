@@ -95,6 +95,14 @@ fn main() {
             let mut window = tauri::WebviewWindowBuilder::from_config(app, &config)?
                 .focused(!verification)
                 .skip_taskbar(verification);
+            if std::env::var("MEMCODE_NATIVE_TEST_PROFILE").as_deref() == Ok("1")
+                && std::env::var("MEMCODE_UPDATER_ACL_TEST").as_deref() == Ok("1")
+                && std::env::var_os("MEMCODE_DATA_DIR")
+                    .map(std::path::PathBuf::from)
+                    .is_some_and(|path| path.is_absolute())
+            {
+                window = window.initialization_script(include_str!("updater_acl_probe.js"));
+            }
             if verification {
                 window = window.title("MemCode — verification");
             }

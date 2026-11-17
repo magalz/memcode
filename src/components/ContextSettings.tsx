@@ -1,10 +1,15 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Download, Network, RefreshCw } from "lucide-react";
 import {
   contextAssistantDefaults,
   type ContextAssistantSettings,
   type ContextAssistantSetupState,
 } from "../context-settings";
+import {
+  RetrievalStatusCheck,
+  retrievalSetupMessage,
+  retrievalSetupState,
+} from "../context-setup-status";
 import { Select } from "./Select";
 import { Spinner } from "./UI";
 import "../styles-local-model.css";
@@ -25,42 +30,77 @@ export function ContextSettings({
   const [status, setStatus] = useState<ContextAssistantSetupState>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [checking, setChecking] = useState(false);
+  const checks = useRef(new RetrievalStatusCheck());
+  const mounted = useRef(true);
+  const installingRef = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      checks.current.invalidate();
+    };
+  }, []);
   const managed =
     settings.provider === "onnx" && !settings.packageDirectory.trim();
-  const refresh = async () => {
-    try {
-      setStatus(await window.memcode.retrievalStatus());
+  const refresh = useCallback(async () => {
+    setChecking(true);
+    const result = await checks.current.run(() =>
+      window.memcode.retrievalStatus(),
+    );
+    if (!result || !mounted.current) return;
+    if (result.status) {
+      setStatus(result.status);
       setError("");
-    } catch (error) {
-      setError((error as Error).message);
-    }
-  };
+    } else setError(result.error);
+    setChecking(false);
+  }, []);
   useEffect(() => {
     if (settings.enabled && managed) void refresh();
-  }, [settings.enabled, managed]);
+    return () => checks.current.invalidate();
+  }, [settings.enabled, managed, refresh]);
   useEffect(() => {
     if (!busy && status?.status !== "installing") return;
-    const timer = setInterval(() => void refresh(), 750);
-    return () => clearInterval(timer);
-  }, [busy, status?.status]);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      if (cancelled || (!installingRef.current && busy)) return;
+      await refresh();
+      if (!cancelled) timer = setTimeout(() => void poll(), 750);
+    };
+    timer = setTimeout(() => void poll(), 750);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [busy, status?.status, refresh]);
   const install = async () => {
+    checks.current.invalidate();
+    installingRef.current = true;
     setBusy(true);
     setError("");
     try {
-      setStatus(await window.memcode.installRetrieval());
-    } catch (error) {
-      setError((error as Error).message);
-      try {
-        setStatus(await window.memcode.retrievalStatus());
-      } catch {
-        /* Keep the setup error visible. */
+      const next = retrievalSetupState(await window.memcode.installRetrieval());
+      checks.current.invalidate();
+      if (mounted.current) {
+        setStatus(next);
+        setError("");
       }
+    } catch (error) {
+      checks.current.invalidate();
+      if (mounted.current)
+        setError(error instanceof Error ? error.message : String(error));
     } finally {
-      setBusy(false);
+      installingRef.current = false;
+      if (mounted.current) {
+        setBusy(false);
+        setChecking(false);
+      }
     }
   };
-  const installing = busy || status?.status === "installing";
-  const ready = status?.status === "ready";
+  const installing = busy || (status?.status === "installing" && !error);
+  const failed = !!error || status?.status === "error";
+  const ready = status?.status === "ready" && !failed;
   return (
     <section
       className="settings-section context-settings"
@@ -90,9 +130,9 @@ export function ContextSettings({
         </span>
       </label>
       {settings.enabled && managed && (
-        <div className="local-model-card" aria-busy={installing}>
+        <div className="local-model-card" aria-busy={installing || checking}>
           <div className="local-model-status">
-            {installing ? (
+            {installing || (checking && !status) ? (
               <Spinner />
             ) : ready ? (
               <Check size={15} />
@@ -100,22 +140,19 @@ export function ContextSettings({
               <Network size={15} />
             )}
             <strong>
-              {ready
-                ? "Ready to assist"
-                : installing
-                  ? status?.phase === "verify"
-                    ? "Checking your local model…"
-                    : "Downloading your local model…"
-                  : "Set up local retrieval"}
+              {failed
+                ? "Local retrieval needs attention"
+                : ready
+                  ? "Ready to assist"
+                  : installing
+                    ? status?.phase === "verify"
+                      ? "Checking your local model…"
+                      : "Downloading your local model…"
+                    : "Set up local retrieval"}
             </strong>
             {ready && <span className="local-model-ready">Installed</span>}
           </div>
-          <p>
-            {status?.message ??
-              (error
-                ? "Local setup could not be checked. Try again below."
-                : "Checking the model on this computer…")}
-          </p>
+          <p>{retrievalSetupMessage(status, error)}</p>
           {installing && (
             <div className="local-model-progress" role="status">
               <progress
@@ -131,12 +168,12 @@ export function ContextSettings({
               ) : null}
             </div>
           )}
-          {!ready && status?.status !== "unsupported" && (
+          {(!ready || error) && status?.status !== "unsupported" && (
             <button
               type="button"
               className="button primary"
-              disabled={installing || (!status && !error)}
-              onClick={() => void (status ? install() : refresh())}
+              disabled={installing || checking}
+              onClick={() => void (!status || error ? refresh() : install())}
             >
               {installing ? (
                 <Spinner />
@@ -147,7 +184,7 @@ export function ContextSettings({
               )}
               {installing
                 ? "Setting up…"
-                : !status && error
+                : error
                   ? "Check setup again"
                   : status?.status === "error"
                     ? "Retry setup"

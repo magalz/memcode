@@ -148,6 +148,10 @@ jobs:
         timeout-minutes: 2
         run: node scripts/macos-cold-start.mjs
 
+      - name: Verify actual renderer updater IPC permissions
+        timeout-minutes: 2
+        run: node scripts/native-updater-acceptance.mjs
+
       - name: Verify packaged engine copies and offline preparation without any installed CLI
         timeout-minutes: 4
         run: node scripts/bundled-engine-acceptance.mjs --prepare-only
@@ -200,6 +204,7 @@ jobs:
               gatekeeperAcceptance: process.env.MEMCODE_MACOS_RELEASE_MODE === 'public-release' ? 'accepted' : 'manual-approval-required',
             },
             nativeColdStart: JSON.parse(readFileSync('release/macos-cold-start.json', 'utf8')),
+            nativeUpdaterAcl: JSON.parse(readFileSync('release/native-updater-acl-darwin.json', 'utf8')),
             bundledEngine: JSON.parse(readFileSync('release/bundled-engine-darwin-prepare-only.json', 'utf8')),
             authenticatedEngineAcceptance: process.env.ENGINE_ACCEPTANCE === 'true' ? JSON.parse(readFileSync('release/bundled-engine-darwin-real-account-index-watch.json', 'utf8')) : {tested:false,reason:'dedicated real account test not requested'},
             packagedRuntime: JSON.parse(readFileSync('dist-desktop-runtime/provenance.json', 'utf8')),
@@ -219,6 +224,7 @@ jobs:
           path: |
             release/macos-cold-start.json
             release/macos-cold-start.png
+            release/native-updater-acl-darwin.json
             release/macos-release-trust.json
             release/bundled-engine-darwin-prepare-only.json
             release/bundled-engine-darwin-real-account-index-watch.json
