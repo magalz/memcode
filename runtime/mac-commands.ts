@@ -45,9 +45,10 @@ async function executable(path: string): Promise<boolean> {
 export function cursorInstallationIdentity(
   resolved: string,
   home: string,
+  canonicalRoot = join(home, ".local", "share", "cursor-agent"),
 ): string | undefined {
   const root = join(home, ".local", "share", "cursor-agent");
-  const parts = relative(join(root, "versions"), resolved).split(sep);
+  const parts = relative(join(canonicalRoot, "versions"), resolved).split(sep);
   return parts.length === 2 &&
     /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(parts[0]) &&
     parts[1] === "cursor-agent"
@@ -114,6 +115,14 @@ export async function findMacCommand(
 ): Promise<Command | null> {
   const home = options.home ?? homedir();
   const directories = macCommandDirectories(options);
+  const cursorRoot = join(home, ".local", "share", "cursor-agent");
+  // realpath(agent) resolves /var -> /private/var and symlinked home/.local
+  // directories too. Compare with the same canonical installation root while
+  // retaining its stable user-facing identity, rather than rejecting its alias.
+  const canonicalCursorRoot =
+    name === "cursor"
+      ? await realpath(cursorRoot).catch(() => cursorRoot)
+      : undefined;
   // nvm does not expose its default installation in Finder's environment.
   directories.push(
     ...(await versionedDirectories(join(home, ".nvm", "versions", "node"))).map(
@@ -134,7 +143,11 @@ export async function findMacCommand(
         let identity: string | undefined;
         if (name === "cursor") {
           try {
-            identity = cursorInstallationIdentity(await realpath(path), home);
+            identity = cursorInstallationIdentity(
+              await realpath(path),
+              home,
+              canonicalCursorRoot,
+            );
           } catch {
             continue;
           } // An automatic CLI update may replace the link mid-discovery.

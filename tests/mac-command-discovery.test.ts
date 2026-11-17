@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -77,6 +84,47 @@ test("an unrelated executable named agent is never mistaken for Cursor", async (
       f.home,
     ),
     undefined,
+  );
+});
+
+test("Cursor aliases remain trusted when the home directory resolves through a filesystem alias", async (t) => {
+  const f = await fixture(t);
+  const runtime = await f.executable(
+    join(
+      f.home,
+      ".local",
+      "share",
+      "cursor-agent",
+      "versions",
+      "2026.11.13-build",
+      "cursor-agent",
+    ),
+  );
+  const bin = join(f.home, ".local", "bin");
+  const alias = process.platform === "win32" ? "cursor-agent" : "agent";
+  if (process.platform === "win32") {
+    // Directory junctions exercise the same realpath mismatch without requiring
+    // Windows Developer Mode/admin rights to create a file symlink.
+    await symlink(dirname(runtime), bin, "junction");
+  } else {
+    await mkdir(bin, { recursive: true });
+    await symlink(runtime, join(bin, alias));
+  }
+  const aliasedHome = join(f.root, "home-alias");
+  await symlink(
+    f.home,
+    aliasedHome,
+    process.platform === "win32" ? "junction" : "dir",
+  );
+  const found = await findCommand("cursor", "", {
+    ...f.options,
+    home: aliasedHome,
+  });
+  assert.equal(found?.command, join(aliasedHome, ".local", "bin", alias));
+  assert.equal(
+    commandIdentity(found!),
+    "cursor-agent-install:" +
+      join(aliasedHome, ".local", "share", "cursor-agent"),
   );
 });
 

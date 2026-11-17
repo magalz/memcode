@@ -101,10 +101,40 @@ try {
       },
     );
     assert.equal(result.stdout.trim(), "memcode-synthetic-agent");
+    if (name === "cursor")
+      assert.equal(
+        commandIdentity(command),
+        "cursor-agent-install:" + join(home, ".local", "share", "cursor-agent"),
+      );
   }
   report.existingUserBinCliLaunchesVerified = 2;
   report.shebangNodeWorksWithoutTerminalPath = true;
   report.knownCursorSymlinkVerified = true;
+  const aliasedHome = join(profile, "home-alias");
+  await symlink(home, aliasedHome, "dir");
+  const aliasCommand = await findCommand("cursor", "", {
+    ...options,
+    home: aliasedHome,
+  });
+  assert.equal(
+    aliasCommand?.command,
+    join(aliasedHome, ".local", "bin", "agent"),
+  );
+  assert.equal(
+    commandIdentity(aliasCommand),
+    "cursor-agent-install:" +
+      join(aliasedHome, ".local", "share", "cursor-agent"),
+  );
+  assert.equal(
+    (
+      await execute(aliasCommand.command, ["--version"], {
+        env: { HOME: aliasedHome, PATH: aliasCommand.env.PATH },
+        timeout: 10000,
+      })
+    ).stdout.trim(),
+    "memcode-synthetic-agent",
+  );
+  report.canonicalHomeAliasDiscoveryAndLaunchVerified = true;
   const provider = join(
     home,
     "node_modules",

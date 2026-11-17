@@ -91,6 +91,10 @@ jobs:
           node --import tsx --test --test-reporter=tap --test-timeout=90000 tests/*.test.ts
           node scripts/verify-third-party-notices.mjs
 
+      - name: Verify native Mac discovery fixtures before packaging
+        timeout-minutes: 2
+        run: node --import tsx scripts/macos-harness-acceptance.mjs
+
       - name: Build the private app, disk image and signed updater
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
