@@ -87,6 +87,8 @@ export interface TaskEvent {
   after: TaskObservation;
 }
 export interface PlanningHistory {
+  /** Shared projects whose history is derived from accepted relay events. */
+  authoritativeProjects?: string[];
   startedAt: string;
   events: TaskEvent[];
   observations: Record<string, TaskObservation>;

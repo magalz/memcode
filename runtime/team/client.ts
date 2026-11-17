@@ -17,6 +17,7 @@ import type { RepositoryDescriptor } from "../../src/repository";
 import type { TeamIdentityChallenge, TeamIdentityProofProvider } from "../team-identity";
 import type { TeamSpaceCredential, TeamSpaceSession } from "./spaces";
 import { formatTeamInvitation, parseTeamInvitation } from "./invitation";
+import { applyPlanningHistory, planningHistorySchema, planningHistoryUnchangedSchema, planningMetadata, planningValueHash, projectPlanningHistory, projectPlanningMetadata, remotePlanningMetadata, remotePlanningSeed, type ExpectedPlanningMetadata, type TeamPlanningHistory, type TeamPlanningMetadata, type TeamPlanningSeed } from "./history";
 
 interface PendingCommand { opId: string; command: TeamCommand; deletionId?: string }
 interface DeletionBackup {
@@ -39,11 +40,19 @@ interface SavedConnection {
   linkedProject?: Project;
   teamId?: string;
   repository?: RepositoryDescriptor;
+  history?: TeamPlanningHistory;
+  pendingHistoryImport?: { opId: string; history: TeamPlanningSeed; expectedHead?: number };
+  historyOutbox?: Array<{ opId: string; metadata: TeamPlanningMetadata; expected?: ExpectedPlanningMetadata }>;
+  planningBaseline?: TeamPlanningMetadata;
+  rejectedHistory?: Array<{ opId: string; metadata: TeamPlanningMetadata; message: string; at: string }>;
+  retainedPlanningEvents?: AppState["planning"]["events"];
 }
 interface Connection extends SavedConnection {
   status: TeamWorkspaceState["connection"]; error?: string; lastSyncedAt?: string;
   flushing?: Promise<void>; leases: Map<string, TeamClaim>;
   preparingDeletionId?: string;
+  historySupported?: boolean;
+  historyError?: string;
 }
 interface SavedTeam { endpoint: string; credential: TeamSpaceCredential; snapshot: WorkspaceTeam; locked?: boolean }
 interface PrivateProfile { version: 1; deviceId: string; host?: { port: number; bind?: string; advertisedEndpoint?: string }; connections: SavedConnection[]; teams?: SavedTeam[]; projectShares?: Record<string, string>; teamCreates?: Array<{name:string;opId:string}> }
@@ -166,7 +175,7 @@ export class TeamSyncClient implements TeamWorkerClaims {
     for (const connection of this.connections.values()) this.startLoop(connection);
   }
   private persist(): Promise<void> {
-    const connections = [...this.connections.values()].map(({ projectId, endpoint, credential, snapshot, baseline, outbox, cursor, readThrough, claimAttempts, rejected, deletions, localIds, linkedProject, teamId, repository }) => ({ projectId, endpoint, credential, snapshot, baseline, outbox, cursor, readThrough, claimAttempts, rejected, deletions, localIds, linkedProject, teamId, repository }));
+    const connections = [...this.connections.values()].map(({ projectId, endpoint, credential, snapshot, baseline, outbox, cursor, readThrough, claimAttempts, rejected, deletions, localIds, linkedProject, teamId, repository, history, pendingHistoryImport, historyOutbox, planningBaseline, rejectedHistory, retainedPlanningEvents }) => ({ projectId, endpoint, credential, snapshot, baseline, outbox, cursor, readThrough, claimAttempts, rejected, deletions, localIds, linkedProject, teamId, repository, history, pendingHistoryImport, historyOutbox, planningBaseline, rejectedHistory, retainedPlanningEvents }));
     const serialized = JSON.stringify({ ...this.profile, connections });
     const pending = this.writes.catch(() => {}).then(async () => {
       const temp = `${this.file}.next`;
@@ -181,9 +190,17 @@ export class TeamSyncClient implements TeamWorkerClaims {
       projectId: connection.projectId, connection: connection.status, workspace: structuredClone(localTeamSnapshot(connection, connection.snapshot)),
       ...(connection.teamId ? {teamId:connection.teamId,teamName:this.profile.teams?.find((item)=>item.credential.teamId===connection.teamId)?.snapshot.name} : {}),
       memberId: connection.credential.memberId, deviceId: connection.credential.deviceId,
-      pendingCount: connection.outbox.length,
+      pendingCount: connection.outbox.length + (connection.historyOutbox?.length ?? 0) + (connection.pendingHistoryImport ? 1 : 0),
       unreadCount: connection.snapshot.activity.filter((item) => item.sequence > connection.readThrough && item.memberId !== connection.credential.memberId).length,
       lastSyncedAt: connection.lastSyncedAt, error: connection.error, mode: connection.teamId ? "memtrace" as const : "invite-preview" as const,
+      planningHistory: {
+        state: connection.historyError ? "error" as const : connection.historySupported === false ? "unsupported" as const : connection.pendingHistoryImport || connection.historyOutbox?.length || connection.outbox.length || !connection.history?.import || connection.history.through < connection.snapshot.head ? "pending" as const : "synced" as const,
+        revision: connection.history?.through, hash: connection.history?.import?.hash,
+        eventCount: connection.pendingHistoryImport?.history.events.length ?? connection.history?.events.length ?? 0,
+        cycleSnapshotCount: (connection.pendingHistoryImport?.history ?? connection.history)?.cycles.reduce((total, cycle) => total + cycle.snapshots.length, 0) ?? 0,
+        importAvailable: connection.historySupported === true && !connection.history?.import && !connection.pendingHistoryImport && connection.snapshot.members.find((member) => member.id === connection.credential.memberId)?.role === "owner",
+        ...(connection.historyError ? { detail: connection.historyError } : connection.historySupported === false ? { detail: "This Team service syncs the board but does not yet preserve complete planning history. The original local history is retained; update the Team service before relying on another computer's charts." } : !connection.history?.import ? {detail:"The original planning history has not been imported. Existing local charts and runbooks are preserved; the project owner can import the authoritative history."} : {}),
+      },
     }))];
   }
   status(projectId: string): TeamWorkspaceState | null {
@@ -198,6 +215,18 @@ export class TeamSyncClient implements TeamWorkerClaims {
   async capture(): Promise<void> {
     let dirty = false;
     for (const connection of this.connections.values()) {
+      const nextPlanning = remotePlanningMetadata(connection, projectPlanningMetadata(this.state(), connection.projectId));
+      const previousPlanning = connection.planningBaseline;
+      if (previousPlanning) {
+        const priorStories = new Map(previousPlanning.stories.map((item) => [item.id, item]));
+        const stories = nextPlanning.stories.filter((item) => JSON.stringify(item) !== JSON.stringify(priorStories.get(item.id)));
+        const planning = JSON.stringify(nextPlanning.planning) !== JSON.stringify(previousPlanning.planning) ? nextPlanning.planning : undefined;
+        if (stories.length || planning) {
+          (connection.historyOutbox ??= []).push({ opId: randomUUID(), metadata: { stories, ...(planning ? { planning } : {}) }, expected: { stories: stories.map((item) => ({id:item.id,hash:priorStories.has(item.id) ? planningValueHash(priorStories.get(item.id)) : null})), ...(planning ? {planningHash:planningValueHash(previousPlanning.planning)} : {}) } });
+          dirty = true;
+        }
+      }
+      connection.planningBaseline = nextPlanning;
       const next = remoteTeamProjection(connection, projectSharedState(this.state(), connection.projectId));
       const commands = sharedCommands(connection.baseline, next);
       if (!commands.length) continue;
@@ -257,23 +286,69 @@ export class TeamSyncClient implements TeamWorkerClaims {
     await this.changed();
   }
   private apply(connection: Connection): void {
-    for (const backup of connection.deletions ?? []) if (backup.rejected) this.restoreDeletion(connection, backup);
+    if (connection.history?.import) this.state().planning.authoritativeProjects = [...new Set([...(this.state().planning.authoritativeProjects ?? []), connection.projectId])];
+    for (const backup of connection.deletions ?? []) if (backup.rejected) {
+      this.restoreDeletion(connection, backup);
+      const retained = (connection.retainedPlanningEvents ??= []), ids = new Set(retained.map((item) => item.id));
+      retained.push(...structuredClone(backup.events.filter((item) => !ids.has(item.id))));
+    }
+    // An older service must never replace the owner's real chronology with
+    // upload-time v1 dates. Its local history stays authoritative until imported.
+    const localDates = !connection.localIds && (!connection.history?.import || connection.pendingHistoryImport)
+      ? projectPlanningHistory(this.state(), connection.projectId) : undefined;
     applySharedSnapshot(this.state(), connection.projectId, localTeamSnapshot(connection, optimistic(connection.snapshot, connection.outbox, connection.baseline, connection.credential.memberId)), localTeamProjection(connection, connection.baseline));
+    if (localDates) {
+      for (const meta of localDates.stories) {
+        const task = this.state().tasks.find((item) => item.id === meta.id && item.projectId === connection.projectId);
+        if (task) Object.assign(task, {createdAt:meta.createdAt, updatedAt:meta.updatedAt});
+      }
+      for (const meta of localDates.comments) {
+        const comment = this.state().storyComments?.find((item) => item.id === meta.id);
+        if (comment) Object.assign(comment, {createdAt:meta.createdAt, updatedAt:meta.updatedAt, deletedAt:meta.deletedAt});
+      }
+    }
+    if (connection.history?.import && connection.history.through === connection.snapshot.head && !connection.pendingHistoryImport && !connection.outbox.length && !connection.historyOutbox?.length) applyPlanningHistory(this.state(), connection.projectId, connection.history, connection);
+    if (connection.retainedPlanningEvents?.length) {
+      const ids = new Set(this.state().planning.events.map((item) => item.id));
+      this.state().planning.events.push(...structuredClone(connection.retainedPlanningEvents.filter((item) => !ids.has(item.id))));
+    }
     connection.baseline = remoteTeamProjection(connection, projectSharedState(this.state(), connection.projectId));
+    connection.planningBaseline = remotePlanningMetadata(connection, projectPlanningMetadata(this.state(), connection.projectId));
+  }
+  private async pullHistory(connection: Connection): Promise<void> {
+    if (connection.historySupported === false) return;
+    try {
+      const raw = await this.request(connection.endpoint, `/v1/planning-history?workspaceId=${encodeURIComponent(connection.credential.workspaceId)}${connection.history ? `&after=${connection.history.through}` : ""}`, connection.credential.capability);
+      const unchanged = planningHistoryUnchangedSchema.safeParse(raw);
+      if (unchanged.success) {
+        if (unchanged.data.workspaceId !== connection.credential.workspaceId || unchanged.data.through !== connection.history?.through) throw Error("The Team service returned an inconsistent planning history cursor.");
+        connection.historySupported = true; connection.historyError = connection.rejectedHistory?.at(-1)?.message; return;
+      }
+      const history = planningHistorySchema.parse(raw);
+      if (history.workspaceId !== connection.credential.workspaceId) throw Error("The Team service returned history for a different project.");
+      if (!connection.history || history.through >= connection.history.through) connection.history = history;
+      connection.historySupported = true; connection.historyError = connection.rejectedHistory?.at(-1)?.message;
+    } catch (error) {
+      if ([404, 405, 501].includes((error as Error & {status?: number}).status ?? 0)) { connection.historySupported = false; return; }
+      connection.historyError = `Planning history could not synchronize. Its saved records were preserved. ${message(error)}`;
+      throw error;
+    }
   }
   private async pull(connection: Connection, waitMs = 0): Promise<void> {
     const query = new URLSearchParams({ workspaceId: connection.credential.workspaceId, after: String(connection.cursor), waitMs: String(waitMs) });
     const reply = teamSyncReplySchema.parse(await this.request(connection.endpoint, `/v1/sync?${query}`, connection.credential.capability, undefined, waitMs));
     if (this.closed || this.connections.get(connection.projectId) !== connection) return;
     const previous = connection.cursor;
+    const previousHistory = connection.history?.through;
     if (reply.snapshot && reply.snapshot.head >= connection.snapshot.head) connection.snapshot = reply.snapshot as TeamSnapshot;
     for (const event of reply.events) if (event.sequence > connection.snapshot.head) {
       if (event.sequence !== connection.snapshot.head + 1) throw Error("Team history has a gap; reconnect to backfill the missing changes.");
       connection.snapshot = applyTeamEvent(connection.snapshot, event);
     }
     connection.cursor = Math.max(connection.cursor, reply.cursor);
+    await this.pullHistory(connection);
     connection.status = "online"; connection.error = connection.rejected?.length ? `A change was rejected: ${connection.rejected.at(-1)!.message}. Other changes continue syncing.` : undefined; connection.lastSyncedAt = new Date().toISOString();
-    if (reply.snapshot || connection.cursor !== previous) {
+    if (reply.snapshot || connection.cursor !== previous || connection.history?.through !== previousHistory) {
       this.apply(connection);
       await this.persist();
       this.publishState();
@@ -324,6 +399,7 @@ export class TeamSyncClient implements TeamWorkerClaims {
             await this.persist();
           }
         }
+        await this.flushHistory(connection);
         connection.status = "online"; connection.error = connection.rejected?.length ? `A change was rejected: ${connection.rejected.at(-1)!.message}. Other changes continue syncing.` : undefined;
         this.publishState();
         await this.changed();
@@ -331,6 +407,44 @@ export class TeamSyncClient implements TeamWorkerClaims {
     })().finally(() => { connection.flushing = undefined; });
     connection.flushing = pending;
     return pending;
+  }
+  private async flushHistory(connection: Connection): Promise<void> {
+    await this.pullHistory(connection);
+    if (connection.historySupported === false || this.closed) return;
+    const pending = connection.pendingHistoryImport;
+    if (pending) {
+      // A teammate may have joined while this app still talked to a v1-only
+      // service. Catch up its ordinary board journal before fixing the import
+      // boundary, without replacing the queued original source history.
+      while (connection.history && connection.cursor < connection.history.through && !this.closed) await this.pull(connection);
+      pending.expectedHead ??= connection.snapshot.head;
+      await this.persist();
+      try {
+        const reply = await this.request<{history:unknown}>(connection.endpoint, "/v1/planning-history", connection.credential.capability, {workspaceId:connection.credential.workspaceId,opId:pending.opId,expectedHead:pending.expectedHead,history:pending.history});
+        connection.history = planningHistorySchema.parse(reply.history);
+        connection.pendingHistoryImport = undefined; connection.historyError = undefined;
+        await this.persist();
+        while (connection.cursor < connection.history.through && !this.closed) await this.pull(connection);
+      } catch (error) { connection.historyError = `Original planning history has not finished sharing. Its source records are preserved. ${message(error)}`; throw error; }
+    }
+    while (connection.historyOutbox?.length && !this.closed) {
+      const operation = connection.historyOutbox[0];
+      let reply: {history:unknown};
+      try { reply = await this.request<{history:unknown}>(connection.endpoint, "/v1/planning-history/metadata", connection.credential.capability, {workspaceId:connection.credential.workspaceId,opId:operation.opId,...operation.metadata,expected:operation.expected}); }
+      catch (error) {
+        if ((error as Error & {status?:number}).status !== 409) throw error;
+        const rejected = {...operation,message:`A planning edit was rejected and saved on this computer. ${message(error)}`,at:new Date().toISOString()};
+        (connection.rejectedHistory ??= []).push(rejected);
+        connection.historyOutbox = connection.historyOutbox.filter((item) => item.opId !== operation.opId);
+        connection.historyError = rejected.message;
+        await this.pullHistory(connection); await this.persist(); continue;
+      }
+      connection.history = planningHistorySchema.parse(reply.history);
+      connection.historyOutbox = connection.historyOutbox.filter((item) => item.opId !== operation.opId);
+      await this.persist();
+      while (connection.cursor < connection.history.through && !this.closed) await this.pull(connection);
+    }
+    this.apply(connection);
   }
   private startLoop(connection: Connection) {
     if (this.options.background === false) return;
@@ -351,7 +465,24 @@ export class TeamSyncClient implements TeamWorkerClaims {
   }
   async synchronize(projectId: string): Promise<void> {
     const connection = this.connection(projectId);
+    // Explicit Refresh can discover a service upgraded while the app stayed
+    // open. Background long polls keep their inexpensive negative cache.
+    if (connection.historySupported === false) connection.historySupported = undefined;
     await this.capture(); await this.flush(connection); await this.pull(connection);
+  }
+  /** Explicit upgrade path for a project shared by a pre-history client. */
+  async importPlanningHistory(projectId: string): Promise<TeamWorkspaceState> {
+    const connection = this.connection(projectId);
+    if (connection.historySupported === false) connection.historySupported = undefined;
+    if (connection.snapshot.members.find((member) => member.id === connection.credential.memberId)?.role !== "owner") throw Error("Only this project's owner can import its original planning history.");
+    if (this.state().tasks.some((task) => task.projectId === projectId && ["preparing", "running", "stopping"].includes(task.run.state))) throw Error("Stop this project's workers before importing its original planning history.");
+    if (!connection.pendingHistoryImport) {
+      if (connection.history?.import) throw Error("This project's original planning history has already been imported. Its accepted history was preserved.");
+      connection.pendingHistoryImport = {opId:randomUUID(),history:remotePlanningSeed(connection, projectPlanningHistory(this.state(), projectId))};
+      await this.persist();
+    }
+    await this.capture(); await this.flush(connection); await this.pull(connection);
+    return this.status(projectId)!;
   }
   async assertDeletionAllowed(method: string, id: string): Promise<void> {
     const collection = method === "story:delete" ? this.state().tasks : method === "epic:delete" ? this.state().epics : this.state().cycles;
@@ -359,7 +490,15 @@ export class TeamSyncClient implements TeamWorkerClaims {
     if (!entity) return;
     if (this.unavailable.has(entity.projectId)) throw Error("Restore this project’s private Team credentials before deleting shared planning.");
     if (!this.connections.has(entity.projectId)) return;
+    // The safety refresh must preserve local historical evidence that predates
+    // the canonical feed, so a rejected deletion can restore it as promised.
+    const localEvents = structuredClone(this.state().planning.events.filter((event) => event.projectId === entity.projectId));
     await this.synchronize(entity.projectId);
+    const guarded = this.connection(entity.projectId), known = new Set(this.state().planning.events.map((event) => event.id));
+    const retained = (guarded.retainedPlanningEvents ??= []), saved = new Set(retained.map((event) => event.id));
+    retained.push(...localEvents.filter((event) => !known.has(event.id) && !saved.has(event.id)));
+    this.state().planning.events.push(...retained.filter((event) => !known.has(event.id)));
+    await this.persist();
     const taskIds = new Set(this.state().tasks.filter((task) => method === "story:delete" ? task.id === id : method === "epic:delete" ? task.epicId === id : task.cycleId === id).map((task) => task.id));
     if (method === "story:delete") for (const taskId of taskIds) for (const task of this.state().tasks) if (task.parentId === taskId) taskIds.add(task.id);
     const connection = this.connection(entity.projectId);
@@ -431,11 +570,13 @@ export class TeamSyncClient implements TeamWorkerClaims {
   private async attach(projectId: string, endpoint: string, reply: TeamSessionReply, baseline: SharedProjection, linkedProject?: Project, binding?: { teamId: string; repository?: RepositoryDescriptor }) {
     if ([...this.connections.values()].some((connection) => connection.credential.workspaceId === reply.credential.workspaceId && connection.endpoint === endpoint)) throw Error("This team is already connected to another local project in this profile. Open that project instead.");
     const connection: Connection = { projectId, endpoint, credential: reply.credential, snapshot: reply.snapshot, baseline, outbox: [], cursor: reply.snapshot.head, readThrough: 0, status: "online", leases: new Map(), ...(linkedProject ? { localIds: emptyTeamLocalIds(), linkedProject } : {}), ...binding };
+    await this.pullHistory(connection);
     // Validate the entire incoming projection before persisting credentials or
     // modifying the real workspace, so a failed binding leaves no half-join.
     const staged = structuredClone(this.state());
     if (linkedProject) staged.projects.push(structuredClone(linkedProject));
     applySharedSnapshot(staged, projectId, localTeamSnapshot(connection, reply.snapshot), localTeamProjection(connection, baseline));
+    if (connection.history?.import && connection.history.through === connection.snapshot.head) applyPlanningHistory(staged, projectId, connection.history, connection);
     this.connections.set(projectId, connection);
     try { await this.persist(); } catch (error) { this.connections.delete(projectId); throw error; }
     if (linkedProject) this.state().projects.push(linkedProject);
@@ -619,7 +760,8 @@ export class TeamSyncClient implements TeamWorkerClaims {
         this.apply(previous); await this.persist(); this.publishState(); await this.changed();
       } else {
         const initial = projectSharedState(this.state(), project.id);
-        const connection: Connection = { projectId: project.id, endpoint: saved.endpoint, credential: reply.credential, snapshot: reply.snapshot, baseline: initial, outbox: sharedCommands(emptySharedProjection(), initial).map((command) => ({ opId: randomUUID(), command })), cursor: reply.snapshot.head, readThrough: 0, status: "syncing", leases: new Map(), teamId: input.teamId, repository: descriptor.repository };
+        const seed = projectPlanningHistory(this.state(), project.id);
+        const connection: Connection = { projectId: project.id, endpoint: saved.endpoint, credential: reply.credential, snapshot: reply.snapshot, baseline: initial, outbox: sharedCommands(emptySharedProjection(), initial).map((command) => ({ opId: randomUUID(), command })), cursor: reply.snapshot.head, readThrough: 0, status: "syncing", leases: new Map(), teamId: input.teamId, repository: descriptor.repository, pendingHistoryImport: {opId:randomUUID(),history:seed}, planningBaseline:planningMetadata(seed) };
         this.connections.set(project.id, connection); await this.persist(); this.publishState(); await this.changed(); await this.flush(connection); this.startLoop(connection);
       }
       saved.snapshot = await this.request(saved.endpoint, `/v1/teams?teamId=${encodeURIComponent(input.teamId)}`, saved.credential.capability); await this.persist();
@@ -682,7 +824,8 @@ export class TeamSyncClient implements TeamWorkerClaims {
     if (!bootstrap) throw Error("This relay needs its private host bootstrap secret to create a workspace.");
     const reply = teamSessionReplySchema.parse(await this.request(endpoint, "/v1/workspaces", bootstrap, { name: project.name, memberName: input.displayName, deviceId: this.profile.deviceId, deviceName: process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "Mac" : "Linux" })) as TeamSessionReply;
     const initial = projectSharedState(this.state(), project.id);
-    const connection: Connection = { projectId: project.id, endpoint, credential: reply.credential, snapshot: reply.snapshot, baseline: initial, outbox: sharedCommands(emptySharedProjection(), initial).map((command) => ({ opId: randomUUID(), command })), cursor: reply.snapshot.head, readThrough: 0, status: "syncing", leases: new Map() };
+    const seed = projectPlanningHistory(this.state(), project.id);
+    const connection: Connection = { projectId: project.id, endpoint, credential: reply.credential, snapshot: reply.snapshot, baseline: initial, outbox: sharedCommands(emptySharedProjection(), initial).map((command) => ({ opId: randomUUID(), command })), cursor: reply.snapshot.head, readThrough: 0, status: "syncing", leases: new Map(), pendingHistoryImport: {opId:randomUUID(),history:seed}, planningBaseline:planningMetadata(seed) };
     this.connections.set(project.id, connection);
     await this.persist(); this.publishState(); await this.changed();
     await this.flush(connection); this.startLoop(connection);
@@ -731,12 +874,12 @@ export class TeamSyncClient implements TeamWorkerClaims {
   }
   async leave(projectId: string): Promise<void> {
     if (this.state().tasks.some((task) => task.projectId === projectId && ["preparing", "running", "stopping"].includes(task.run.state))) throw Error("Stop this project’s workers before leaving the team.");
-    if (this.unavailable.delete(projectId)) { this.publishState(); await this.changed(); return; }
+    if (this.unavailable.delete(projectId)) { this.state().planning.authoritativeProjects = this.state().planning.authoritativeProjects?.filter((id) => id !== projectId); this.publishState(); await this.changed(); return; }
     const connection = this.connection(projectId);
-    if (connection.outbox.length) throw Error("Sync queued team changes before leaving so your teammates do not miss them.");
+    if (connection.outbox.length || connection.historyOutbox?.length || connection.pendingHistoryImport) throw Error("Sync queued team changes and original planning history before leaving so your teammates do not miss them.");
     for (const claim of connection.snapshot.claims.filter((claim) => claim.memberId === connection.credential.memberId && claim.deviceId === connection.credential.deviceId)) await this.release(localTeamId(connection, "story", claim.storyId), projectId);
     if (connection.outbox.length) throw Error("The claim release is queued. Reconnect before leaving so teammates receive it.");
-    this.connections.delete(projectId); this.publishState(); await this.persist(); await this.changed();
+    this.connections.delete(projectId); this.state().planning.authoritativeProjects = this.state().planning.authoritativeProjects?.filter((id) => id !== projectId); this.publishState(); await this.persist(); await this.changed();
   }
   async read(projectId: string): Promise<TeamWorkspaceState> {
     const connection = this.connection(projectId);

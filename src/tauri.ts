@@ -227,6 +227,8 @@ export async function installNativeBridge(): Promise<void> {
     githubRepositorySignIn: (action) =>
       call("repository:github-sign-in", { action }),
     teamStatus: (projectId) => call("team:status", { projectId }),
+    importTeamHistory: (projectId) =>
+      call("team:import-history", { projectId }),
     teamCreate: (input) => call("team:create", input),
     teamJoin: (input) => call("team:join", input),
     bindProjectFolder: (projectId, path) =>

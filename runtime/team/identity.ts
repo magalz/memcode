@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { TeamSnapshot, TeamStory, TeamComment } from "../../src/team";
 import type { SharedProjection } from "./projection";
 
-type Kind = "story" | "epic" | "cycle" | "comment";
+type Kind = "story" | "epic" | "cycle" | "comment" | "workflow" | "field" | "view";
 export interface TeamLocalIds {
   toLocal: Record<string, string>;
   toRemote: Record<string, string>;

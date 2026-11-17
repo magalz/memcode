@@ -248,6 +248,15 @@ export interface TeamWorkspaceState {
   lastSyncedAt?: string;
   error?: string;
   mode?: "invite-preview" | "memtrace";
+  planningHistory?: {
+    state: "synced" | "pending" | "unsupported" | "error";
+    revision?: number;
+    hash?: string;
+    importAvailable?: boolean;
+    eventCount: number;
+    cycleSnapshotCount: number;
+    detail?: string;
+  };
 }
 export interface TeamInvite {
   endpoint: string;
@@ -418,6 +427,7 @@ export interface MemCodeAPI {
     action: "start" | "status" | "cancel",
   ): Promise<import("./repository").RepositoryGitHubSignIn>;
   teamStatus(projectId: string): Promise<TeamWorkspaceState | null>;
+  importTeamHistory(projectId: string): Promise<TeamWorkspaceState>;
   teamCreate(input: {
     projectId: string;
     endpoint?: string;

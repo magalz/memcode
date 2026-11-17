@@ -26,7 +26,9 @@ export function observePlanning(
   at = new Date().toISOString(),
   baseline = false,
 ): void {
+  const authoritative = new Set(state.planning.authoritativeProjects ?? []);
   for (const task of state.tasks) {
+    if (authoritative.has(task.projectId)) continue;
     const next = observation(task),
       previous = state.planning.observations[task.id];
     if (previous && JSON.stringify(previous) === JSON.stringify(next)) continue;
@@ -44,6 +46,7 @@ export function observePlanning(
     state.planning.observations[task.id] = next;
   }
   for (const cycle of state.cycles) {
+    if (authoritative.has(cycle.projectId)) continue;
     if (cycle.state === "completed") continue;
     const next = cycleSnapshot(state, cycle.id, at),
       previous = cycle.snapshots.at(-1);

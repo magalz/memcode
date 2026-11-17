@@ -53,6 +53,10 @@ A published HTML file does not bundle its linked assets or share its running dev
 
 The connection indicator, queued-change count and unread activity describe different things. Accepted planning changes are journaled, retried operations are deduplicated, and reconnecting clients catch up from their last received event.
 
+Current clients use an additional authenticated history channel to preserve original story dates, runbooks, archive state, workflow configuration, planning events, cycle baselines and historical checkpoints when an existing project is first shared. The import is owner-only and retry-safe. Future shared planning history is derived from accepted service events, giving each computer the same recorded chronology. This does not upload private worker conversations, terminals or the Memtrace graph.
+
+The Team screen reports history sync separately from the current board. An older service can still sync its supported board fields, but cannot confirm historical planning transfer; update it before relying on matching charts. Older clients can keep using the original board protocol, while an updated client is required to display the preserved history.
+
 Metadata edits can wait in the local outbox while offline. New shared workers need a reachable service to confirm ownership. A registered device or cached claim is not evidence that a worker is currently running.
 
 **A synchronized board does not mean synchronized source.** Fetch, review and integrate code through Git, using your team’s epic-branch workflow. A story claim prevents a second official worker on the same story; different stories can still change the same files. Local Memtrace Fleet coordinates workers on each computer. This pilot does not provide live shared-file editing or cross-computer Fleet coordination.

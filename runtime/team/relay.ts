@@ -19,6 +19,7 @@ import { TeamSpaceStore } from "./spaces";
 import { createMemtraceIdentityVerifier, teamIdentityAudience, type TeamIdentityChallenge, type TeamIdentityProofVerifier } from "../team-identity";
 import { sanitizeRepositoryURL } from "../repository-onboarding";
 import { teamInvitationLanding } from "./landing";
+import { advancePlanningHistory, emptyPlanningHistory, planningImportSchema, planningMetadataSchema, planningMetadata, planningValueHash, validatePlanningImport, updatePlanningMetadata, type TeamPlanningHistory, type TeamPlanningMetadata, type TeamPlanningSeed } from "./history";
 import type {
   TeamCredential,
   TeamEvent,
@@ -54,9 +55,12 @@ type RecordEntry =
       actor: Actor;
       event: TeamEvent;
     }
-  | { kind: "command"; dedup: string; commandHash: string; event: TeamEvent };
+  | { kind: "command"; dedup: string; commandHash: string; event: TeamEvent }
+  | { kind: "planning_import"; dedup: string; commandHash: string; event: TeamEvent; history: TeamPlanningSeed; importedAt: string; opId: string }
+  | { kind: "planning_metadata"; dedup: string; commandHash: string; event: TeamEvent; metadata: TeamPlanningMetadata };
 interface Room {
   snapshot: TeamSnapshot;
+  history: TeamPlanningHistory;
   events: TeamEvent[];
   credentials: Map<string, Actor>;
   invitations: Map<string, { expiresAt: string; used: boolean }>;
@@ -158,6 +162,7 @@ function reply(response: ServerResponse, status: number, value: unknown) {
   response.end(JSON.stringify(value));
 }
 function applyRecord(room: Room, record: RecordEntry) {
+  const before = room.snapshot;
   if (record.kind === "invite")
     room.invitations.set(record.hash, {
       expiresAt: record.expiresAt,
@@ -172,7 +177,7 @@ function applyRecord(room: Room, record: RecordEntry) {
     room.snapshot = applyTeamEvent(room.snapshot, record.event);
     room.events.push(record.event);
   }
-  if (record.kind === "command") {
+  if (record.kind === "command" || record.kind === "planning_import" || record.kind === "planning_metadata") {
     room.operations.set(record.dedup, {
       commandHash: record.commandHash,
       event: record.event,
@@ -180,10 +185,15 @@ function applyRecord(room: Room, record: RecordEntry) {
     room.snapshot = applyTeamEvent(room.snapshot, record.event);
     room.events.push(record.event);
   }
+  if (record.kind === "planning_import") {
+    room.history = { ...structuredClone(record.history), version: 1, workspaceId: room.snapshot.workspaceId, through: record.event.sequence, import: { opId: record.opId, hash: record.commandHash, at: record.importedAt } };
+  } else if (record.kind === "planning_metadata") updatePlanningMetadata(room.history, room.snapshot, record.metadata, record.event);
+  else if (record.kind === "command" || record.kind === "join") advancePlanningHistory(room.history, before, room.snapshot, record.event);
 }
 function roomFrom(record: Extract<RecordEntry, { kind: "create" }>): Room {
   return {
     snapshot: teamSnapshotSchema.parse(record.snapshot),
+    history: emptyPlanningHistory(record.snapshot.workspaceId, record.snapshot.members[0]?.joinedAt ?? new Date(0).toISOString()),
     events: [],
     credentials: new Map([[record.credentialHash, record.actor]]),
     invitations: new Map(),
@@ -670,6 +680,61 @@ export async function startTeamRelay(
               snapshot: room.snapshot,
               identity: "invite-preview",
             } satisfies TeamSessionReply);
+          });
+        }
+        if (url.pathname === "/v1/planning-history" && request.method === "GET") {
+          const workspaceId = teamId.parse(url.searchParams.get("workspaceId")), { room } = authenticate(request, workspaceId);
+          if (url.searchParams.get("after") === String(room.history.through)) return reply(response, 200, {version:1,workspaceId,through:room.history.through,unchanged:true});
+          return reply(response, 200, room.history);
+        }
+        if (url.pathname === "/v1/planning-history" && request.method === "POST") {
+          const input = planningImportSchema.parse(JSON.parse((await body(request, 8 * 1024 * 1024)).toString("utf8")));
+          const { room, actor } = authenticate(request, input.workspaceId);
+          return await serialized(room, async () => {
+            authenticate(request, input.workspaceId);
+            if (memberFor(room, actor).role !== "owner") return error("FORBIDDEN", "Only this project's owner can import its original planning history.", 403);
+            const hash = digest(JSON.stringify(input.history)), key = `history/${actor.memberId}/${actor.deviceId}/${input.opId}`;
+            const prior = room.operations.get(key);
+            if (prior) {
+              if (prior.commandHash !== hash) return error("OP_ID_REUSE", "This history import ID was used for different planning data.", 409);
+              return reply(response, 200, { history: room.history, replayed: true });
+            }
+            if (room.history.import) return error("HISTORY_IMPORTED", "This project's original planning history has already been imported. Its accepted history was preserved.", 409);
+            if (input.expectedHead !== room.snapshot.head) return error("HISTORY_HEAD", "The board changed before its history import. Refresh and verify the source planning before retrying.", 409);
+            const exactIds = (ids: string[], expected: string[]) => ids.length === expected.length && [...ids].sort().every((id, i) => id === [...expected].sort()[i]);
+            if (!exactIds(input.history.stories.map((item) => item.id), room.snapshot.stories.map((item) => item.id)) || !exactIds(input.history.cycles.map((item) => item.id), room.snapshot.cycles.map((item) => item.id)) || input.history.comments.some((item) => !room.snapshot.comments.some((comment) => comment.id === item.id)))
+              return error("HISTORY_SCOPE", "The imported planning must match this project's current stories, cycles and discussions.", 409);
+            const at = new Date().toISOString();
+            try { validatePlanningImport(input.history, room.snapshot, at); } catch (failure) { return error("HISTORY_SOURCE", (failure as Error).message, 409); }
+            const event = teamEvent(room.snapshot, actor, input.opId, at, [], "Original project planning history imported", "planning.imported");
+            await commit(room, { kind: "planning_import", dedup: key, commandHash: hash, event, history: input.history, importedAt: at, opId: input.opId });
+            return reply(response, 200, { history: room.history, replayed: false });
+          });
+        }
+        if (url.pathname === "/v1/planning-history/metadata" && request.method === "POST") {
+          const input = planningMetadataSchema.parse(JSON.parse((await body(request, 8 * 1024 * 1024)).toString("utf8")));
+          const { room, actor } = authenticate(request, input.workspaceId);
+          return await serialized(room, async () => {
+            authenticate(request, input.workspaceId);
+            const metadata = { stories: input.stories, planning: input.planning }, hash = planningValueHash({metadata,expected:input.expected}), key = `planning/${actor.memberId}/${actor.deviceId}/${input.opId}`;
+            const prior = room.operations.get(key);
+            if (prior) {
+              if (prior.commandHash !== hash) return error("OP_ID_REUSE", "This planning update ID was used for different data.", 409);
+              return reply(response, 200, { history: room.history, replayed: true });
+            }
+            if (metadata.stories.some((item) => !room.snapshot.stories.some((story) => story.id === item.id))) return error("HISTORY_SCOPE", "A story in this planning update no longer exists.", 409);
+            if (input.expected) {
+              const current = planningMetadata(room.history);
+              for (const value of input.expected.stories) {
+                const meta = current.stories.find((item) => item.id === value.id);
+                const expected = value.hash ?? planningValueHash({id:value.id,category:"Work",checklist:[],archivedAt:null});
+                if (!meta || planningValueHash(meta) !== expected) return error("PLANNING_CONFLICT", "This runbook or story planning changed on another computer. Its accepted version was preserved; review your saved local edit before trying again.", 409);
+              }
+              if (metadata.planning && input.expected.planningHash !== planningValueHash(current.planning)) return error("PLANNING_CONFLICT", "Project workflow or saved views changed on another computer. Its accepted version was preserved; review your saved local edit.", 409);
+            }
+            const at = new Date().toISOString(), event = teamEvent(room.snapshot, actor, input.opId, at, [], "Story runbooks and planning updated", "planning.updated");
+            await commit(room, { kind: "planning_metadata", dedup: key, commandHash: hash, event, metadata });
+            return reply(response, 200, { history: room.history, replayed: false });
           });
         }
         if (request.method === "GET" && url.pathname === "/v1/sync") {

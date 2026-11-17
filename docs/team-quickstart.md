@@ -7,7 +7,7 @@ MemCode is source-available for noncommercial work. Company-internal and commerc
 ## Invite your team
 
 1. Open an existing project. In **Team**, choose **Create a team**, name it and approve your Memtrace account in the browser.
-2. Choose **Share with your team**. Check the project and repository. Its current stories, epics, cycles, comments and activity become the shared starting point.
+2. Choose **Share with your team**. Check the project and repository. Its existing stories, epics, cycles, runbooks and discussions become the shared starting point. Current clients also transfer the original planning history and cycle checkpoints, so joining does not reset the delivery charts.
 3. Choose **Invite teammate**, optionally restrict the invitation to their verified email, then copy the link and send it privately.
 
 MemCode discovers the official Team service when it is enabled. You do not set up a server or receive a setup secret. If Team creation is not available yet, keep working locally and retry after service activation. Invitations include the service address automatically; private service operation is an advanced option.
@@ -19,6 +19,8 @@ MemCode discovers the official Team service when it is enabled. You do not set u
 3. Start planning, commenting and reviewing the project's existing work. Your personal projects remain separate.
 
 You do not need to create an empty project or download MemCode again. Accepting a Team invitation does not grant access to the source repository or start a worker.
+
+In **Team**, check **Planning history in sync**. Its recorded-change and cycle-checkpoint counts describe the history received from the shared service. A service-update or sync error is shown separately from the board connection; a connected board alone does not confirm that its historical charts were transferred. Keep the original project until history sync is confirmed on both computers.
 
 ## Start coding on your computer
 
@@ -40,7 +42,7 @@ Story discussion belongs in **Comments**. Instructions for a worker belong in **
 
 | Shared with the team | Kept on this computer |
 | --- | --- |
-| Stories, epics, cycles, authored comments and activity | Source files, local paths and Memtrace graph |
+| Stories, epics, cycles, runbooks, planning history, authored comments and activity | Source files, local paths and Memtrace graph |
 | Confirmed story claims | Coding-provider credentials and approvals |
 | Files you explicitly publish | Full agent conversations, browser sessions and terminal processes |
 

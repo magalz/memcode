@@ -345,6 +345,10 @@ export async function createRuntime(
       await team!.synchronize(projectId).catch(() => {});
     return team!.status(projectId);
   });
+  register("team:import-history", teamProject, ({ projectId }) => {
+    project(projectId);
+    return team!.importPlanningHistory(projectId);
+  });
   register(
     "team:create",
     z

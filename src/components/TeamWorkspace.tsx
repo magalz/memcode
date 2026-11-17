@@ -156,8 +156,8 @@ export function TeamWorkspace({
       </div>
       <h3>Join a project</h3>
       <p>
-        Paste an invitation to open the project’s current board, epics,
-        comments and published results.
+        Paste an invitation to open the project’s current board, epics, comments
+        and published results.
       </p>
       <label className="team-field">
         <span>Your display name</span>
@@ -259,7 +259,9 @@ export function TeamWorkspace({
             <div className="team-setup-context">
               <GitBranch size={14} />
               <span>
-                {project.path ? project.name : "Choose a local project to share"}
+                {project.path
+                  ? project.name
+                  : "Choose a local project to share"}
               </span>
             </div>
             <label className="team-field">
@@ -380,7 +382,9 @@ export function TeamWorkspace({
             <Users size={22} />
           </span>
           <div>
-            <span className="team-kicker">{managed ? "PROJECT ACTIVITY" : "PRIVATE PREVIEW · INVITE ACCESS"}</span>
+            <span className="team-kicker">
+              {managed ? "PROJECT ACTIVITY" : "PRIVATE PREVIEW · INVITE ACCESS"}
+            </span>
             <h2>{workspace.name}</h2>
             <p>Shared work. Local workers. Source changes through Git.</p>
           </div>
@@ -408,29 +412,88 @@ export function TeamWorkspace({
               size={13}
             />
           </button>
-          {!managed && <button
-            className="button primary"
-            disabled={!!busy || !online}
-            onClick={() =>
-              void perform("invite", async () => {
-                const value = await window.memcode.teamInvite(project.id);
-                setInvite(JSON.stringify(value));
-              })
-            }
-          >
-            <Link2 size={14} />
-            Invite teammate
-          </button>}
-          {!managed && <button
-            className="button secondary"
-            disabled={!!busy}
-            onClick={() => setJoining((value) => !value)}
-          >
-            <Link2 size={13} />
-            Join another project
-          </button>}
+          {!managed && (
+            <button
+              className="button primary"
+              disabled={!!busy || !online}
+              onClick={() =>
+                void perform("invite", async () => {
+                  const value = await window.memcode.teamInvite(project.id);
+                  setInvite(JSON.stringify(value));
+                })
+              }
+            >
+              <Link2 size={14} />
+              Invite teammate
+            </button>
+          )}
+          {!managed && (
+            <button
+              className="button secondary"
+              disabled={!!busy}
+              onClick={() => setJoining((value) => !value)}
+            >
+              <Link2 size={13} />
+              Join another project
+            </button>
+          )}
         </div>
       </div>
+      {team.planningHistory && (
+        <div
+          className={`team-history-status ${team.planningHistory.state}`}
+          role="status"
+        >
+          {team.planningHistory.state === "synced" ? (
+            <Check size={15} />
+          ) : team.planningHistory.state === "pending" &&
+            !team.planningHistory.importAvailable ? (
+            <LoaderCircle size={15} className="team-spin" />
+          ) : (
+            <FileText size={15} />
+          )}
+          <div>
+            <strong>
+              {team.planningHistory.state === "synced"
+                ? online
+                  ? "Planning history in sync"
+                  : "Planning history saved on this computer"
+                : team.planningHistory.state === "pending"
+                  ? team.planningHistory.importAvailable
+                    ? "Original history ready to share"
+                    : "Syncing planning history"
+                  : team.planningHistory.state === "unsupported"
+                    ? "History sync needs a service update"
+                    : "Planning history needs attention"}
+            </strong>
+            <span>
+              {team.planningHistory.state === "synced"
+                ? `${team.planningHistory.eventCount.toLocaleString()} recorded changes · ${team.planningHistory.cycleSnapshotCount.toLocaleString()} cycle checkpoints`
+                : team.planningHistory.detail ||
+                  "Your saved history is preserved on this computer."}
+            </span>
+          </div>
+          {team.planningHistory.importAvailable &&
+            currentMember?.role === "owner" && (
+              <button
+                className="button secondary"
+                disabled={!!busy || !online || tasks.some(isActive)}
+                onClick={() =>
+                  void perform("history", async () => {
+                    setTeam(await window.memcode.importTeamHistory(project.id));
+                  })
+                }
+              >
+                {busy === "history" ? (
+                  <LoaderCircle size={13} className="team-spin" />
+                ) : (
+                  <ArrowUpRight size={13} />
+                )}
+                Share original history
+              </button>
+            )}
+        </div>
+      )}
       {(error || team.error) && (
         <div className="team-error" role="alert">
           {error || team.error}
