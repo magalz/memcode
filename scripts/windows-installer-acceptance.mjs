@@ -238,6 +238,25 @@ async function launch() {
       },
     };
   } catch (error) {
+    await writeFile(join(base, "native-startup-output.txt"), output);
+    try {
+      const state = execFileSync(
+        ps,
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "[Console]::OutputEncoding=New-Object System.Text.UTF8Encoding $false; @{ identity=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; session=$env:SESSIONNAME; processes=@(Get-CimInstance Win32_Process | Where-Object { $_.Name -in @('memcode.exe','msedgewebview2.exe','node.exe') } | Select-Object Name,ProcessId,ParentProcessId,SessionId,ExecutablePath); webviewEnvironment=@(Get-ChildItem Env: | Where-Object { $_.Name -like 'WEBVIEW2_*' } | Select-Object Name,Value); windows=@(Get-Process memcode,msedgewebview2 -ErrorAction SilentlyContinue | Select-Object Id,MainWindowTitle,Responding); events=@(Get-WinEvent -FilterHashtable @{LogName='Application';StartTime=(Get-Date).AddMinutes(-5)} -ErrorAction SilentlyContinue | Where-Object { $_.Message -match 'memcode.exe|msedgewebview2.exe' } | Select-Object -First 5 Id,ProviderName,Message) } | ConvertTo-Json -Depth 5",
+        ],
+        { encoding: "utf8", windowsHide: true, timeout: 15_000 },
+      );
+      await writeFile(join(base, "native-startup-processes.json"), state);
+    } catch (inspectionError) {
+      await writeFile(
+        join(base, "native-inspection-error.txt"),
+        inspectionError.message,
+      );
+    }
     child.kill();
     await browser?.close().catch(() => {});
     throw error;
