@@ -75,7 +75,9 @@ export function childEnv(
   if (process.platform === "darwin")
     parts.push(...macCommandDirectories(), dirname(process.execPath));
   const kept: string[] = [];
-  for (const part of parts)
+  for (const part of new Set(
+    parts.map((part) => part.replace(/^"|"$/g, "")).filter(Boolean),
+  ))
     if ([...kept, part].join(delimiter).length < 7000) kept.push(part);
   env[key] = kept.join(delimiter);
   return env;
