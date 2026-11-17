@@ -681,6 +681,22 @@ export async function createRuntime(
     return pending;
   };
   // The platform-independent routes retained from the original desktop runtime.
+  register("installation:status", z.undefined(), () =>
+    host.call("installation_status", {}),
+  );
+  register("installation:show-source", z.undefined(), () =>
+    host.call("installation_show_source", {}),
+  );
+  register("installation:show-applications", z.undefined(), () =>
+    host.call("installation_show_applications", {}),
+  );
+  register("connection:refresh-catalog", z.undefined(), async () => {
+    await discoverHarnesses(true);
+    return store.runtime();
+  });
+  register("connection:guide", z.object({ harness }).strict(), ({ harness }) =>
+    host.call("open_worker_setup", { harness }),
+  );
   register("workspace:load", z.undefined(), async () => {
     await reconcileCatalog();
     return { state: store.state, runtime: await store.runtime() };
@@ -888,6 +904,7 @@ export async function createRuntime(
     z
       .object({
         workerPermissionDefaults: workerPermissionDefaults.optional(),
+        automaticUpdateDownloads: z.boolean().optional(),
         memtracePath: z.string().max(1000),
         speechEndpoint: z.string().max(1000),
         speech: speechSettingsSchema.optional(),
@@ -964,7 +981,11 @@ export async function createRuntime(
         await engine.reconnect();
       // A Settings dialog opened before a worker-default change must not erase it.
       store.state.settings = {
+        ...store.state.settings,
         ...settings,
+        speech: settings.speech ?? store.state.settings.speech,
+        contextAssistant:
+          settings.contextAssistant ?? store.state.settings.contextAssistant,
         workerPermissionDefaults: state().settings.workerPermissionDefaults,
       };
       await changed();
@@ -1039,6 +1060,23 @@ export async function createRuntime(
   registerSpeech(register, speech);
   register("retrieval:status", z.undefined(), () => retrieval.status());
   register("retrieval:setup", z.undefined(), () => retrieval.install());
+  register(
+    "retrieval:configure",
+    z
+      .object({
+        enabled: z.boolean(),
+        provider: z.literal("onnx"),
+        packageDirectory: z.literal(""),
+        baseUrl: z.string().max(2000),
+        model: z.literal(contextAssistantDefaults.model),
+      })
+      .strict(),
+    async (settings) => {
+      store.state.settings.contextAssistant = settings;
+      await changed();
+      return settings;
+    },
+  );
   registerReview(
     register,
     state,

@@ -1,0 +1,120 @@
+.installation-guide-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #102a2255;
+  backdrop-filter: blur(12px);
+}
+.installation-guide {
+  width: min(540px, 100%);
+  max-height: calc(100dvh - 48px);
+  overflow: auto;
+  padding: 32px;
+  border: 1px solid #dce7db;
+  border-radius: 20px;
+  background: #fcfef9;
+  color: #173127;
+  box-shadow: 0 32px 120px #061b2240;
+  outline: none;
+}
+.installation-guide header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.installation-guide-symbol {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  color: #528b73;
+  margin: 35px 0 24px;
+}
+.installation-guide h1 {
+  font-size: 32px;
+  font-weight: 500;
+  letter-spacing: -1.2px;
+  margin: 0 0 15px;
+}
+.installation-guide p {
+  font-size: 13px;
+  line-height: 1.8;
+  color: #718578;
+}
+.installation-guide ol {
+  list-style: none;
+  padding: 8px 0;
+  display: grid;
+  gap: 23px;
+  margin: 20px 0;
+}
+.installation-guide li {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.installation-guide li > span {
+  border: 1px solid #d8e4d5;
+  background: #f1f6ed;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-size: 11px;
+}
+.installation-guide li strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin: 3px 0 6px;
+}
+.installation-guide li small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #829385;
+}
+.installation-guide .installation-guide-kept {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 8px;
+  background: #eff6ed;
+  font-size: 11px;
+}
+.installation-guide footer {
+  display: flex;
+  gap: 10px;
+  margin-top: 25px;
+  flex-wrap: wrap;
+}
+.installation-guide footer .button {
+  flex: 1;
+  justify-content: center;
+  white-space: nowrap;
+}
+.installation-guide-preview {
+  display: block;
+  margin: 18px auto 0;
+  font-size: 11px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .installation-guide {
+    animation: installation-guide-enter 220ms ease-out both;
+  }
+  @keyframes installation-guide-enter {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}

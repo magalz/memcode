@@ -14,6 +14,7 @@ import {
   managedInstallAvailable,
   speechDownloadBytes,
   validateSpeechFiles,
+  findManagedSpeechAssets,
 } from "./speech-install";
 import { localURL } from "./urls";
 
@@ -46,12 +47,40 @@ export class SpeechManager {
   private runningConfig = "";
   private installAbort?: AbortController;
   private transcriptionAbort?: AbortController;
+  private recovering?: Promise<void>;
   constructor(
     private readonly settings: () => Settings,
     private readonly dataDir: string,
     private readonly save: (settings: SpeechSettings) => Promise<void>,
     private readonly launch: typeof spawn = spawn,
+    private readonly recoverAssets: typeof findManagedSpeechAssets = findManagedSpeechAssets,
   ) {}
+  private async recover() {
+    const previous = this.settings();
+    const endpoint = previous.speechEndpoint;
+    if (
+      this.closed ||
+      this.installing ||
+      previous.speech ||
+      (previous.speechEndpoint &&
+        previous.speechEndpoint !== "http://127.0.0.1:8080/inference")
+    )
+      return;
+    return (this.recovering ??= (async () => {
+      const settings = await this.recoverAssets(this.dataDir);
+      // An explicit advanced choice made during verification wins over recovery.
+      if (
+        settings &&
+        !this.closed &&
+        !this.settings().speech &&
+        this.settings().speechEndpoint === endpoint
+      )
+        await this.save(settings);
+    })().catch((error) => {
+      this.recovering = undefined;
+      throw error;
+    }));
+  }
   private config(): SpeechSettings {
     return this.settings().speech ?? { ...speechDefaults, mode: "endpoint" };
   }
@@ -62,6 +91,7 @@ export class SpeechManager {
     ]);
   }
   async status(): Promise<SpeechStatus> {
+    await this.recover();
     const settings = this.config(),
       configured =
         !!this.settings().speech &&
@@ -112,6 +142,8 @@ export class SpeechManager {
           },
           this.installAbort.signal,
         );
+        settings.language =
+          this.settings().speech?.language ?? settings.language;
         if (this.closed) throw Error("The workspace is closing.");
         await this.save(settings);
         this.progress = undefined;
@@ -138,6 +170,7 @@ export class SpeechManager {
     return this.starting;
   }
   private async start(): Promise<SpeechStatus> {
+    await this.recover();
     const settings = this.config(),
       key = this.configKey(settings);
     if (this.child && this.runningConfig === key && this.phase === "ready")

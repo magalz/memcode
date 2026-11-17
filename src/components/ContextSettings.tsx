@@ -25,15 +25,36 @@ export function ContextSettings({
   change: (value: ContextAssistantSettings) => void;
 }) {
   const settings = value ?? contextAssistantDefaults;
+  const latestSettings = useRef(settings);
+  latestSettings.current = settings;
   const update = (patch: Partial<ContextAssistantSettings>) =>
     change({ ...settings, ...patch });
   const [status, setStatus] = useState<ContextAssistantSetupState>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [preferenceError, setPreferenceError] = useState("");
   const [checking, setChecking] = useState(false);
   const checks = useRef(new RetrievalStatusCheck());
   const mounted = useRef(true);
   const installingRef = useRef(false);
+  const preferenceSequence = useRef(0);
+  const persistManaged = async (next: ContextAssistantSettings) => {
+    change(next);
+    if (next.provider !== "onnx" || next.packageDirectory.trim()) return true;
+    const sequence = ++preferenceSequence.current;
+    try {
+      await window.memcode.configureRetrieval(next);
+      if (mounted.current && sequence === preferenceSequence.current)
+        setPreferenceError("");
+      return true;
+    } catch (error) {
+      if (mounted.current && sequence === preferenceSequence.current)
+        setPreferenceError(
+          error instanceof Error ? error.message : String(error),
+        );
+      return false;
+    }
+  };
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -56,7 +77,7 @@ export function ContextSettings({
     setChecking(false);
   }, []);
   useEffect(() => {
-    if (settings.enabled && managed) void refresh();
+    if (managed) void refresh();
     return () => checks.current.invalidate();
   }, [settings.enabled, managed, refresh]);
   useEffect(() => {
@@ -81,10 +102,13 @@ export function ContextSettings({
     setError("");
     try {
       const next = retrievalSetupState(await window.memcode.installRetrieval());
+      const persisted =
+        next.status !== "ready" ||
+        (await persistManaged(latestSettings.current));
       checks.current.invalidate();
       if (mounted.current) {
         setStatus(next);
-        setError("");
+        if (persisted) setError("");
       }
     } catch (error) {
       checks.current.invalidate();
@@ -120,7 +144,9 @@ export function ContextSettings({
         <input
           type="checkbox"
           checked={settings.enabled}
-          onChange={(event) => update({ enabled: event.target.checked })}
+          onChange={(event) =>
+            void persistManaged({ ...settings, enabled: event.target.checked })
+          }
         />
         <span>
           Use a local retrieval assistant
@@ -129,6 +155,17 @@ export function ContextSettings({
           </small>
         </span>
       </label>
+      {preferenceError && (
+        <p className="local-model-error" role="alert">
+          Your retrieval preference was not saved. {preferenceError}
+        </p>
+      )}
+      {!settings.enabled && managed && status?.status === "ready" && (
+        <p className="settings-hint">
+          <Check size={13} /> Your local model is installed. Enable it whenever
+          you need it.
+        </p>
+      )}
       {settings.enabled && managed && (
         <div className="local-model-card" aria-busy={installing || checking}>
           <div className="local-model-status">
@@ -192,9 +229,11 @@ export function ContextSettings({
             </button>
           )}
           <small>
-            {ready
-              ? "Runs locally when a worker needs context. Save settings to use it."
-              : `Downloads ${status?.totalBytes ? `about ${megabytes(status.totalBytes)} of ` : "the "}model files once. No extra app or package paths. Your code stays on this computer.`}
+            {ready && !preferenceError
+              ? "Runs locally when a worker needs context. Your setup is saved automatically."
+              : ready
+                ? "Your model is installed. Change the assistant preference again to retry saving."
+                : `Downloads ${status?.totalBytes ? `about ${megabytes(status.totalBytes)} of ` : "the "}model files once. No extra app or package paths. Your code stays on this computer.`}
           </small>
         </div>
       )}

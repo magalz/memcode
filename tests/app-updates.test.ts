@@ -27,6 +27,61 @@ const api = (patch: Partial<AppUpdateAPI> = {}): AppUpdateAPI => ({
 });
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
+test("automatic downloads prepare a verified update in the background and never restart active work", async () => {
+  let downloads = 0,
+    installs = 0;
+  const updater = new AppUpdater(
+    api({
+      context: async () => ({ activeWorkers: 3, activeTerminals: 1 }),
+      download: async (_, progress) => {
+        downloads++;
+        progress({ phase: "verifying", downloaded: 100, total: 100 });
+      },
+      install: async () => {
+        installs++;
+      },
+    }),
+  );
+  updater.setAutomaticDownloads(true);
+  await updater.start();
+  assert.equal(downloads, 1);
+  assert.equal(updater.getSnapshot().phase, "ready");
+  assert.equal(installs, 0);
+  await updater.poll();
+  updater.setAutomaticDownloads(true);
+  assert.equal(downloads, 1);
+  assert.equal(await updater.requestRestart(), false);
+  assert.deepEqual(updater.getSnapshot().restartReview, {
+    activeWorkers: 3,
+    activeTerminals: 1,
+  });
+  assert.equal(installs, 0);
+});
+
+test("automatic download opt-out retains manual control and a failure waits for an explicit retry", async () => {
+  let downloads = 0;
+  const updater = new AppUpdater(
+    api({
+      download: async () => {
+        downloads++;
+        throw Error("offline");
+      },
+    }),
+  );
+  updater.setAutomaticDownloads(false);
+  await updater.start();
+  assert.equal(downloads, 0);
+  updater.setAutomaticDownloads(true);
+  await tick();
+  assert.equal(downloads, 1);
+  assert.equal(updater.getSnapshot().phase, "error");
+  updater.setAutomaticDownloads(true);
+  await updater.poll();
+  assert.equal(downloads, 1);
+  await updater.download();
+  assert.equal(downloads, 2);
+});
+
 test("network failures never report up to date or retain a stale install announcement", async () => {
   let fail = false;
   const updater = new AppUpdater(

@@ -4,11 +4,36 @@ import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { homedir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import {
+  findMacCommand,
+  findMacDesktopApp,
+  macCommandDirectories,
+  type MacCommandOptions,
+} from "./mac-commands";
 
 export interface Command {
   command: string;
   prefix: string[];
   env?: Record<string, string>;
+  /** Provider identity, independent of the MemCode Node executable hosting it. */
+  identity?: string;
+}
+export function commandIdentity(command: Command): string {
+  const script = command.prefix[0];
+  return (
+    command.identity ??
+    (script && isAbsolute(script) && /\.(?:cjs|mjs|js)$/i.test(script)
+      ? script
+      : command.command)
+  );
+}
+export async function findDesktopApp(
+  name: string,
+  options: MacCommandOptions & { platform?: NodeJS.Platform } = {},
+): Promise<string | null> {
+  return (options.platform ?? process.platform) === "darwin"
+    ? findMacDesktopApp(name, options)
+    : null;
 }
 export async function exists(path: string): Promise<boolean> {
   try {
@@ -47,6 +72,8 @@ export function childEnv(
         .filter(Boolean),
     ),
   ];
+  if (process.platform === "darwin")
+    parts.push(...macCommandDirectories(), dirname(process.execPath));
   const kept: string[] = [];
   for (const part of parts)
     if ([...kept, part].join(delimiter).length < 7000) kept.push(part);
@@ -82,6 +109,8 @@ async function cursorRuntime(): Promise<Command | null> {
         return {
           command: join(path, "node.exe"),
           prefix: [join(path, "index.js")],
+          identity:
+            "cursor-agent-install:" + root.replaceAll("\\", "/").toLowerCase(),
           env: { CURSOR_INVOKED_AS: "agent" },
         };
   } catch {
@@ -160,6 +189,7 @@ async function codexAppx(): Promise<Command | null> {
 export async function findCommand(
   name: string,
   configured = "",
+  options: MacCommandOptions & { platform?: NodeJS.Platform } = {},
 ): Promise<Command | null> {
   if (configured) {
     if (!isAbsolute(configured) || !(await exists(configured))) return null;
@@ -167,12 +197,15 @@ export async function findCommand(
       return {
         command: process.execPath,
         prefix: [configured],
+        identity: configured,
         env: { ELECTRON_RUN_AS_NODE: "1" },
       };
     if (process.platform === "win32" && !/\.exe$/i.test(configured))
       return null;
     return { command: configured, prefix: [] };
   }
+  if ((options.platform ?? process.platform) === "darwin")
+    return findMacCommand(name, options);
   if (name === "cursor") {
     const runtime = await cursorRuntime();
     if (runtime) return runtime;
@@ -218,6 +251,7 @@ export async function findCommand(
           return {
             command: process.execPath,
             prefix: [path],
+            identity: path,
             env: { ELECTRON_RUN_AS_NODE: "1" },
           };
       }

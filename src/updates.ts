@@ -88,6 +88,7 @@ export class AppUpdater {
   private inspectingRestart = false;
   private started = false;
   private lastPassiveCheck?: number;
+  private automaticDownloads = false;
   constructor(
     private readonly api: AppUpdateAPI = nativeAPI,
     private readonly clock: () => number = Date.now,
@@ -134,6 +135,10 @@ export class AppUpdater {
   }
   history() {
     return this.api.history();
+  }
+  setAutomaticDownloads(enabled: boolean) {
+    this.automaticDownloads = enabled;
+    if (enabled && this.snapshot.phase === "available") void this.download();
   }
   async start() {
     if (this.started) return;
@@ -193,6 +198,8 @@ export class AppUpdater {
     } finally {
       this.busy = false;
     }
+    if (this.automaticDownloads && this.snapshot.phase === "available")
+      await this.download();
   }
   async download() {
     if (

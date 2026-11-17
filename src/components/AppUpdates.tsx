@@ -62,12 +62,18 @@ function ReleaseHistoryEntry({
 /** A quiet installed-app entry point; checking never signs in or installs. */
 export function AppUpdateAction({
   open,
+  automaticDownloads = true,
   updater = appUpdater,
 }: {
   open: () => void;
+  automaticDownloads?: boolean;
   updater?: AppUpdater;
 }) {
   const state = useSyncExternalStore(updater.subscribe, updater.getSnapshot);
+  useEffect(
+    () => updater.setAutomaticDownloads(automaticDownloads),
+    [updater, automaticDownloads],
+  );
   useEffect(() => {
     void updater.start();
     const recheck = () => {
@@ -114,9 +120,13 @@ export function AppUpdateAction({
 
 export function AppUpdates({
   currentVersion,
+  automaticDownloads = true,
+  onAutomaticDownloadsChange,
   updater = appUpdater,
 }: {
   currentVersion: string;
+  automaticDownloads?: boolean;
+  onAutomaticDownloadsChange?: (enabled: boolean) => void;
   updater?: AppUpdater;
 }) {
   const state = useSyncExternalStore(updater.subscribe, updater.getSnapshot);
@@ -218,7 +228,9 @@ export function AppUpdates({
           <p>
             {development
               ? "Keep this checkout current with Git. Signed app updates are available in installed beta releases."
-              : "MemCode checks for updates while it’s open. Download and restart when you choose; your account and workspace stay with you."}
+              : automaticDownloads
+                ? "Updates download in the background. Restart when you’re ready; your account, workers and workspace stay with you."
+                : "MemCode checks for updates while it’s open. Download and restart when you choose; your account and workspace stay with you."}
           </p>
         </div>
         {state.info && !development && (
@@ -248,6 +260,24 @@ export function AppUpdates({
             }}
           />
         </div>
+      )}
+      {!development && onAutomaticDownloadsChange && (
+        <label className="checkbox-label app-update-preference">
+          <input
+            type="checkbox"
+            checked={automaticDownloads}
+            onChange={(event) =>
+              onAutomaticDownloadsChange(event.target.checked)
+            }
+          />
+          <span>
+            Download updates automatically
+            <small>
+              Verified downloads prepare in the background. You choose when to
+              restart.
+            </small>
+          </span>
+        </label>
       )}
       {state.error && (
         <p className="app-update-error" role="alert">

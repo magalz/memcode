@@ -1,24 +1,11 @@
 import type { AppState, HarnessRuntime, WorkItem } from "./shared";
-
-function pathKey(path: string) {
-  return /\\|^[a-z]:/i.test(path)
-    ? path.replaceAll("\\", "/").toLowerCase()
-    : path;
-}
+import { workerApprovalMatches } from "./connections";
 export function approvedRuntime(
   runtime: HarnessRuntime | undefined,
   connections: AppState["workerConnections"],
 ) {
   if (!runtime?.available || !runtime.path) return false;
-  const receipt = connections?.[runtime.id];
-  return (
-    !!receipt &&
-    receipt.scopeVersion === 1 &&
-    receipt.harness === runtime.id &&
-    !!receipt.approvedAt &&
-    ["authenticated", "local"].includes(receipt.auth) &&
-    pathKey(receipt.runtimePath) === pathKey(runtime.path)
-  );
+  return workerApprovalMatches(connections?.[runtime.id], runtime);
 }
 export function workerReadiness(
   task: Pick<WorkItem, "assignment" | "harness" | "route" | "example">,

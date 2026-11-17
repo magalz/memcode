@@ -139,6 +139,9 @@ fn installed_only() -> Result<(), String> {
     if development() {
         return Err("Development builds update through Git. Install a beta release to use signed app updates.".into());
     }
+    if !crate::install_location::status().can_update {
+        return Err("Move MemCode into Applications and open the installed copy before updating. Your projects and settings stay saved.".into());
+    }
     Ok(())
 }
 

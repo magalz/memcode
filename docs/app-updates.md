@@ -1,8 +1,14 @@
 # App updates
 
-Installed MemCode releases use Tauri's signed updater. When a release is available, choose **Download update** in the app header or open **Settings → MemCode updates**. Follow download progress, keep working, then choose **Restart to update** when ready. An idle workspace restarts directly; active workers prevent installation, and open terminal sessions get a clear review before restart. Queued follow-ups are retained.
+Installed MemCode releases use Tauri's signed updater. Verified updates download in the background by default. Keep working, then choose **Restart to update** in the app header when ready. An idle workspace restarts directly; active workers prevent installation, and open terminal sessions get a clear review before restart. Queued follow-ups are retained. To control downloads yourself, turn off **Download updates automatically** in **Settings → MemCode updates** and save.
 
 Updates keep the same local profile, approved Memtrace account and projects. A routine app or bundled-engine update does not require another browser approval. An already-running account refresh finishes saving its replacement credential during shutdown.
+
+The same profile also retains worker approvals, permission defaults, onboarding progress, dictation language and local retrieval preferences. Downloaded models live in the profile cache, outside the replaced application. A provider approval follows its supported installation identity, not MemCode's bundled Node launcher. A genuinely different provider installation still requires approval; a temporarily unavailable sign-in check preserves the existing receipt and shows **Connection saved**.
+
+On macOS, drag MemCode from the downloaded disk image into Applications, eject the image and open the installed app. A focused installation guide appears when MemCode runs from a read-only image or AppTranslocation; in-place updates are blocked there. This does not bypass Gatekeeper. The manual-approval beta is ad-hoc signed: removing Apple's warning for new releases requires a Developer ID signature and notarization, independently of the updater's cryptographic signature.
+
+The updater keeps a prepared download while the app stays open, including when Settings closes. Download persistence across a full quit is not established by this implementation.
 
 Development checkouts use Git and `npm run dev`; the updater does not replace a running development build.
 
@@ -36,3 +42,7 @@ cargo test --manifest-path src-tauri/Cargo.toml updates::tests:: -- --nocapture
 ```
 
 The Rust test uses the real Tauri signer/verifier protocol with a discarded test key. It accepts the signed fixture and rejects altered bytes, a different key and an announced version that differs from the signed version. The UI smoke uses a clearly isolated backend fixture and never installs an update. A release-to-release installer/restart test on each supported OS is a separate release acceptance step; these tests do not claim that installation happened.
+
+## Reference behavior
+
+The implementation follows the stable launcher/background-update approach documented by [Claude Code](https://code.claude.com/docs/en/setup), the [Cursor CLI update flow](https://cursor.com/docs/cli/installation), and Tauri's [DMG](https://v2.tauri.app/distribute/dmg/) and [signed updater](https://v2.tauri.app/plugin/updater/) contracts. GUI-launched Mac apps search bounded standard provider/package-manager locations instead of assuming Finder inherits a terminal's PATH. An editor being present is distinguished from its worker CLI being available.

@@ -64,6 +64,7 @@ import "./styles-team.css";
 import "./styles-collaboration.css";
 import { BetaAccess } from "./components/BetaAccess";
 import { AppUpdateAction } from "./components/AppUpdates";
+import { InstallationGuide } from "./components/InstallationGuide";
 import type { MemCodeBetaStatus } from "./beta";
 import type { MemtraceAccount } from "./connections";
 import { approvedRuntime } from "./worker-availability";
@@ -495,6 +496,7 @@ export function App() {
   }
   return (
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
+      <InstallationGuide />
       <div className="desktop-titlebar" data-tauri-drag-region>
         <div className="titlebar-left">
           <button
@@ -688,7 +690,12 @@ export function App() {
               <span />
               {runtimeHealth.available ? "Local execution" : "Runtime stopped"}
             </span>
-            <AppUpdateAction open={() => setDialog("settings")} />
+            <AppUpdateAction
+              open={() => setDialog("settings")}
+              automaticDownloads={
+                state.settings.automaticUpdateDownloads !== false
+              }
+            />
             <button
               className="icon-button"
               title="Search workspace"
@@ -874,6 +881,7 @@ export function App() {
                 })}
               <WorkerConnections
                 runtime={runtime}
+                onRuntime={setRuntime}
                 state={state}
                 notify={notify}
                 onCreateWork={() => create()}

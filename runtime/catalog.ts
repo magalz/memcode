@@ -3,7 +3,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { childEnv, findCommand } from "./commands";
+import {
+  childEnv,
+  commandIdentity,
+  findCommand,
+  findDesktopApp,
+} from "./commands";
 import {
   harnessNames,
   type Harness,
@@ -100,6 +105,7 @@ export async function discoverHarnesses(
   const value = await Promise.all(
     (["codex", "claude", "cursor"] as Harness[]).map(async (id) => {
       const command = await findCommand(id);
+      const desktopAppPath = await findDesktopApp(id);
       let models: ModelOption[] = [];
       if (command && id === "codex") models = await codexModels();
       if (command && id === "cursor") models = await cursorModels(command);
@@ -116,6 +122,8 @@ export async function discoverHarnesses(
         name: harnessNames[id],
         available: !!command,
         path: command?.command ?? null,
+        ...(command ? { runtimeIdentity: commandIdentity(command) } : {}),
+        ...(desktopAppPath ? { desktopAppPath } : {}),
         models,
         note: command
           ? models.length

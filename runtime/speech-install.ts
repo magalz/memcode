@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import {
   mkdir,
   readFile,
@@ -7,6 +8,7 @@ import {
   stat,
   readdir,
   chmod,
+  lstat,
 } from "node:fs/promises";
 import { join, resolve, isAbsolute, basename } from "node:path";
 import { unzipSync } from "fflate";
@@ -57,6 +59,118 @@ export const speechAssets = {
 export const managedInstallAvailable = !!speechRuntimeFor();
 export const speechDownloadBytes = () =>
   (speechRuntimeFor()?.bytes ?? 0) + speechAssets.modelBytes;
+
+export interface SpeechCacheManifest {
+  runtime: SpeechRuntimeAsset;
+  version: string;
+  platform: string;
+  arch: string;
+  modelSha256: string;
+  modelBytes: number;
+}
+function speechCacheManifest(): SpeechCacheManifest | undefined {
+  const runtime = speechRuntimeFor();
+  return runtime
+    ? {
+        runtime,
+        version: speechAssets.version,
+        platform: process.platform,
+        arch: process.arch,
+        modelSha256: speechAssets.modelSha256,
+        modelBytes: speechAssets.modelBytes,
+      }
+    : undefined;
+}
+async function cachedFileHash(path: string, bytes: number) {
+  const info = await lstat(path);
+  if (!info.isFile() || info.isSymbolicLink() || info.size !== bytes)
+    throw Error("The cached speech file changed.");
+  const hash = createHash("sha256");
+  let observed = 0;
+  for await (const chunk of createReadStream(path)) {
+    observed += chunk.length;
+    if (observed > bytes) throw Error("The cached speech file changed.");
+    hash.update(chunk);
+  }
+  if (observed !== bytes) throw Error("The cached speech file changed.");
+  return hash.digest("hex");
+}
+
+/** Read-only recovery of this release's already verified managed assets. */
+export async function findManagedSpeechAssets(
+  dataDir: string,
+  manifest: SpeechCacheManifest | undefined = speechCacheManifest(),
+): Promise<SpeechSettings | undefined> {
+  if (!manifest) return;
+  const { runtime, version, platform, arch } = manifest;
+  const root = join(dataDir, "speech"),
+    directory = join(
+      root,
+      version,
+      `${platform}-${arch}-${runtime.sha256.slice(0, 12)}`,
+    );
+  const archive = join(
+    root,
+    `whisper-cpu-${version}-${platform}-${arch}-${runtime.sha256.slice(0, 12)}.zip`,
+  );
+  try {
+    if ((await cachedFileHash(archive, runtime.bytes)) !== runtime.sha256)
+      return;
+    const zip = await readFile(archive);
+    if (
+      zip.length !== runtime.bytes ||
+      createHash("sha256").update(zip).digest("hex") !== runtime.sha256
+    )
+      return;
+    const files = unzipSync(zip, {
+      filter: (file) => {
+        if (!safeArchivePath(file.name) || file.originalSize > 64_000_000)
+          throw Error("Invalid speech runtime archive.");
+        return !file.name.endsWith("/");
+      },
+    });
+    const entries = Object.entries(files);
+    if (
+      entries.length > 128 ||
+      entries.reduce((n, [, bytes]) => n + bytes.length, 0) > 256_000_000
+    )
+      return;
+    for (const [name, bytes] of entries)
+      if (
+        (await cachedFileHash(join(directory, name), bytes.length)) !==
+        createHash("sha256").update(bytes).digest("hex")
+      )
+        return;
+    const executables = entries
+      .filter(([name]) =>
+        /^(whisper-server|server)(\.exe)?$/i.test(basename(name)),
+      )
+      .sort(
+        ([a], [b]) =>
+          Number(!basename(a).startsWith("whisper-server")) -
+          Number(!basename(b).startsWith("whisper-server")),
+      );
+    const chosen = executables.find(
+      ([, bytes]) =>
+        !runtime.executableSha256 ||
+        createHash("sha256").update(bytes).digest("hex") ===
+          runtime.executableSha256,
+    );
+    if (!chosen) return;
+    const executable = join(directory, chosen[0]),
+      modelPath = join(root, "ggml-tiny.bin");
+    if (platform !== "win32" && !((await lstat(executable)).mode & 0o111))
+      return;
+    if (
+      (await cachedFileHash(modelPath, manifest.modelBytes)) !==
+      manifest.modelSha256
+    )
+      return;
+    return { mode: "managed", executable, modelPath, language: "auto" };
+  } catch {
+    return;
+  }
+}
 export function safeArchivePath(name: string) {
   return (
     !!name &&
@@ -142,6 +256,12 @@ export async function installSpeechAssets(
     throw Error(
       "Local dictation setup is available for Windows x64 and Apple Silicon Mac installers. This architecture needs an existing local speech server in Advanced settings.",
     );
+  const cached = await findManagedSpeechAssets(dataDir);
+  if (cached) {
+    signal?.throwIfAborted();
+    progress(1);
+    return cached;
+  }
   const root = join(dataDir, "speech"),
     directory = join(
       root,
@@ -176,6 +296,11 @@ export async function installSpeechAssets(
     throw Error("The speech runtime archive is too large.");
   for (const [name, bytes] of Object.entries(files)) {
     const path = join(directory, name);
+    if (
+      (await cachedFileHash(path, bytes.length).catch(() => "")) ===
+      createHash("sha256").update(bytes).digest("hex")
+    )
+      continue;
     await mkdir(resolve(path, ".."), { recursive: true });
     await writeFile(path, bytes);
   }
@@ -189,7 +314,11 @@ export async function installSpeechAssets(
       .digest("hex") !== runtime.executableSha256
   )
     throw Error("The local speech executable failed its integrity check.");
-  if (process.platform !== "win32") await chmod(executable, 0o755);
+  if (
+    process.platform !== "win32" &&
+    ((await stat(executable)).mode & 0o777) !== 0o755
+  )
+    await chmod(executable, 0o755);
   const modelPath = join(root, "ggml-tiny.bin");
   await download(
     speechAssets.modelUrl,

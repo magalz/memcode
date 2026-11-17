@@ -1,7 +1,13 @@
 import { z } from "zod";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { childEnv, findCommand } from "./commands";
+import { isAbsolute } from "node:path";
+import {
+  childEnv,
+  commandIdentity,
+  findCommand,
+  findDesktopApp,
+} from "./commands";
 import { MemtraceAccountManager, type MemtraceAccountOptions } from "./account";
 import type { NativeHost } from "./host";
 import {
@@ -10,14 +16,13 @@ import {
   type Harness,
   type HarnessRuntime,
 } from "../src/shared";
-import type { WorkerConnectionStatus } from "../src/connections";
+import {
+  hasWorkerApproval,
+  workerApprovalMatches,
+  type WorkerConnectionStatus,
+} from "../src/connections";
 const execute = promisify(execFile);
 const clean = (text: string) => text.replace(/\u001b\[[0-9;]*m/g, "");
-const samePath = (a: string, b: string) =>
-  process.platform === "win32"
-    ? a.replaceAll("\\", "/").toLowerCase() ===
-      b.replaceAll("\\", "/").toLowerCase()
-    : a === b;
 export const loginCommands = {
   codex: "codex login",
   claude: "claude auth login",
@@ -69,17 +74,13 @@ export function assertWorkerConnected(
   state: AppState,
   harness: Harness,
   path?: string,
+  runtimeIdentity?: string,
 ) {
   const receipt = state.workerConnections?.[harness];
   if (
-    !receipt ||
-    receipt.scopeVersion !== 1 ||
-    receipt.harness !== harness ||
-    typeof receipt.runtimePath !== "string" ||
-    !receipt.runtimePath ||
-    !["authenticated", "local"].includes(receipt.auth) ||
-    !receipt.approvedAt ||
-    (path && !samePath(receipt.runtimePath, path))
+    !hasWorkerApproval(receipt, harness) ||
+    (path &&
+      !workerApprovalMatches(receipt, { id: harness, path, runtimeIdentity }))
   )
     throw Error(
       `Connect ${harnessNames[harness]} in Workers before starting a worker.`,
@@ -89,7 +90,12 @@ export function connectedRuntimes(state: AppState, runtimes: HarnessRuntime[]) {
   return runtimes.filter((runtime) => {
     try {
       if (!runtime.available || !runtime.path) return false;
-      assertWorkerConnected(state, runtime.id, runtime.path);
+      assertWorkerConnected(
+        state,
+        runtime.id,
+        runtime.path,
+        runtime.runtimeIdentity,
+      );
       return true;
     } catch {
       return false;
@@ -111,28 +117,50 @@ export function registerConnections(
   accountOptions: MemtraceAccountOptions = {},
 ) {
   const account = new MemtraceAccountManager(configuredPath, host, {
-    ...accountOptions,
-    beforeChange: () => {
-      if (state().tasks.some((task) => !task.example && ["preparing", "running", "stopping"].includes(task.run.state)))
-        throw Error("Stop active workers before changing the Memtrace account.");
-      return accountOptions.beforeChange?.();
-    },
-  }),
+      ...accountOptions,
+      beforeChange: () => {
+        if (
+          state().tasks.some(
+            (task) =>
+              !task.example &&
+              ["preparing", "running", "stopping"].includes(task.run.state),
+          )
+        )
+          throw Error(
+            "Stop active workers before changing the Memtrace account.",
+          );
+        return accountOptions.beforeChange?.();
+      },
+    }),
     id = z.enum(["codex", "claude", "cursor"]);
   // Reuse the existing Memtrace session for host-owned author attribution.
   // This is a read-only status check, not a worker connection or login action.
   void account.refresh().catch(() => {});
   const status = async (harness: Harness): Promise<WorkerConnectionStatus> => {
-    const command = await commandFor(harness),
-      receipt = state().workerConnections?.[harness];
+    const receipt = state().workerConnections?.[harness];
+    let command = await commandFor(harness);
+    // A GUI launch can have a narrower PATH than the terminal that originally
+    // connected the provider. Reuse its explicitly approved provider entry.
+    if (!command && hasWorkerApproval(receipt, harness)) {
+      const saved = receipt.runtimeIdentity ?? receipt.runtimePath;
+      if (isAbsolute(saved) && !/[/\\]node(?:\.exe)?$/i.test(saved))
+        command = await commandFor(harness, saved);
+    }
     if (!command)
       return {
         harness,
         installed: false,
         connected: false,
         runtimePath: null,
+        approvalSaved: hasWorkerApproval(receipt, harness),
+        approvedAt: hasWorkerApproval(receipt, harness)
+          ? receipt.approvedAt
+          : undefined,
+        desktopAppPath: (await findDesktopApp(harness)) ?? undefined,
         auth: "unknown",
-        note: "Install the standalone CLI, then connect it here.",
+        note: hasWorkerApproval(receipt, harness)
+          ? "Your worker approval is saved. Its command-line runtime could not be found; refresh discovery or restore the runtime."
+          : "Install the standalone CLI, then connect it here.",
         loginCommand: loginCommands[harness],
       };
     let auth: Pick<WorkerConnectionStatus, "auth" | "accountLabel"> = {
@@ -160,32 +188,56 @@ export function registerConnections(
           },
         );
         auth = parseWorkerAuth(harness, stdout, stderr);
-      } catch {
+      } catch (error) {
+        const failure = error as { stdout?: string; stderr?: string };
+        auth = parseWorkerAuth(
+          harness,
+          failure.stdout ?? "",
+          failure.stderr ?? "",
+        );
         /* No raw CLI output or credentials reach the renderer. */
       }
     }
-    const approved =
-        !!receipt &&
-        receipt.scopeVersion === 1 &&
-        samePath(receipt.runtimePath, command.command),
+    const identity = commandIdentity(command);
+    const approved = workerApprovalMatches(receipt, {
+        id: harness,
+        path: command.command,
+        runtimeIdentity: identity,
+      }),
       connected =
         approved && (auth.auth === "authenticated" || auth.auth === "local");
+    if (
+      approved &&
+      receipt &&
+      (receipt.runtimeIdentity !== identity ||
+        receipt.runtimePath !== command.command)
+    ) {
+      receipt.runtimeIdentity = identity;
+      receipt.runtimePath = command.command;
+      await changed();
+    }
     return {
       harness,
       installed: true,
       connected,
+      approvalSaved: approved,
       runtimePath: command.command,
+      runtimeIdentity: identity,
       ...auth,
-      approvedAt: approved ? receipt.approvedAt : undefined,
+      approvedAt: approved ? receipt?.approvedAt : undefined,
       note: connected
         ? "Approved for projects you select. No worker starts until you send work."
-        : receipt && !approved
-          ? "The installed runtime changed. Review and approve its connection again."
-          : auth.auth === "local"
-            ? "A local model is configured. Review and approve the connection."
-            : auth.auth === "authenticated"
-              ? "Installed and signed in. Review and approve the connection."
-              : `Sign in with ${loginCommands[harness]}, then check again.`,
+        : approved
+          ? auth.auth === "unknown"
+            ? "Your worker approval is saved. Sign-in status could not be checked; check again before starting work."
+            : `Your worker approval is saved. Sign in with ${loginCommands[harness]}, then check again.`
+          : receipt && !approved
+            ? "The installed runtime changed. Review and approve its connection again."
+            : auth.auth === "local"
+              ? "A local model is configured. Review and approve the connection."
+              : auth.auth === "authenticated"
+                ? "Installed and signed in. Review and approve the connection."
+                : `Sign in with ${loginCommands[harness]}, then check again.`,
       loginCommand: loginCommands[harness],
     };
   };
@@ -207,6 +259,7 @@ export function registerConnections(
         harness: input.harness,
         approvedAt: new Date().toISOString(),
         runtimePath: result.runtimePath,
+        runtimeIdentity: result.runtimeIdentity ?? result.runtimePath,
         auth: result.auth,
         accountLabel: result.accountLabel,
         scopeVersion: 1,
@@ -237,6 +290,8 @@ export function registerConnections(
   register("account:sign-in", z.undefined(), () => account.signIn());
   register("account:sign-out", z.undefined(), () => account.signOut());
   register("account:switch", z.undefined(), () => account.switchAccount());
-  register("account:cancel-sign-in", z.undefined(), () => account.cancelSignIn());
+  register("account:cancel-sign-in", z.undefined(), () =>
+    account.cancelSignIn(),
+  );
   return { account, close: () => account.close() };
 }

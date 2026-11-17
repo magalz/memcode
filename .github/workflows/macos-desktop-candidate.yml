@@ -172,6 +172,39 @@ jobs:
           MEMCODE_MAC_KEYCHAIN_TEST: "1"
         run: node scripts/macos-keychain-acceptance.mjs
 
+      - name: Verify installed Mac agent discovery with Finder PATH and the real Codex application
+        timeout-minutes: 12
+        run: node --import tsx scripts/macos-harness-acceptance.mjs --verify-codex-app
+
+      - name: Verify native installation guard on a real read-only disk image
+        timeout-minutes: 3
+        run: |
+          cargo test --manifest-path src-tauri/Cargo.toml install_location::tests -- --nocapture
+          node scripts/macos-installation-acceptance.mjs
+
+      - name: Verify downloaded models survive an actual resource-root move and two offline restarts
+        timeout-minutes: 25
+        run: |
+          node --input-type=module <<'NODE'
+          import {createHash} from 'node:crypto';
+          import {createReadStream,createWriteStream} from 'node:fs';
+          import {mkdir} from 'node:fs/promises';
+          import {join} from 'node:path';
+          import {Readable} from 'node:stream';
+          import {pipeline} from 'node:stream/promises';
+          import {execFileSync} from 'node:child_process';
+          const directory=join(process.env.RUNNER_TEMP,'reviewed-memcode-beta10');
+          await mkdir(directory,{recursive:true});
+          const archive=join(directory,'MemCode.app.tar.gz');
+          const response=await fetch('https://d12b8r6xagt10r.cloudfront.net/releases/memcode/0.4.0-beta.10/macos-aarch64/MemCode.app.tar.gz');
+          if(!response.ok||!response.body)throw Error('Could not fetch the reviewed previous installer');
+          await pipeline(Readable.fromWeb(response.body),createWriteStream(archive,{flags:'wx'}));
+          const hash=createHash('sha256');for await(const chunk of createReadStream(archive))hash.update(chunk);
+          if(hash.digest('hex')!=='54cb1619d1e672242f7e29e33a63410973e6754e0c0fff5e272456f9f112f687')throw Error('Previous installer integrity failed');
+          execFileSync('/usr/bin/tar',['-xzf',archive,'-C',directory]);
+          execFileSync(process.execPath,['scripts/upgrade-models-acceptance.mjs','--previous-resources',join(directory,'MemCode.app/Contents/Resources'),'--resources','src-tauri/target/release/bundle/macos/MemCode.app/Contents/Resources'],{stdio:'inherit'});
+          NODE
+
       - name: Verify the updater and collect bounded candidate files
         env:
           ENGINE_ACCEPTANCE: ${{ github.event_name == 'workflow_dispatch' && inputs.engine_acceptance && 'true' || 'false' }}
@@ -212,6 +245,9 @@ jobs:
             nativeColdStart: JSON.parse(readFileSync('release/macos-cold-start.json', 'utf8')),
             nativeUpdaterAcl: JSON.parse(readFileSync('release/native-updater-acl-darwin.json', 'utf8')),
             nativeKeychainRotation: JSON.parse(readFileSync('release/macos-keychain-rotation.json', 'utf8')),
+            nativeHarnessDiscovery: JSON.parse(readFileSync('release/macos-harness-discovery.json', 'utf8')),
+            nativeInstallationGuard: JSON.parse(readFileSync('release/macos-installation-guard.json', 'utf8')),
+            installedModelRetention: JSON.parse(readFileSync('release/upgrade-models-darwin.json', 'utf8')),
             bundledEngine: JSON.parse(readFileSync('release/bundled-engine-darwin-prepare-only.json', 'utf8')),
             authenticatedEngineAcceptance: process.env.ENGINE_ACCEPTANCE === 'true' ? JSON.parse(readFileSync('release/bundled-engine-darwin-real-account-index-watch.json', 'utf8')) : {tested:false,reason:'dedicated real account test not requested'},
             packagedRuntime: JSON.parse(readFileSync('dist-desktop-runtime/provenance.json', 'utf8')),
@@ -233,6 +269,9 @@ jobs:
             release/macos-cold-start.png
             release/native-updater-acl-darwin.json
             release/macos-keychain-rotation.json
+            release/macos-harness-discovery.json
+            release/macos-installation-guard.json
+            release/upgrade-models-darwin.json
             release/macos-release-trust.json
             release/bundled-engine-darwin-prepare-only.json
             release/bundled-engine-darwin-real-account-index-watch.json

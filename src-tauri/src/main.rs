@@ -6,6 +6,7 @@ mod browser;
 #[cfg(windows)]
 mod browser_capture;
 mod native;
+mod install_location;
 mod state_patch;
 mod terminal;
 mod updates;

@@ -42,6 +42,7 @@ export function WorkerConnections({
   notify,
   onCreateWork,
   onConnected,
+  onRuntime,
   compact = false,
 }: {
   runtime: RuntimeInfo;
@@ -49,6 +50,7 @@ export function WorkerConnections({
   notify: (text: string) => void;
   onCreateWork?: (harness: Harness) => void;
   onConnected?: (harness: Harness) => void;
+  onRuntime?: (runtime: RuntimeInfo) => void;
   compact?: boolean;
 }) {
   const health = useRuntimeHealth();
@@ -61,9 +63,13 @@ export function WorkerConnections({
     [savingDefault, setSavingDefault] = useState<Harness>();
   const busyRef = useRef(busy);
   busyRef.current = busy;
-  const refresh = useCallback(async () => {
+  const onRuntimeRef = useRef(onRuntime);
+  onRuntimeRef.current = onRuntime;
+  const refresh = useCallback(async (discover = false) => {
     setLoading(true);
     try {
+      if (discover)
+        onRuntimeRef.current?.(await window.memcode.refreshWorkerCatalog());
       setStatuses(await window.memcode.workerConnectionStatus());
       setError("");
     } catch (error) {
@@ -180,7 +186,7 @@ export function WorkerConnections({
         </div>
         <button
           className="button secondary worker-connections-refresh"
-          onClick={() => void refresh()}
+          onClick={() => void refresh(true)}
           disabled={loading || busy || !health.available}
           aria-label="Refresh worker connections"
         >
@@ -194,10 +200,17 @@ export function WorkerConnections({
         </p>
       )}
       <div className="worker-connection-grid">
-        {runtime.harnesses.map((installed) => {
+        {runtime.harnesses.map((catalogRuntime) => {
+          const installed = catalogRuntime;
           const status = statuses.find((s) => s.harness === installed.id),
             connected = health.available && status?.connected === true,
-            approvalSaved = approvedRuntime(installed, state.workerConnections),
+            approvalSaved =
+              status?.approvalSaved ??
+              approvedRuntime(installed, state.workerConnections),
+            available = status?.installed ?? installed.available,
+            desktopFound = !!(
+              status?.desktopAppPath ?? installed.desktopAppPath
+            ),
             defaultMode =
               state.settings.workerPermissionDefaults?.[installed.id] ??
               "review",
@@ -229,8 +242,12 @@ export function WorkerConnections({
                     ) : (
                       "Status unavailable"
                     )
-                  ) : installed.available ? (
+                  ) : approvalSaved ? (
+                    "Connection saved"
+                  ) : available ? (
                     "Installed"
+                  ) : desktopFound ? (
+                    "App found"
                   ) : (
                     "Not installed"
                   )}
@@ -240,17 +257,19 @@ export function WorkerConnections({
               <p>
                 {!health.available
                   ? "Runtime disconnected. Your saved connection approval is unchanged."
-                  : (status?.note ??
-                    (loading
-                      ? "Checking your installed setup…"
-                      : "Connect your installed worker to use it here."))}
+                  : !available && desktopFound && !approvalSaved
+                    ? "Your desktop app is installed. Set up its agent command to run workers here, then refresh."
+                    : (status?.note ??
+                      (loading
+                        ? "Checking your installed setup…"
+                        : "Connect your installed worker to use it here."))}
               </p>
               {connected && status?.accountLabel && (
                 <small className="connection-account-label">
                   {status.accountLabel}
                 </small>
               )}
-              {installed.available && (
+              {(available || approvalSaved) && (
                 <div className="worker-default-control">
                   <label>
                     <span>Default permissions</span>
@@ -329,10 +348,53 @@ export function WorkerConnections({
                       <Unplug size={13} />
                     </button>
                   </>
+                ) : approvalSaved ? (
+                  <>
+                    <button
+                      className="button secondary worker-connect-button"
+                      disabled={loading || busy}
+                      onClick={() => void refresh(true)}
+                    >
+                      <RefreshCw size={12} />
+                      Check again
+                    </button>
+                    <button
+                      className="text-button"
+                      onClick={() =>
+                        void window.memcode
+                          .openWorkerSetup(installed.id)
+                          .catch((error) => notify((error as Error).message))
+                      }
+                    >
+                      {available ? "Sign-in help" : "Set up agent"}
+                      <ArrowUpRight size={12} />
+                    </button>
+                    <button
+                      className="icon-button"
+                      aria-label={"Disconnect " + installed.name}
+                      disabled={busy || active > 0}
+                      onClick={() => void disconnect(installed.id)}
+                    >
+                      <Unplug size={13} />
+                    </button>
+                  </>
+                ) : !available ? (
+                  <button
+                    className="button secondary worker-connect-button"
+                    disabled={loading || busy}
+                    onClick={() =>
+                      void window.memcode
+                        .openWorkerSetup(installed.id)
+                        .catch((error) => notify((error as Error).message))
+                    }
+                  >
+                    <ArrowUpRight size={12} />
+                    Set up {installed.name}
+                  </button>
                 ) : (
                   <button
                     className="button secondary worker-connect-button"
-                    disabled={!installed.available || busy || loading}
+                    disabled={busy || loading}
                     onClick={() => {
                       setSelected(
                         status ?? {

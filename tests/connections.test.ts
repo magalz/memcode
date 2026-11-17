@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve, sep } from "node:path";
 import { initialState } from "../src/seed";
@@ -16,6 +16,8 @@ import {
   parseMemtraceStatus,
 } from "../runtime/account";
 import type { AppState, HarnessRuntime } from "../src/shared";
+import type { Command } from "../runtime/commands";
+import { workerApprovalMatches } from "../src/connections";
 
 test("Memtrace status never invents a person or returns credential fields", () => {
   const account = parseMemtraceStatus({
@@ -129,6 +131,114 @@ test("installed adapters are disconnected until an explicit path-bound grant", (
   );
 });
 
+test("legacy bundled-Node approval follows the provider across an app relocation, not an arbitrary script", () => {
+  const state = initialState(),
+    approvedAt = "2026-11-15T12:00:00Z";
+  state.workerConnections = {
+    codex: {
+      harness: "codex",
+      approvedAt,
+      scopeVersion: 1,
+      auth: "authenticated",
+      runtimePath:
+        "/Volumes/MemCode/MemCode.app/Contents/Resources/desktop-runtime/node",
+    },
+  };
+  const runtime: HarnessRuntime = {
+    id: "codex",
+    name: "Codex",
+    available: true,
+    models: [],
+    path: "/Applications/MemCode.app/Contents/Resources/desktop-runtime/node",
+    runtimeIdentity:
+      "/opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js",
+  };
+  assert.deepEqual(connectedRuntimes(state, [runtime]), [runtime]);
+  assert.doesNotThrow(() =>
+    assertWorkerConnected(
+      state,
+      "codex",
+      runtime.path!,
+      runtime.runtimeIdentity,
+    ),
+  );
+  assert.throws(
+    () =>
+      assertWorkerConnected(
+        state,
+        "codex",
+        runtime.path!,
+        "/tmp/unknown-agent.mjs",
+      ),
+    /Connect Codex/,
+  );
+  assert.equal(state.workerConnections.codex?.approvedAt, approvedAt);
+  state.workerConnections.codex!.runtimeIdentity = runtime.runtimeIdentity;
+  assert.throws(
+    () =>
+      assertWorkerConnected(
+        state,
+        "codex",
+        runtime.path!,
+        "/other/node_modules/@openai/codex/bin/codex.js",
+      ),
+    /Connect Codex/,
+  );
+});
+
+test("Cursor version upgrades keep consent only within the already approved installation", () => {
+  const receipt = {
+    harness: "cursor" as const,
+    scopeVersion: 1 as const,
+    auth: "authenticated" as const,
+    approvedAt: "2026-11-15T12:00:00Z",
+    runtimePath:
+      "C:/Users/Test/AppData/Local/cursor-agent/versions/2026.1/node.exe",
+  };
+  const runtime = {
+    id: "cursor" as const,
+    path: "C:/Users/Test/AppData/Local/cursor-agent/versions/2026.2/node.exe",
+    runtimeIdentity:
+      "cursor-agent-install:c:/users/test/appdata/local/cursor-agent",
+  };
+  assert.equal(workerApprovalMatches(receipt, runtime), true);
+  assert.equal(
+    workerApprovalMatches(receipt, {
+      ...runtime,
+      runtimeIdentity: "cursor-agent-install:c:/unapproved/cursor-agent",
+    }),
+    false,
+  );
+  for (const alias of ["agent", "cursor-agent"]) {
+    const macReceipt = {
+      ...receipt,
+      runtimePath: `/Users/demo/.local/bin/${alias}`,
+    };
+    const macRuntime = {
+      id: "cursor" as const,
+      path: "/Users/demo/.local/share/cursor-agent/versions/2026.2/cursor-agent",
+      runtimeIdentity:
+        "cursor-agent-install:/Users/demo/.local/share/cursor-agent",
+    };
+    assert.equal(workerApprovalMatches(macReceipt, macRuntime), true);
+    assert.equal(
+      workerApprovalMatches(macReceipt, {
+        ...macRuntime,
+        runtimeIdentity:
+          "cursor-agent-install:/Users/other/.local/share/cursor-agent",
+      }),
+      false,
+    );
+    assert.equal(
+      workerApprovalMatches(
+        { ...macReceipt, runtimePath: "/usr/local/bin/agent" },
+        macRuntime,
+      ),
+      false,
+    );
+  }
+});
+
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), "memcode-connect-test-")),
     script = join(directory, "cli.mjs"),
@@ -150,6 +260,120 @@ async function fixture() {
     },
   };
 }
+
+test("saved provider consent survives a changed host launcher, missing PATH and transient sign-in probes", async () => {
+  const f = await fixture(),
+    state = initialState();
+  const provider = join(
+    f.directory,
+    "node_modules",
+    "@openai",
+    "codex",
+    "bin",
+    "codex.js",
+  );
+  await mkdir(join(provider, ".."), { recursive: true });
+  await writeFile(
+    join(f.directory, "package.json"),
+    JSON.stringify({ type: "module" }),
+  );
+  await writeFile(provider, await readFile(f.script, "utf8"));
+  const approvedAt = "2026-11-15T12:00:00Z";
+  state.workerConnections = {
+    codex: {
+      harness: "codex",
+      approvedAt,
+      runtimePath:
+        "/Volumes/MemCode/MemCode.app/Contents/Resources/desktop-runtime/node",
+      auth: "authenticated",
+      scopeVersion: 1,
+    },
+  };
+  let missing = false,
+    gone = false,
+    saves = 0;
+  let identity = provider;
+  const routes = new Map<
+    string,
+    { schema: any; handler: (input: any) => any }
+  >();
+  const command: Command = {
+    command: process.execPath,
+    prefix: [provider, "codex"],
+    identity,
+  };
+  const registry = registerConnections(
+    (name, schema, handler) => routes.set(name, { schema, handler }),
+    () => state,
+    async () => {
+      saves++;
+    },
+    () => join(f.directory, "no-memtrace"),
+    { call: async () => undefined as never },
+    async (harness, configured = "") =>
+      harness === "codex" && !gone && (!missing || configured === identity)
+        ? { ...command, identity }
+        : null,
+  );
+  const status = async () =>
+    (await routes.get("connection:status")!.handler(undefined)).find(
+      (item: any) => item.harness === "codex",
+    );
+  try {
+    assert.equal((await status()).connected, true);
+    assert.equal(saves, 1, "A legacy launcher receipt is migrated once.");
+    assert.equal(state.workerConnections.codex?.approvedAt, approvedAt);
+    assert.equal(state.workerConnections.codex?.runtimeIdentity, provider);
+    assert.equal(state.workerConnections.codex?.runtimePath, process.execPath);
+    missing = true;
+    assert.equal(
+      (await status()).connected,
+      true,
+      "A saved provider entry works when GUI PATH loses it.",
+    );
+    gone = true;
+    const unavailable = await status();
+    assert.equal(unavailable.installed, false);
+    assert.equal(unavailable.approvalSaved, true);
+    assert.equal(unavailable.approvedAt, approvedAt);
+    assert.match(unavailable.note, /approval is saved/);
+    gone = false;
+    await writeFile(
+      provider,
+      "console.error('not logged in'); process.exit(1);\n",
+    );
+    const signedOut = await status();
+    assert.equal(signedOut.auth, "not-authenticated");
+    assert.equal(signedOut.connected, false);
+    assert.equal(signedOut.approvalSaved, true);
+    assert.equal(signedOut.approvedAt, approvedAt);
+    await writeFile(provider, "throw Error('temporary status failure');\n");
+    const unknown = await status();
+    assert.equal(unknown.auth, "unknown");
+    assert.equal(unknown.approvalSaved, true);
+    assert.equal(state.workerConnections.codex?.approvedAt, approvedAt);
+    missing = false;
+    identity = join(
+      f.directory,
+      "other",
+      "node_modules",
+      "@openai",
+      "codex",
+      "bin",
+      "codex.js",
+    );
+    const changed = await status();
+    assert.equal(
+      changed.approvalSaved,
+      false,
+      "A different provider entry needs new consent even under the same Node launcher.",
+    );
+    assert.equal(state.workerConnections.codex?.runtimeIdentity, provider);
+  } finally {
+    await registry.close();
+    await f.cleanup();
+  }
+});
 test("connection consent uses only read-only auth probes and persists no credentials", async () => {
   const f = await fixture(),
     state = initialState(),

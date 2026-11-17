@@ -14,6 +14,7 @@ import type {
 import { isActive } from "../src/domain";
 import { childEnv, findCommand, git, now, exists, within } from "./local";
 import type { Command } from "./local";
+import { commandIdentity } from "./commands";
 import type { MemtraceEngine } from "./memtrace";
 import { discoverHarnesses } from "./catalog";
 import { planRoute } from "./router";
@@ -595,7 +596,12 @@ export class WorkerManager {
         (runtime) => runtime.id === task.harness,
       );
       if (task.assignment !== "auto" && selectedRuntime?.path)
-        assertWorkerConnected(this.state(), task.harness, selectedRuntime.path);
+        assertWorkerConnected(
+          this.state(),
+          task.harness,
+          selectedRuntime.path,
+          selectedRuntime.runtimeIdentity,
+        );
       const approved = connectedRuntimes(this.state(), catalog);
       if (!approved.length)
         throw Error("Connect a worker in Workers before starting a worker.");
@@ -619,7 +625,12 @@ export class WorkerManager {
         throw new Error(
           "The selected local harness is no longer available. Refresh its runtime or choose another worker.",
         );
-      assertWorkerConnected(this.state(), task.harness, command.command);
+      assertWorkerConnected(
+        this.state(),
+        task.harness,
+        command.command,
+        commandIdentity(command),
+      );
       await this.changed();
       task.run.changeRunId = randomUUID();
       await this.fleet.before(project, task);

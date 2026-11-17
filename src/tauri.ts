@@ -256,6 +256,11 @@ export async function installNativeBridge(): Promise<void> {
       call("story-comment:edit", { taskId, id, text }),
     deleteStoryComment: (taskId, id) =>
       call("story-comment:delete", { taskId, id }),
+    refreshWorkerCatalog: () => call("connection:refresh-catalog"),
+    installationStatus: () => call("installation:status"),
+    showInstallationSource: () => call("installation:show-source"),
+    showApplications: () => call("installation:show-applications"),
+    openWorkerSetup: (harness) => call("connection:guide", { harness }),
     workerConnectionStatus: () => call("connection:status"),
     connectWorker: (harness, approved) =>
       call("connection:approve", { harness, approved }),
@@ -271,6 +276,7 @@ export async function installNativeBridge(): Promise<void> {
     stopSpeech: () => call("speech:stop"),
     retrievalStatus: () => call("retrieval:status"),
     installRetrieval: () => call("retrieval:setup"),
+    configureRetrieval: (settings) => call("retrieval:configure", settings),
     sendFollowup: (taskId, text, ids) =>
       call("review:send", { taskId, text, ids }),
     saveReviewComment: (input) => call("review:save", input),

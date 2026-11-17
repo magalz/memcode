@@ -47,6 +47,10 @@ export interface HarnessRuntime {
   name: string;
   available: boolean;
   path: string | null;
+  /** Provider entry point identity; independent of MemCode's Node launcher. */
+  runtimeIdentity?: string;
+  /** Desktop application detected even when its agent CLI is not available. */
+  desktopAppPath?: string;
   models: ModelOption[];
   note?: string;
 }
@@ -198,6 +202,7 @@ export interface Project {
   example?: boolean;
 }
 export interface Settings {
+  automaticUpdateDownloads?: boolean;
   workerPermissionDefaults?: Partial<
     Record<Harness, import("./permissions").PermissionMode>
   >;
@@ -469,6 +474,15 @@ export interface MemCodeAPI {
   ): Promise<import("./story-comments").StoryComment>;
   editStoryComment(taskId: string, id: string, text: string): Promise<void>;
   deleteStoryComment(taskId: string, id: string): Promise<void>;
+  refreshWorkerCatalog(): Promise<RuntimeInfo>;
+  installationStatus(): Promise<{
+    state: string;
+    needsInstall: boolean;
+    canUpdate: boolean;
+  }>;
+  showInstallationSource(): Promise<void>;
+  showApplications(): Promise<void>;
+  openWorkerSetup(harness: Harness): Promise<void>;
   workerConnectionStatus(): Promise<
     import("./connections").WorkerConnectionStatus[]
   >;
@@ -492,6 +506,9 @@ export interface MemCodeAPI {
   installRetrieval(): Promise<
     import("./context-settings").ContextAssistantSetupState
   >;
+  configureRetrieval(
+    settings: ContextAssistantSettings,
+  ): Promise<ContextAssistantSettings>;
   sendFollowup(
     taskId: string,
     text: string,

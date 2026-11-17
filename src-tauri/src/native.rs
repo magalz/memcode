@@ -124,6 +124,33 @@ pub async fn host_call(app: AppHandle, method: &str, input: Value) -> Result<Val
                 .map_err(|e| e.to_string())??;
             Ok(Value::Null)
         }
+        "installation_status" => {
+            let status = tauri::async_runtime::spawn_blocking(crate::install_location::status)
+                .await.map_err(|error| error.to_string())?;
+            serde_json::to_value(status).map_err(|error| error.to_string())
+        }
+        "installation_show_source" => {
+            tauri::async_runtime::spawn_blocking(crate::install_location::show_install_location)
+                .await.map_err(|error| error.to_string())??;
+            Ok(Value::Null)
+        }
+        "installation_show_applications" => {
+            tauri::async_runtime::spawn_blocking(crate::install_location::show_applications)
+                .await.map_err(|error| error.to_string())??;
+            Ok(Value::Null)
+        }
+        "open_worker_setup" => {
+            let url = match input["harness"].as_str() {
+                Some("codex") => "https://developers.openai.com/codex/cli/",
+                Some("claude") => "https://code.claude.com/docs/en/setup",
+                Some("cursor") => "https://cursor.com/docs/cli/installation",
+                _ => return Err("Unknown worker provider".into()),
+            };
+            tauri::async_runtime::spawn_blocking(move || open_claim(url))
+                .await
+                .map_err(|e| e.to_string())??;
+            Ok(Value::Null)
+        }
         "open_memcode_telemetry_privacy" => {
             tauri::async_runtime::spawn_blocking(|| open_claim("https://www.memtrace.io/docs/privacy/telemetry#memcode"))
                 .await

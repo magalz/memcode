@@ -36,6 +36,7 @@ import { HarnessMark, Mark, PriorityMark, Spinner, StageIcon } from "./UI";
 import { estimateOptions } from "../planning/types";
 import { ContextSettings } from "./ContextSettings";
 import { DictationSettings } from "./DictationSettings";
+import { synchronizeSettingsDraft } from "../settings-draft";
 import type { MemtraceAccount } from "../connections";
 import { AppUpdates } from "./AppUpdates";
 import { BetaAccess } from "./BetaAccess";
@@ -648,6 +649,12 @@ export function SettingsDialog({
   onAccountStatus?: (account: MemtraceAccount) => void;
 }) {
   const [draft, setDraft] = useState(settings);
+  const previousSettings = useRef(settings);
+  useEffect(() => {
+    const previous = previousSettings.current;
+    previousSettings.current = settings;
+    setDraft((value) => synchronizeSettingsDraft(value, previous, settings));
+  }, [settings]);
   const [busy, setBusy] = useState(false);
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -674,8 +681,17 @@ export function SettingsDialog({
             existingCLI
             onAccountStatus={onAccountStatus}
           />
-          <AppUpdates currentVersion={runtime.appVersion} />
-          <TelemetrySettings notify={notify}/>
+          <AppUpdates
+            currentVersion={runtime.appVersion}
+            automaticDownloads={draft.automaticUpdateDownloads !== false}
+            onAutomaticDownloadsChange={(value) =>
+              setDraft((draft) => ({
+                ...draft,
+                automaticUpdateDownloads: value,
+              }))
+            }
+          />
+          <TelemetrySettings notify={notify} />
           <div className="settings-section">
             <div>
               <GitBranch size={17} />
@@ -791,7 +807,7 @@ export function SettingsDialog({
           <ContextSettings
             value={draft.contextAssistant}
             change={(contextAssistant) =>
-              setDraft({ ...draft, contextAssistant })
+              setDraft((value) => ({ ...value, contextAssistant }))
             }
           />
           <div className="storage-note">
