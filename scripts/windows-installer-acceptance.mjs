@@ -7,6 +7,7 @@ import { mkdir, readFile, writeFile, stat, unlink } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:net";
+import { get as httpGet } from "node:http";
 import { chromium } from "@playwright/test";
 
 assert.equal(process.platform, "win32");
@@ -120,6 +121,25 @@ const run = (path, args, timeout = 120_000) =>
       code === 0 ? done() : reject(Error(`Installer exited with code ${code}`));
     });
   });
+// Never send local inspector probes through a runner's fetch/proxy dispatcher.
+const inspectorReady = (port) =>
+  new Promise((done) => {
+    const request = httpGet(
+      {
+        hostname: "127.0.0.1",
+        port,
+        path: "/json/version",
+        agent: false,
+        timeout: 500,
+      },
+      (response) => {
+        response.resume();
+        done(response.statusCode === 200);
+      },
+    );
+    request.on("timeout", () => request.destroy());
+    request.on("error", () => done(false));
+  });
 async function port() {
   const server = createServer();
   await new Promise((done) => server.listen(0, "127.0.0.1", done));
@@ -172,13 +192,7 @@ async function launch() {
           `The installed app exited before opening: ${child.exitCode}. ${output}`,
         );
       try {
-        if (
-          (
-            await fetch(`http://127.0.0.1:${debugPort}/json/version`, {
-              signal: AbortSignal.timeout(500),
-            })
-          ).ok
-        ) {
+        if (await inspectorReady(debugPort)) {
           ready = true;
           break;
         }
