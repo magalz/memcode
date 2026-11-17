@@ -231,6 +231,19 @@ impl Credentials for OsCredentials {
         }
     }
     fn write(&self, value: &str) -> Result<(), String> {
+        #[cfg(target_os = "macos")]
+        {
+            use security_framework::os::macos::keychain::{SecKeychain, SecPreferencesDomain};
+            // keyring's legacy set_password first decrypts the old password.
+            // Rotation already has the replacement: update only its value in
+            // the same User/login Keychain, preserving the item's existing ACL.
+            let keychain = SecKeychain::default_for_domain(SecPreferencesDomain::User)
+                .map_err(|_| "OS-protected beta credential storage is unavailable")?;
+            macos_update_password(&keychain, &self.0, value).map_err(|_| {
+                "The beta credential could not be saved in the OS credential store".into()
+            })
+        }
+        #[cfg(not(target_os = "macos"))]
         self.entry()?
             .set_password(value)
             .map_err(|_| "The beta credential could not be saved in the OS credential store".into())
@@ -242,6 +255,35 @@ impl Credentials for OsCredentials {
                 Err("The beta credential could not be removed from the OS credential store".into())
             }
         }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_update_password(
+    keychain: &security_framework::os::macos::keychain::SecKeychain,
+    user: &str,
+    value: &str,
+) -> security_framework::base::Result<()> {
+    use core_foundation::data::CFData;
+    use security_framework::item::{
+        update_item, ItemClass, ItemSearchOptions, ItemUpdateOptions, ItemUpdateValue,
+    };
+    let mut query = ItemSearchOptions::new();
+    query
+        .keychains(std::slice::from_ref(keychain))
+        .class(ItemClass::generic_password())
+        .service(SERVICE)
+        .account(user);
+    let mut replacement = ItemUpdateOptions::new();
+    replacement.set_value(ItemUpdateValue::Data(CFData::from_buffer(value.as_bytes())));
+    match update_item(&query, &replacement) {
+        Ok(()) => Ok(()),
+        // Only a genuinely absent item may be created. Never delete/recreate
+        // an existing credential, loosen its ACL, or fall back after denial.
+        Err(error) if error.code() == -25300 => {
+            keychain.add_generic_password(SERVICE, user, value.as_bytes())
+        }
+        Err(error) => Err(error),
     }
 }
 fn stored(paths: &Paths, credentials: &impl Credentials) -> Result<Value, String> {
@@ -497,6 +539,201 @@ mod tests {
             assert!(access_token(&json!(value)).is_err());
         }
         assert!(access_token(&json!("a.b.c")).is_ok());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_rotation_updates_in_place_without_decrypting_or_changing_acl() {
+        // Never create a test Keychain on a user's Mac. This mandatory release
+        // gate runs only on GitHub's disposable native macOS runner.
+        if std::env::var("MEMCODE_MAC_KEYCHAIN_TEST").as_deref() != Ok("1")
+            || std::env::var("GITHUB_ACTIONS").as_deref() != Ok("true")
+        {
+            return;
+        }
+        use core_foundation::{base::TCFType, data::CFData};
+        use security_framework::{
+            item::{ItemClass, ItemSearchOptions, Reference, SearchResult},
+            os::macos::keychain::{CreateOptions, SecKeychain},
+        };
+        use std::{ffi::c_void, process::Command};
+        extern "C" {
+            fn SecKeychainItemCreatePersistentReference(
+                item: *const c_void,
+                reference: *mut *const c_void,
+            ) -> i32;
+        }
+        fn security(args: &[&str]) -> String {
+            let output = Command::new("/usr/bin/security")
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "Synthetic Keychain operation failed"
+            );
+            String::from_utf8(output.stdout).unwrap()
+        }
+        fn listing() -> Vec<String> {
+            security(&["list-keychains", "-d", "user"])
+                .lines()
+                .map(|line| line.trim().trim_matches('"').to_owned())
+                .filter(|line| !line.is_empty())
+                .collect()
+        }
+        struct IsolatedKeychain {
+            dir: PathBuf,
+            path: PathBuf,
+            original_list: Vec<String>,
+            original_default: String,
+            restored: bool,
+        }
+        impl IsolatedKeychain {
+            fn restore(&mut self) {
+                if self.restored {
+                    return;
+                }
+                let _ = Command::new("/usr/bin/security")
+                    .args(["delete-keychain", self.path.to_str().unwrap()])
+                    .output();
+                let mut args = vec!["list-keychains", "-d", "user", "-s"];
+                args.extend(self.original_list.iter().map(String::as_str));
+                security(&args);
+                if !self.original_default.is_empty() {
+                    security(&[
+                        "default-keychain",
+                        "-d",
+                        "user",
+                        "-s",
+                        &self.original_default,
+                    ]);
+                }
+                self.restored = true;
+                let _ = fs::remove_dir_all(&self.dir);
+            }
+        }
+        impl Drop for IsolatedKeychain {
+            fn drop(&mut self) {
+                self.restore();
+            }
+        }
+        fn identity(keychain: &SecKeychain, user: &str) -> Vec<u8> {
+            let mut query = ItemSearchOptions::new();
+            let found = query
+                .keychains(std::slice::from_ref(keychain))
+                .class(ItemClass::generic_password())
+                .service(SERVICE)
+                .account(user)
+                .load_refs(true)
+                .search()
+                .unwrap();
+            assert_eq!(found.len(), 1);
+            let SearchResult::Ref(Reference::KeychainItem(item)) = &found[0] else {
+                panic!("Expected the unique synthetic Keychain item reference");
+            };
+            let mut reference = std::ptr::null();
+            let status = unsafe {
+                SecKeychainItemCreatePersistentReference(item.as_CFTypeRef(), &mut reference)
+            };
+            assert_eq!(status, 0);
+            assert!(!reference.is_null());
+            unsafe { CFData::wrap_under_create_rule(reference.cast()).to_vec() }
+        }
+        fn acl(path: &Path) -> String {
+            // -a reads ACL metadata only, never -d decrypted secret data.
+            let dump = security(&["dump-keychain", "-a", path.to_str().unwrap()]);
+            let (_, entries) = dump
+                .split_once("access:")
+                .expect("Synthetic item has an ACL");
+            assert!(entries.contains("authorizations"));
+            assert!(entries.contains("/usr/bin/security"));
+            entries.trim().to_owned()
+        }
+        let _serial = SERIAL.lock().unwrap();
+        let original_list = listing();
+        let original_default = security(&["default-keychain", "-d", "user"])
+            .trim()
+            .trim_matches('"')
+            .to_owned();
+        let paths = fixture();
+        let mut isolated = IsolatedKeychain {
+            path: paths.dir.join("synthetic.keychain"),
+            dir: paths.dir,
+            original_list: original_list.clone(),
+            original_default: original_default.clone(),
+            restored: false,
+        };
+        let mut keychain = CreateOptions::new()
+            .password("synthetic-keychain-password-never-used-for-an-account")
+            .create(&isolated.path)
+            .unwrap();
+        keychain
+            .unlock(Some(
+                "synthetic-keychain-password-never-used-for-an-account",
+            ))
+            .unwrap();
+        let user = "synthetic-mac-rotation-test";
+        // The Rust test process is deliberately NOT trusted to decrypt this
+        // item. A regression to read-before-write must fail with UI disabled.
+        security(&[
+            "add-generic-password",
+            "-a",
+            user,
+            "-s",
+            SERVICE,
+            "-w",
+            "synthetic-original-value",
+            "-T",
+            "/usr/bin/security",
+            isolated.path.to_str().unwrap(),
+        ]);
+        let identity_before = identity(&keychain, user);
+        let acl_before = acl(&isolated.path);
+        {
+            let _no_prompt = SecKeychain::disable_user_interaction().unwrap();
+            assert!(
+                keychain.find_generic_password(SERVICE, user).is_err(),
+                "The test must reject the old decrypt-before-write behavior"
+            );
+            for pass in 1..=8 {
+                macos_update_password(&keychain, user, &format!("synthetic-rotation-{pass}"))
+                    .unwrap();
+            }
+            assert!(
+                keychain.find_generic_password(SERVICE, user).is_err(),
+                "Rotation must not grant new decrypt access"
+            );
+            assert_eq!(
+                identity(&keychain, user),
+                identity_before,
+                "Credential rotation must preserve the same Keychain item"
+            );
+        }
+        assert_eq!(
+            acl(&isolated.path),
+            acl_before,
+            "Value-only rotation must preserve every existing ACL entry"
+        );
+        let actual = security(&[
+            "find-generic-password",
+            "-a",
+            user,
+            "-s",
+            SERVICE,
+            "-w",
+            isolated.path.to_str().unwrap(),
+        ]);
+        assert_eq!(actual.trim(), "synthetic-rotation-8");
+        drop(keychain);
+        isolated.restore();
+        assert_eq!(listing(), original_list);
+        assert_eq!(
+            security(&["default-keychain", "-d", "user"])
+                .trim()
+                .trim_matches('"'),
+            original_default
+        );
+        println!("MAC_KEYCHAIN_ROTATION_PASS: 8 value-only updates; decrypt denied; item and ACL preserved; final value verified; runner search list and default restored; no account credentials used.");
     }
     #[test]
     fn beta_store_update_keeps_profile_and_account_namespace_across_package_versions() {

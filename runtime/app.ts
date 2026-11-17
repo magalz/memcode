@@ -957,7 +957,11 @@ export async function createRuntime(
         throw new Error(
           "Stop active workers before changing runtime settings.",
         );
-      await engine.close();
+      // Saving speech, retrieval or worker preferences must not permanently
+      // close the shared engine. Only its executable changes the connection;
+      // reconnect resets the owner lifecycle so the next project can open it.
+      if (settings.memtracePath !== store.state.settings.memtracePath)
+        await engine.reconnect();
       // A Settings dialog opened before a worker-default change must not erase it.
       store.state.settings = {
         ...settings,

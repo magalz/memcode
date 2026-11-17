@@ -166,6 +166,12 @@ jobs:
           MEMCODE_MAC_ENGINE_ACCEPTANCE_GRANT: ${{ secrets.MEMCODE_MAC_ENGINE_ACCEPTANCE_GRANT }}
         run: node scripts/bundled-engine-acceptance.mjs
 
+      - name: Verify native Keychain rotation preserves access without decrypt prompts
+        timeout-minutes: 10
+        env:
+          MEMCODE_MAC_KEYCHAIN_TEST: "1"
+        run: node scripts/macos-keychain-acceptance.mjs
+
       - name: Verify the updater and collect bounded candidate files
         env:
           ENGINE_ACCEPTANCE: ${{ github.event_name == 'workflow_dispatch' && inputs.engine_acceptance && 'true' || 'false' }}
@@ -205,6 +211,7 @@ jobs:
             },
             nativeColdStart: JSON.parse(readFileSync('release/macos-cold-start.json', 'utf8')),
             nativeUpdaterAcl: JSON.parse(readFileSync('release/native-updater-acl-darwin.json', 'utf8')),
+            nativeKeychainRotation: JSON.parse(readFileSync('release/macos-keychain-rotation.json', 'utf8')),
             bundledEngine: JSON.parse(readFileSync('release/bundled-engine-darwin-prepare-only.json', 'utf8')),
             authenticatedEngineAcceptance: process.env.ENGINE_ACCEPTANCE === 'true' ? JSON.parse(readFileSync('release/bundled-engine-darwin-real-account-index-watch.json', 'utf8')) : {tested:false,reason:'dedicated real account test not requested'},
             packagedRuntime: JSON.parse(readFileSync('dist-desktop-runtime/provenance.json', 'utf8')),
@@ -225,6 +232,7 @@ jobs:
             release/macos-cold-start.json
             release/macos-cold-start.png
             release/native-updater-acl-darwin.json
+            release/macos-keychain-rotation.json
             release/macos-release-trust.json
             release/bundled-engine-darwin-prepare-only.json
             release/bundled-engine-darwin-real-account-index-watch.json
