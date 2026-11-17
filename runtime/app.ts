@@ -46,6 +46,7 @@ import { discoverOfficialTeamService } from "./team/discovery";
 import { createBetaAuthorization } from "./beta-auth";
 import { MemCodeBeta, nativeBetaStorage } from "./beta";
 import { ManagedMemcodeEngine } from "./managed-engine";
+import { ManagedRetrievalAssistant } from "./context/managed-assistant";
 import { ProductTelemetry, observeTelemetryMutation } from "./telemetry";
 import { runTaskVerification } from "./verification";
 import { SpeechManager, registerSpeech } from "./speech";
@@ -191,6 +192,9 @@ export async function createRuntime(
   };
   const browsers = new AgentBrowserManager(state, store.dir, changed, 16, host);
   const terminals = new TerminalManager(state, host);
+  const retrieval = new ManagedRetrievalAssistant(store.dir, {
+    runtimeDirectory: join(appPath, "retriever-runtime"),
+  });
   const workers = new WorkerManager(
       state,
       changed,
@@ -220,6 +224,7 @@ export async function createRuntime(
           !requireFreshWorkerContext ||
           (project.analysis === "ready" && !!project.repoId)),
       telemetry,
+      () => retrieval.assistant(),
     ),
     preview = new PreviewManager(
       host,
@@ -914,27 +919,34 @@ export async function createRuntime(
             throw new Error(
               "The cached ONNX pilot uses Qwen2.5-Coder-0.5B-Instruct. Select that model or use a local model server.",
             );
-          if (!isAbsolute(helper.packageDirectory))
-            throw new Error(
-              "Choose the absolute installed Transformers package directory for local context assistance.",
-            );
-          let manifest: { name?: string };
-          try {
-            manifest = JSON.parse(
-              await readFile(
-                join(helper.packageDirectory, "package.json"),
-                "utf8",
-              ),
-            );
-          } catch {
-            throw new Error(
-              "The Transformers package directory could not be read.",
-            );
+          if (!helper.packageDirectory.trim()) {
+            if ((await retrieval.status()).status !== "ready")
+              throw new Error(
+                "Choose Set up local retrieval before enabling the local assistant.",
+              );
+          } else {
+            if (!isAbsolute(helper.packageDirectory))
+              throw new Error(
+                "Choose the absolute installed Transformers package directory for local context assistance.",
+              );
+            let manifest: { name?: string };
+            try {
+              manifest = JSON.parse(
+                await readFile(
+                  join(helper.packageDirectory, "package.json"),
+                  "utf8",
+                ),
+              );
+            } catch {
+              throw new Error(
+                "The Transformers package directory could not be read.",
+              );
+            }
+            if (manifest.name !== "@huggingface/transformers")
+              throw new Error(
+                "Choose the @huggingface/transformers package directory with your cached model.",
+              );
           }
-          if (manifest.name !== "@huggingface/transformers")
-            throw new Error(
-              "Choose the @huggingface/transformers package directory with your cached model.",
-            );
         }
       }
       if (settings.localModel && !settings.model.trim())
@@ -1021,6 +1033,8 @@ export async function createRuntime(
     );
   });
   registerSpeech(register, speech);
+  register("retrieval:status", z.undefined(), () => retrieval.status());
+  register("retrieval:setup", z.undefined(), () => retrieval.install());
   registerReview(
     register,
     state,
@@ -1310,6 +1324,7 @@ export async function createRuntime(
       await repositories.close();
       await team?.close();
       await speech.close();
+      await retrieval.close();
       await connections.close();
       await terminals.close();
       await browsers.close();

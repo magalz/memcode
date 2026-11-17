@@ -11,20 +11,23 @@ import {pathToFileURL} from 'node:url';
 import {join} from 'node:path';
 import {createInterface} from 'node:readline';
 const root=process.argv[1];
+const modelDirectory=process.argv[2];
 const {pipeline,env}=await import(pathToFileURL(join(root,'dist','transformers.node.mjs')).href);
 env.allowRemoteModels=false;
+env.allowLocalModels=true;
 env.cacheDir=join(root,'.cache');
-const gen=await pipeline('text-generation','onnx-community/Qwen2.5-Coder-0.5B-Instruct',{dtype:'q4',local_files_only:true,session_options:{intra_op_num_threads:2,inter_op_num_threads:1}});
+const gen=await pipeline('text-generation',modelDirectory||'onnx-community/Qwen2.5-Coder-0.5B-Instruct',{dtype:'q4',device:'cpu',local_files_only:true,session_options:{intra_op_num_threads:2,inter_op_num_threads:1}});
 console.log(JSON.stringify({ready:true}));
 for await(const line of createInterface({input:process.stdin})){
+ let id;
  try {
-  const {id,messages}=JSON.parse(line);
+  const request=JSON.parse(line);id=request.id;const messages=request.messages;
   const prompt=gen.tokenizer.apply_chat_template(messages,{tokenize:false,add_generation_prompt:true});
   const inputTokens=gen.tokenizer.encode(prompt).length;
   const result=await gen(messages,{max_new_tokens:96,do_sample:false});
   const text=result[0]?.generated_text?.at(-1)?.content??'';
   console.log(JSON.stringify({id,text,usage:{inputTokens,outputRetokenized:gen.tokenizer.encode(text).length,method:'local tokenizer; output retokenized, not provider usage'}}));
- } catch(error){console.log(JSON.stringify({error:String(error)}));}
+ } catch(error){console.log(JSON.stringify({id,error:String(error)}));}
 }
 `;
 
@@ -46,6 +49,7 @@ export class OnnxAssistant implements RetrievalAssistant {
   constructor(
     private readonly packageDirectory: string,
     private readonly timeoutMs = 20000,
+    private readonly modelDirectory?: string,
   ) {}
   private start(): Promise<void> {
     if (this.closed)
@@ -54,14 +58,14 @@ export class OnnxAssistant implements RetrievalAssistant {
     this.ready = new Promise((resolve, reject) => {
       const child = (this.child = spawn(
         process.execPath,
-        ["--input-type=module", "-e", program, this.packageDirectory],
-        { windowsHide: true, shell: false, stdio: ["pipe", "pipe", "pipe"] },
+        ["--input-type=module", "-e", program, this.packageDirectory, ...(this.modelDirectory ? [this.modelDirectory] : [])],
+        { windowsHide: true, shell: false, stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, HF_HUB_OFFLINE: "1", TRANSFORMERS_OFFLINE: "1", OMP_NUM_THREADS: "2" } },
       ));
       let errors = "";
       const startup = setTimeout(() => {
         reject(new Error("Local ONNX startup timed out"));
         this.close();
-      }, 30000);
+      }, 90000);
       child.stderr.on("data", (data) => {
         errors = (errors + data).slice(-1500);
       });

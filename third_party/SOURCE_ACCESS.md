@@ -35,3 +35,13 @@ Memtrace/MemDB proprietary engine source is not included by this source-access
 notice. Node is distributed with its complete separate NODE-LICENSE in the
 desktop-runtime resources; operating-system browser/credential services retain
 their own applicable terms.
+
+## Optional text-only inference
+
+The separately supplied local inference resources retain their own original
+licenses and notices. Exact upstream sources are available for
+[Transformers.js 4.3.2](https://github.com/huggingface/transformers.js/tree/4.3.2)
+and [ONNX Runtime 1.23.2](https://github.com/microsoft/onnxruntime/tree/v1.23.2).
+The text-only Transformers.js build is identified as modified in the runtime
+provenance; it excludes Sharp and libvips. The staged runtime's notice inventory
+and original npm package declarations identify its remaining components.

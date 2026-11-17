@@ -6,28 +6,57 @@ import {
   rename,
   stat,
   readdir,
+  chmod,
 } from "node:fs/promises";
 import { join, resolve, isAbsolute, basename } from "node:path";
 import { unzipSync } from "fflate";
 import type { SpeechSettings } from "../src/speech";
+import speechRuntimeCatalog from "../scripts/speech-runtime.json";
 
-// Official CPU packages and multilingual model, pinned to verified upstream assets.
-// No installer script, package-manager command or downloaded code runs here.
+export interface SpeechRuntimeAsset {
+  url: string;
+  sha256: string;
+  bytes: number;
+  executableSha256?: string;
+}
+export function speechRuntimeFor(
+  platform: string = process.platform,
+  arch: string = process.arch,
+): SpeechRuntimeAsset | undefined {
+  const runtimes: Record<string, SpeechRuntimeAsset> =
+    speechRuntimeCatalog.runtimes;
+  const runtime = runtimes[`${platform}-${arch}`];
+  if (!runtime) return;
+  const url = new URL(runtime.url);
+  if (
+    url.protocol !== "https:" ||
+    !["github.com", "d12b8r6xagt10r.cloudfront.net"].includes(url.hostname) ||
+    url.username ||
+    url.password ||
+    !/^[a-f0-9]{64}$/.test(runtime.sha256) ||
+    !Number.isSafeInteger(runtime.bytes) ||
+    runtime.bytes < 1 ||
+    runtime.bytes > 32_000_000 ||
+    (runtime.executableSha256 !== undefined &&
+      !/^[a-f0-9]{64}$/.test(runtime.executableSha256))
+  )
+    throw Error("The local speech runtime manifest is invalid.");
+  return runtime;
+}
+
+// The official Windows package, our pinned-source Mac CPU build, and the
+// multilingual model. Setup never invokes installer scripts or package managers.
 export const speechAssets = {
-  version: "v1.9.2",
-  runtimeUrl:
-    "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-x64.zip",
-  runtimeSha256:
-    "49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a",
-  runtimeBytes: 8194445,
+  version: speechRuntimeCatalog.version,
   modelUrl:
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.bin",
   modelSha256:
     "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
   modelBytes: 77691713,
 };
-export const managedInstallAvailable =
-  process.platform === "win32" && process.arch === "x64";
+export const managedInstallAvailable = !!speechRuntimeFor();
+export const speechDownloadBytes = () =>
+  (speechRuntimeFor()?.bytes ?? 0) + speechAssets.modelBytes;
 export function safeArchivePath(name: string) {
   return (
     !!name &&
@@ -108,19 +137,27 @@ export async function installSpeechAssets(
   progress: (value: number) => void,
   signal?: AbortSignal,
 ): Promise<SpeechSettings> {
-  if (!managedInstallAvailable)
+  const runtime = speechRuntimeFor();
+  if (!runtime)
     throw Error(
-      "Automatic setup currently supports Windows x64. In Advanced, choose an installed whisper-server and a local Whisper model, or use an existing local server.",
+      "Local dictation setup is available for Windows x64 and Apple Silicon Mac installers. This architecture needs an existing local speech server in Advanced settings.",
     );
   const root = join(dataDir, "speech"),
-    directory = join(root, speechAssets.version),
-    total = speechAssets.runtimeBytes + speechAssets.modelBytes;
+    directory = join(
+      root,
+      speechAssets.version,
+      `${process.platform}-${process.arch}-${runtime.sha256.slice(0, 12)}`,
+    ),
+    total = runtime.bytes + speechAssets.modelBytes;
   await mkdir(directory, { recursive: true });
   const zip = await download(
-    speechAssets.runtimeUrl,
-    join(root, "whisper-cpu-" + speechAssets.version + ".zip"),
-    speechAssets.runtimeSha256,
-    speechAssets.runtimeBytes + 1024,
+    runtime.url,
+    join(
+      root,
+      `whisper-cpu-${speechAssets.version}-${process.platform}-${process.arch}-${runtime.sha256.slice(0, 12)}.zip`,
+    ),
+    runtime.sha256,
+    runtime.bytes,
     (bytes) => progress(bytes / total),
     signal,
   );
@@ -145,13 +182,21 @@ export async function installSpeechAssets(
   const executable = await findSpeechExecutable(directory);
   if (!executable)
     throw Error("The verified speech package did not contain whisper-server.");
+  if (
+    runtime.executableSha256 &&
+    createHash("sha256")
+      .update(await readFile(executable))
+      .digest("hex") !== runtime.executableSha256
+  )
+    throw Error("The local speech executable failed its integrity check.");
+  if (process.platform !== "win32") await chmod(executable, 0o755);
   const modelPath = join(root, "ggml-tiny.bin");
   await download(
     speechAssets.modelUrl,
     modelPath,
     speechAssets.modelSha256,
     speechAssets.modelBytes + 1024,
-    (bytes) => progress((speechAssets.runtimeBytes + bytes) / total),
+    (bytes) => progress((runtime.bytes + bytes) / total),
     signal,
   );
   signal?.throwIfAborted();

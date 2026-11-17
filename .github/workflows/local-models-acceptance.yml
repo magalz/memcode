@@ -1,0 +1,123 @@
+name: Private native Mac local model acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run:
+        description: Optional successful Mac desktop candidate run at this exact source; blank tests reviewed staging resources
+        type: string
+        default: ""
+      components:
+        description: Real models to test (only all is complete feature acceptance)
+        type: choice
+        options: [all, speech, retrieval]
+        default: all
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: memcode-local-model-acceptance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native-mac:
+    if: github.repository == 'syncable-dev/memcode' && github.event.repository.private == true && github.ref == 'refs/heads/beta/memcode-desktop-candidate'
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - name: Check out the reviewed private source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the bundled Node version
+        id: node
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync,appendFileSync} from 'node:fs';
+          if(process.platform!=='darwin'||process.arch!=='arm64')throw Error('A native Apple Silicon runner is required');
+          const manifest=JSON.parse(readFileSync('scripts/desktop-node.json','utf8'));
+          appendFileSync(process.env.GITHUB_OUTPUT,`version=${manifest.version}\n`);
+          NODE
+
+      - name: Set up the reviewed build Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: ${{ steps.node.outputs.version }}
+          cache: npm
+
+      - name: Install locked build dependencies and check the acceptance fixture
+        run: |
+          npm ci
+          node node_modules/typescript/bin/tsc --project scripts/fixtures/tsconfig.local-models.json
+
+      - name: Stage verified bundled Node and the managed retrieval runtime
+        if: inputs.candidate_run == ''
+        env:
+          COMPONENTS: ${{ inputs.components }}
+        run: |
+          node scripts/prepare-desktop-runtime.mjs
+          if [ "$COMPONENTS" != speech ]; then node scripts/prepare-retriever-runtime.mjs; fi
+          node --input-type=module <<'NODE'
+          import {mkdir,cp,appendFile} from 'node:fs/promises';
+          import {join} from 'node:path';
+          const resources=join(process.env.RUNNER_TEMP,'memcode-local-model-resources');
+          await mkdir(resources,{mode:0o700});
+          await cp('dist-desktop-runtime',join(resources,'desktop-runtime'),{recursive:true});
+          if(process.env.COMPONENTS!=='speech')await cp('dist-retriever-runtime',join(resources,'retriever-runtime'),{recursive:true});
+          await appendFile(process.env.GITHUB_ENV,`MEMCODE_MODELS_RESOURCES=${resources}\n`);
+          NODE
+
+      - name: Obtain the exact completed application candidate
+        if: inputs.candidate_run != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import {execFileSync} from 'node:child_process';
+          import {readFile,mkdir,appendFile} from 'node:fs/promises';
+          import {join,basename} from 'node:path';
+          import {createHash} from 'node:crypto';
+          const run=process.env.CANDIDATE_RUN;
+          assert.match(run,/^[1-9][0-9]{0,15}$/);
+          const json=JSON.parse(execFileSync('gh',['api',`repos/syncable-dev/memcode/actions/runs/${run}`],{encoding:'utf8'}));
+          assert.equal(json.head_sha,process.env.GITHUB_SHA);
+          assert.equal(json.status,'completed');assert.equal(json.conclusion,'success');
+          assert.equal(json.path,'.github/workflows/macos-desktop-candidate.yml');
+          const directory=join(process.env.RUNNER_TEMP,'memcode-exact-app-candidate');
+          await mkdir(directory,{mode:0o700});
+          execFileSync('gh',['run','download',run,'--repo','syncable-dev/memcode','--name',`MemCode-macos-arm64-candidate-${process.env.GITHUB_SHA}`,'--dir',directory],{stdio:'pipe'});
+          const candidate=JSON.parse(await readFile(join(directory,'candidate.json'),'utf8'));
+          assert.equal(candidate.source.commit,process.env.GITHUB_SHA);
+          assert.equal(candidate.target,'aarch64-apple-darwin');
+          assert.equal(candidate.updaterSignatureVerified,true);
+          const archive=candidate.files.find(file=>file.name==='MemCode.app.tar.gz');assert.ok(archive);
+          assert.equal(basename(archive.name),archive.name);
+          const bytes=await readFile(join(directory,archive.name));
+          assert.equal(bytes.length,archive.bytes);assert.equal(createHash('sha256').update(bytes).digest('hex'),archive.sha256);
+          execFileSync('tar',['-xzf',join(directory,archive.name),'-C',directory],{stdio:'pipe'});
+          await appendFile(process.env.GITHUB_ENV,`MEMCODE_MODELS_PACKAGED_APP=${join(directory,'MemCode.app')}\n`);
+          NODE
+
+      - name: Run real transcription and retrieval, then restart from cache with remote requests blocked
+        env:
+          COMPONENTS: ${{ inputs.components }}
+        run: |
+          if [ -n "$MEMCODE_MODELS_PACKAGED_APP" ]; then
+            node scripts/local-models-acceptance.mjs --packaged-app "$MEMCODE_MODELS_PACKAGED_APP" --only "$COMPONENTS" --output release/local-models-darwin.json
+          else
+            node scripts/local-models-acceptance.mjs --resources "$MEMCODE_MODELS_RESOURCES" --only "$COMPONENTS" --output release/local-models-darwin.json
+          fi
+
+      - name: Upload only the bounded content-free acceptance report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: MemCode-local-models-mac-${{ github.sha }}
+          path: release/local-models-darwin.json
+          if-no-files-found: error
+          retention-days: 7

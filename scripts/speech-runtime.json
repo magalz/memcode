@@ -1,0 +1,16 @@
+{
+  "version": "v1.9.2",
+  "runtimes": {
+    "darwin-arm64": {
+      "url": "https://d12b8r6xagt10r.cloudfront.net/releases/local-models/speech/whisper-cpu-v1.9.2-macos-aarch64-675f1f518af50175.zip",
+      "sha256": "675f1f518af50175b651adf7ea6c30da7a1651c80411d6ec3bf3ee251dabfb04",
+      "bytes": 1169961,
+      "executableSha256": "b568f7b4636c039a49c6631440c9cc0c93a9e35f167e702000f218a6043e8327"
+    },
+    "win32-x64": {
+      "url": "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-x64.zip",
+      "sha256": "49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a",
+      "bytes": 8194445
+    }
+  }
+}

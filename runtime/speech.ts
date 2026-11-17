@@ -12,7 +12,7 @@ import {
 import {
   installSpeechAssets,
   managedInstallAvailable,
-  speechAssets,
+  speechDownloadBytes,
   validateSpeechFiles,
 } from "./speech-install";
 import { localURL } from "./urls";
@@ -92,7 +92,7 @@ export class SpeechManager {
       progress: this.progress,
       modelName: settings.modelPath ? basename(settings.modelPath) : undefined,
       managedInstallAvailable,
-      downloadBytes: speechAssets.runtimeBytes + speechAssets.modelBytes,
+      downloadBytes: speechDownloadBytes(),
     };
   }
   async install(): Promise<SpeechStatus> {

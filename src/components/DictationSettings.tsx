@@ -24,19 +24,24 @@ export function DictationSettings({
     ...speechDefaults,
     mode: "endpoint" as const,
   };
-  const refresh = () =>
-    window.memcode
-      .speechStatus()
-      .then(setStatus)
-      .catch((error) => setError(error.message));
+  const refresh = async () => {
+    try {
+      const value = await window.memcode.speechStatus();
+      setStatus(value);
+      return value;
+    } catch (error) {
+      setError((error as Error).message);
+    }
+  };
   useEffect(() => {
     void refresh();
   }, []);
   useEffect(() => {
-    if (!busy) return;
+    if (!busy && status?.state !== "installing" && status?.state !== "starting")
+      return;
     const timer = setInterval(() => void refresh(), 600);
     return () => clearInterval(timer);
-  }, [busy]);
+  }, [busy, status?.state]);
   const act = async (action: () => Promise<SpeechStatus | void>) => {
     setBusy(true);
     setError("");
@@ -45,7 +50,14 @@ export function DictationSettings({
       if (result) setStatus(result);
       else await refresh();
     } catch (error) {
-      setError((error as Error).message);
+      const message = (error as Error).message;
+      // An RPC failure can leave the last polled snapshot at "installing".
+      // The retry stays usable even if the subsequent status check also fails.
+      setStatus((previous) =>
+        previous ? { ...previous, state: "error", message } : previous,
+      );
+      await refresh();
+      setError(message);
     } finally {
       setBusy(false);
     }
@@ -55,6 +67,10 @@ export function DictationSettings({
     (JSON.stringify(status.settings) !== JSON.stringify(value) ||
       (value.mode === "endpoint" &&
         status.endpoint !== settings.speechEndpoint));
+  const installed = status?.state === "available";
+  const downloadSize = status?.downloadBytes
+    ? `about ${Math.ceil(status.downloadBytes / 1_000_000).toLocaleString()} MB`
+    : "a small download";
   return (
     <section
       className="settings-section dictation-settings"
@@ -85,7 +101,9 @@ export function DictationSettings({
                 ? "Setting up dictation"
                 : status?.state === "starting"
                   ? "Starting your local model"
-                  : "A voice for your ideas"}
+                  : installed
+                    ? "Installed on this computer"
+                    : "A voice for your ideas"}
           </strong>
         </span>
         <p>
@@ -99,29 +117,45 @@ export function DictationSettings({
             value={status.progress ?? 0}
           />
         )}
-        {status?.state !== "ready" && (
-          <>
-            <button
-              type="button"
-              className="button primary"
-              disabled={busy || status?.managedInstallAvailable === false}
-              onClick={() =>
-                void act(async () => {
-                  const result = await window.memcode.installSpeech();
-                  change(result.settings);
-                  return result;
-                })
-              }
-            >
-              <Download size={13} />
-              {busy ? "Setting up…" : "Set up local dictation"}
-            </button>
-            <small>
-              Downloads multilingual Whisper Tiny and the official CPU runtime
-              (about 82 MB). This runs only when you choose setup.
-            </small>
-          </>
-        )}
+        {status?.state !== "ready" &&
+          status?.managedInstallAvailable !== false && (
+            <>
+              <button
+                type="button"
+                className="button primary"
+                disabled={
+                  busy ||
+                  (!status && !error) ||
+                  status?.state === "starting" ||
+                  status?.state === "installing"
+                }
+                onClick={() =>
+                  void act(async () => {
+                    if (!status) return refresh();
+                    const result = await (installed
+                      ? window.memcode.prepareSpeech()
+                      : window.memcode.installSpeech());
+                    change(result.settings);
+                    return result;
+                  })
+                }
+              >
+                <Download size={13} />
+                {busy
+                  ? "Setting up…"
+                  : !status && error
+                    ? "Check setup again"
+                    : installed
+                      ? "Start local dictation"
+                      : "Set up local dictation"}
+              </button>
+              <small>
+                {installed
+                  ? "Your local model is installed. It also starts when you click a microphone in any prompt."
+                  : `Downloads multilingual Whisper Tiny and its CPU runtime once (${downloadSize}). No extra apps or package paths.`}
+              </small>
+            </>
+          )}
         {status?.state === "ready" && (
           <div className="dictation-ready-actions">
             <small>{status.modelName ?? "Your local speech server"}</small>
@@ -142,6 +176,10 @@ export function DictationSettings({
           {error}
         </p>
       )}
+      <p className="settings-hint">
+        When you first record, allow microphone access for MemCode. Your audio
+        is transcribed on this computer.
+      </p>
       <details className="dictation-advanced">
         <summary>Advanced · use an existing local model or server</summary>
         <label className="field">

@@ -486,6 +486,12 @@ export interface MemCodeAPI {
   prepareSpeech(): Promise<import("./speech").SpeechStatus>;
   installSpeech(): Promise<import("./speech").SpeechStatus>;
   stopSpeech(): Promise<void>;
+  retrievalStatus(): Promise<
+    import("./context-settings").ContextAssistantSetupState
+  >;
+  installRetrieval(): Promise<
+    import("./context-settings").ContextAssistantSetupState
+  >;
   sendFollowup(
     taskId: string,
     text: string,

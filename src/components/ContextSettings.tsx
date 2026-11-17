@@ -1,9 +1,16 @@
-import { Network } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Download, Network, RefreshCw } from "lucide-react";
 import {
   contextAssistantDefaults,
   type ContextAssistantSettings,
+  type ContextAssistantSetupState,
 } from "../context-settings";
 import { Select } from "./Select";
+import { Spinner } from "./UI";
+import "../styles-local-model.css";
+
+const megabytes = (bytes: number) =>
+  `${Math.ceil(bytes / 1_000_000).toLocaleString()} MB`;
 
 export function ContextSettings({
   value,
@@ -15,17 +22,59 @@ export function ContextSettings({
   const settings = value ?? contextAssistantDefaults;
   const update = (patch: Partial<ContextAssistantSettings>) =>
     change({ ...settings, ...patch });
+  const [status, setStatus] = useState<ContextAssistantSetupState>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const managed =
+    settings.provider === "onnx" && !settings.packageDirectory.trim();
+  const refresh = async () => {
+    try {
+      setStatus(await window.memcode.retrievalStatus());
+      setError("");
+    } catch (error) {
+      setError((error as Error).message);
+    }
+  };
+  useEffect(() => {
+    if (settings.enabled && managed) void refresh();
+  }, [settings.enabled, managed]);
+  useEffect(() => {
+    if (!busy && status?.status !== "installing") return;
+    const timer = setInterval(() => void refresh(), 750);
+    return () => clearInterval(timer);
+  }, [busy, status?.status]);
+  const install = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      setStatus(await window.memcode.installRetrieval());
+    } catch (error) {
+      setError((error as Error).message);
+      try {
+        setStatus(await window.memcode.retrievalStatus());
+      } catch {
+        /* Keep the setup error visible. */
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+  const installing = busy || status?.status === "installing";
+  const ready = status?.status === "ready";
   return (
-    <div className="settings-section">
+    <section
+      className="settings-section context-settings"
+      aria-label="Local retrieval settings"
+    >
       <div>
         <Network size={17} />
         <span>
           <strong>Focused code context</strong>
           <small>
-            MemCode retrieves source evidence through a small worker gateway.
+            Memtrace finds the code. A local assistant helps plan the search.
           </small>
         </span>
-        <span className="settings-tag">Claude pilot</span>
+        <span className="settings-tag">On this computer</span>
       </div>
       <label className="checkbox-label">
         <input
@@ -36,13 +85,108 @@ export function ContextSettings({
         <span>
           Use a local retrieval assistant
           <small>
-            Helps plan searches. Source facts, constraints and coordination stay
-            with Memtrace.
+            Source facts, impact and coordination stay with Memtrace.
           </small>
         </span>
       </label>
+      {settings.enabled && managed && (
+        <div className="local-model-card" aria-busy={installing}>
+          <div className="local-model-status">
+            {installing ? (
+              <Spinner />
+            ) : ready ? (
+              <Check size={15} />
+            ) : (
+              <Network size={15} />
+            )}
+            <strong>
+              {ready
+                ? "Ready to assist"
+                : installing
+                  ? status?.phase === "verify"
+                    ? "Checking your local model…"
+                    : "Downloading your local model…"
+                  : "Set up local retrieval"}
+            </strong>
+            {ready && <span className="local-model-ready">Installed</span>}
+          </div>
+          <p>
+            {status?.message ??
+              (error
+                ? "Local setup could not be checked. Try again below."
+                : "Checking the model on this computer…")}
+          </p>
+          {installing && (
+            <div className="local-model-progress" role="status">
+              <progress
+                aria-label="Local retrieval model download"
+                max={status?.totalBytes || 1}
+                value={status?.downloadedBytes ?? 0}
+              />
+              {status?.totalBytes ? (
+                <small>
+                  {megabytes(status.downloadedBytes)} of{" "}
+                  {megabytes(status.totalBytes)}
+                </small>
+              ) : null}
+            </div>
+          )}
+          {!ready && status?.status !== "unsupported" && (
+            <button
+              type="button"
+              className="button primary"
+              disabled={installing || (!status && !error)}
+              onClick={() => void (status ? install() : refresh())}
+            >
+              {installing ? (
+                <Spinner />
+              ) : error || status?.status === "error" ? (
+                <RefreshCw size={13} />
+              ) : (
+                <Download size={13} />
+              )}
+              {installing
+                ? "Setting up…"
+                : !status && error
+                  ? "Check setup again"
+                  : status?.status === "error"
+                    ? "Retry setup"
+                    : "Set up local retrieval"}
+            </button>
+          )}
+          <small>
+            {ready
+              ? "Runs locally when a worker needs context. Save settings to use it."
+              : `Downloads ${status?.totalBytes ? `about ${megabytes(status.totalBytes)} of ` : "the "}model files once. No extra app or package paths. Your code stays on this computer.`}
+          </small>
+        </div>
+      )}
+      {settings.enabled && (error || status?.status === "error") && (
+        <p className="local-model-error" role="alert">
+          {error || status?.message}
+        </p>
+      )}
+      {settings.enabled && !managed && (
+        <p className="settings-hint">
+          Using your advanced local configuration.
+          <button
+            type="button"
+            className="text-button"
+            onClick={() =>
+              update({
+                provider: "onnx",
+                packageDirectory: "",
+                model: contextAssistantDefaults.model,
+              })
+            }
+          >
+            Use MemCode setup
+          </button>
+        </p>
+      )}
       {settings.enabled && (
-        <>
+        <details className="local-model-advanced">
+          <summary>Advanced · use an existing local model or server</summary>
           <label className="field">
             <span>Local inference</span>
             <Select
@@ -57,20 +201,18 @@ export function ContextSettings({
                 })
               }
             >
-              <option value="onnx">
-                Cached ONNX model · runs on this computer
-              </option>
+              <option value="onnx">MemCode local model</option>
               <option value="openai-compatible">
-                Local model server · loopback endpoint
+                Existing local model server
               </option>
             </Select>
           </label>
           {settings.provider === "onnx" ? (
             <label className="field">
-              <span>Transformers package directory</span>
+              <span>Optional Transformers package directory</span>
               <input
                 aria-label="Context model package directory"
-                placeholder="Absolute path to @huggingface/transformers with its cached model"
+                placeholder="Leave blank to use MemCode’s managed setup"
                 value={settings.packageDirectory}
                 onChange={(event) =>
                   update({ packageDirectory: event.target.value })
@@ -97,14 +239,12 @@ export function ContextSettings({
               onChange={(event) => update({ model: event.target.value })}
             />
           </label>
-        </>
+        </details>
       )}
       <p className="settings-hint">
-        Deterministic retrieval works without a model. ONNX uses existing local
-        files without downloading weights. Unavailable assistance falls back to
-        deterministic retrieval. The pilot keeps normal project rules and
-        authentication.
+        Memtrace retrieval works without this optional model. Setup and local
+        processing stay separate from your coding-model account.
       </p>
-    </div>
+    </section>
   );
 }

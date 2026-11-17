@@ -184,10 +184,10 @@ export async function installNativeBridge(): Promise<void> {
     (event) => previews.forEach((listener) => listener(event.payload)),
   );
   const api: MemCodeAPI = {
-    telemetryStatus:()=>call("telemetry:status"),
-    setTelemetryEnabled:(enabled)=>call("telemetry:set",{enabled}),
-    flushTelemetry:()=>call("telemetry:flush"),
-    openTelemetryPrivacy:()=>call("telemetry:privacy"),
+    telemetryStatus: () => call("telemetry:status"),
+    setTelemetryEnabled: (enabled) => call("telemetry:set", { enabled }),
+    flushTelemetry: () => call("telemetry:flush"),
+    openTelemetryPrivacy: () => call("telemetry:privacy"),
     betaStatus: () => call("beta:status"),
     connectBeta: () => call("beta:connect"),
     cancelBeta: () => call("beta:cancel"),
@@ -269,6 +269,8 @@ export async function installNativeBridge(): Promise<void> {
     prepareSpeech: () => call("speech:prepare"),
     installSpeech: () => call("speech:install"),
     stopSpeech: () => call("speech:stop"),
+    retrievalStatus: () => call("retrieval:status"),
+    installRetrieval: () => call("retrieval:setup"),
     sendFollowup: (taskId, text, ids) =>
       call("review:send", { taskId, text, ids }),
     saveReviewComment: (input) => call("review:save", input),

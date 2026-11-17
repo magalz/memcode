@@ -63,6 +63,8 @@ export async function startContextSession(
       throw new Error(
         `The ONNX pilot requires model ${contextAssistantDefaults.model}.`,
       );
+    if (settings.provider === "onnx" && !settings.packageDirectory.trim())
+      throw new Error("Set up the local retrieval assistant in Settings before enabling it.");
     assistant =
       settings.provider === "onnx"
         ? new OnnxAssistant(settings.packageDirectory)

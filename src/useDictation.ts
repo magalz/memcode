@@ -104,7 +104,7 @@ export function useDictation(
         typeof MediaRecorder === "undefined"
       )
         throw Error(
-          "This system browser cannot record audio. Update WebView2 or use another microphone-capable browser.",
+          "Audio recording is unavailable in this system browser. Update MemCode and your operating system, then try again.",
         );
       const input = await navigator.mediaDevices.getUserMedia({
         audio: {

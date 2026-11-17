@@ -21,6 +21,7 @@ import { assertWorkerConnected, connectedRuntimes } from "./worker-connections";
 import { EpicWorkspace } from "./epic-workspace";
 import { FleetCoordinator, FleetBlocked } from "./fleet";
 import { startContextSession, type ContextSession } from "./context/host";
+import type { RetrievalAssistant } from "./context/local-model";
 import type { TerminalManager } from "./terminals";
 import { claudeProfileArgs, writeClaudeProfile } from "./context/profile";
 import type { ContextPack } from "./context/contracts";
@@ -225,6 +226,7 @@ export class WorkerManager {
     private readonly assertAccountSession?: () => void,
     private readonly mayDispatch: (project?: Project) => boolean = () => true,
     private readonly telemetry?: WorkerTelemetry,
+    private readonly retrievalAssistant?: () => Promise<RetrievalAssistant>,
   ) {
     this.inputs = new WorkerInputs(state, changed);
     for (const task of state().tasks)
@@ -704,6 +706,14 @@ export class WorkerManager {
           throw new Error(
             "The MemCode tool gateway is missing. Build the local runtime before starting a worker.",
           );
+        const contextSettings = this.state().settings.contextAssistant;
+        const managedAssistant =
+          contextSettings?.enabled &&
+          contextSettings.provider === "onnx" &&
+          !contextSettings.packageDirectory.trim() &&
+          this.retrievalAssistant
+            ? await Promise.race([this.retrievalAssistant(), aborted])
+            : undefined;
         contextOpening = startContextSession(
           this.engine,
           {
@@ -714,7 +724,8 @@ export class WorkerManager {
           },
           join(workspace, workerRoot),
           {
-            settings: this.state().settings.contextAssistant,
+            settings: contextSettings,
+            assistant: managedAssistant,
             ...(this.terminals
               ? {
                   terminal: (request) =>

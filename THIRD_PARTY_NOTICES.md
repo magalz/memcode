@@ -23,6 +23,23 @@ licensed and is not covered by MemCode's PolyForm Noncommercial license. No
 Memtrace or MemDB backend source is included. The app activates the private
 engine after account approval without replacing an installed Memtrace CLI.
 
+## Optional local inference and dictation
+
+The separately staged `retriever-runtime/` resources contain a text-only build
+of Transformers.js 4.3.2 and ONNX Runtime 1.23.2. Original package notices remain
+beside those components; `THIRD_PARTY_NOTICES.json` and `provenance.json` record
+their versions, notice files and checksums. The Transformers.js entry is modified
+at build time to expose text generation only. Sharp, libvips and browser inference
+runtimes are excluded. These independently licensed components retain their
+original rights, including commercial use under their respective licenses.
+
+Local retrieval model files are downloaded only during explicit setup. Qwen2.5
+Coder 0.5B retains its Apache-2.0 license and original model card in the private
+model cache. Local dictation downloads Whisper Tiny and a separately licensed
+whisper.cpp CPU runtime; the Mac archive includes original dependency notices
+and exact upstream source provenance. These model and runtime licenses are
+separate from MemCode's noncommercial terms.
+
 ## Source access for MPL components
 
 The unmodified MPL-2.0 components listed below remain available under MPL-2.0.

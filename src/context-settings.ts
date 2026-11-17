@@ -6,6 +6,15 @@ export interface ContextAssistantSettings {
   model: string;
 }
 
+export interface ContextAssistantSetupState {
+  status: "not-installed" | "installing" | "ready" | "error" | "unsupported";
+  phase?: "runtime" | "model" | "verify";
+  downloadedBytes: number;
+  totalBytes: number;
+  model: string;
+  message?: string;
+}
+
 export const contextAssistantDefaults: ContextAssistantSettings = {
   enabled: false,
   provider: "onnx",

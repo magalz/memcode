@@ -33,7 +33,15 @@ execFileSync(process.execPath, ["scripts/prepare-desktop-runtime.mjs"], {
   stdio: "inherit",
   windowsHide: true,
 });
-execFileSync(process.execPath, ["--import", "tsx", "scripts/prepare-memtrace-engine.mjs"], {
+execFileSync(
+  process.execPath,
+  ["--import", "tsx", "scripts/prepare-memtrace-engine.mjs"],
+  {
+    stdio: "inherit",
+    windowsHide: true,
+  },
+);
+execFileSync(process.execPath, ["scripts/prepare-retriever-runtime.mjs"], {
   stdio: "inherit",
   windowsHide: true,
 });
@@ -47,7 +55,9 @@ const target =
     : process.platform === "darwin"
       ? "app,dmg"
       : "deb,appimage";
-const baseConfig = JSON.parse(await readFile("src-tauri/tauri.conf.json", "utf8"));
+const baseConfig = JSON.parse(
+  await readFile("src-tauri/tauri.conf.json", "utf8"),
+);
 const config = JSON.stringify({
   bundle: {
     active: true,
@@ -56,6 +66,7 @@ const config = JSON.stringify({
     resources: {
       ...baseConfig.bundle.resources,
       "../dist-memtrace-engine/": "memtrace-engine/",
+      "../dist-retriever-runtime/": "retriever-runtime/",
     },
   },
 });

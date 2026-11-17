@@ -1,0 +1,16 @@
+{
+  "name": "memcode-retriever-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned local inference dependencies staged into the MemCode desktop installer, never installed on the user's project.",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "dependencies": {
+    "@huggingface/transformers": "4.3.2",
+    "onnxruntime-node": "1.23.2",
+    "onnxruntime-common": "1.23.2"
+  },
+  "overrides": {
+    "onnxruntime-node": "1.23.2",
+    "onnxruntime-common": "1.23.2"
+  }
+}
