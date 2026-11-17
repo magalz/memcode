@@ -128,10 +128,11 @@ impl RuntimeBridge {
                 }
             });
         if !service.is_file() {
-            return Err(format!(
-                "The local runtime is missing at {}. Run npm run build first.",
-                service.display()
-            ));
+            return Err(if cfg!(debug_assertions) {
+                format!("The local runtime is missing at {}. Run npm run build first.", service.display())
+            } else {
+                "A required MemCode program file is missing. Run the MemCode installer again to repair the application. Your projects and settings are kept separately.".into()
+            });
         }
         let app_path = std::env::var_os("MEMCODE_APP_PATH")
             .map(PathBuf::from)
@@ -180,7 +181,13 @@ impl RuntimeBridge {
         {
             command.creation_flags(0x08000000);
         }
-        let mut child = command.spawn().map_err(|e|format!("Could not start the local Node runtime: {e}. Install Node.js 22.12+ or set MEMCODE_NODE_PATH."))?;
+        let mut child = command.spawn().map_err(|error| {
+            if cfg!(debug_assertions) {
+                format!("Could not start the local Node runtime: {error}. Install Node.js 22.12+ or set MEMCODE_NODE_PATH.")
+            } else {
+                format!("MemCode could not start its bundled runtime: {error}. Run the MemCode installer again to repair the application. Your projects and settings are kept separately.")
+            }
+        })?;
         let stdout = child.stdout.take().ok_or("Missing runtime output")?;
         let stderr = child.stderr.take().ok_or("Missing runtime diagnostics")?;
         *self.0.writer.lock().await = child.stdin.take();
@@ -532,7 +539,7 @@ fn node_binary(resources: Option<&std::path::Path>) -> PathBuf {
     }
     if let Some(resources) = resources {
         let bundled = resources.join("desktop-runtime").join(if cfg!(windows) { "node.exe" } else { "node" });
-        if bundled.is_file() {
+        if bundled.is_file() || !cfg!(debug_assertions) {
             return bundled;
         }
     }

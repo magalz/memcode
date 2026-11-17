@@ -7,6 +7,8 @@ mod browser;
 mod browser_capture;
 mod native;
 mod install_location;
+#[cfg(windows)]
+mod startup;
 mod state_patch;
 mod terminal;
 mod updates;
@@ -65,7 +67,7 @@ fn workspace_ack(
 fn main() {
     let browser = browser::BrowserState::new();
     let runtime = RuntimeBridge::new();
-    tauri::Builder::default()
+    let result = tauri::Builder::default()
         .manage(runtime)
         .manage(native::PreviewState::default())
         .manage(browser)
@@ -116,6 +118,8 @@ fn main() {
             let runtime = app.state::<RuntimeBridge>().inner().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(error) = runtime.launch(handle.clone()).await {
+                    #[cfg(windows)]
+                    startup::record("local-runtime", &error);
                     runtime.fail(error).await;
                 }
                 if let Some(window) = handle.get_window("main") {
@@ -137,6 +141,12 @@ fn main() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("MemCode could not start its native desktop shell");
+        .run(tauri::generate_context!());
+    if let Err(error) = result {
+        #[cfg(windows)]
+        startup::fatal(&error.to_string());
+        #[cfg(not(windows))]
+        eprintln!("MemCode could not start its native desktop shell: {error}");
+        std::process::exit(1);
+    }
 }

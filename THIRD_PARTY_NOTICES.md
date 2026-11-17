@@ -15,6 +15,12 @@ or LGPL alternatives. Conjunctive licenses remain conjunctive.
 
 ## Separately licensed Memtrace engine
 
+Windows setup also embeds Microsoft's signed Evergreen WebView2 Runtime offline
+installer. It installs the Windows webview prerequisite when needed; Windows
+continues to update that shared runtime. It is separately licensed by Microsoft:
+[WebView2 distribution](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution).
+The Microsoft installer retains its original publisher signature and notices.
+
 Official MemCode desktop installers include a tested compiled Memtrace engine.
 Its original archive and reviewed checksums are supplied in `memtrace-engine/`;
 the unchanged license, beta usage terms, dependency notices and build provenance
