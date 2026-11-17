@@ -248,7 +248,10 @@ test("explicit Memtrace sign-in delegates the official claim to the system-brows
         input: { url: "https://www.memtrace.io/claim?code=test-device-code" },
       },
     ]);
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    const loginDeadline = Date.now() + 5000;
+    while (manager.current.loginPending && Date.now() < loginDeadline)
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(manager.current.loginPending, false);
     const status = await manager.refresh();
     assert.equal(status.status, "connected");
     assert.equal(status.principal, undefined);
