@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { createWriteStream } from "node:fs";
+import { createReadStream, createWriteStream } from "node:fs";
 import {
   chmod,
   mkdir,
@@ -12,11 +12,12 @@ import {
   readFile,
   readdir,
   rm,
+  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import {
@@ -27,6 +28,11 @@ import {
 
 assert.equal(process.platform, "darwin", "This fixture requires native macOS.");
 const execute = promisify(execFile);
+async function fileSha256(path) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest("hex");
+}
 const root = resolve(import.meta.dirname, "..");
 const argument = (name) => {
   const at = process.argv.indexOf(name);
@@ -310,6 +316,33 @@ try {
     );
     const app = await findDesktopApp("codex", appOptions);
     assert.ok(app && command.command.startsWith(app + "/Contents/Resources/"));
+    report.actualBundledCodexEntrypoint = relative(app, command.command);
+    const packageRoot = join(app, "Contents", "Resources", "codex-cli");
+    if (command.command === join(packageRoot, "bin", "codex")) {
+      const manifest = JSON.parse(
+        await readFile(join(packageRoot, "codex-package.json"), "utf8"),
+      );
+      assert.equal(manifest.layoutVersion, 1);
+      assert.equal(manifest.entrypoint, "bin/codex");
+      assert.equal(manifest.variant, "codex");
+      const nativeBinary = join(
+        packageRoot,
+        "CodexCLI.app",
+        "Contents",
+        "MacOS",
+        "codex",
+      );
+      const nativeFile = await stat(nativeBinary);
+      assert.ok(nativeFile.isFile() && nativeFile.size > 0);
+      report.actualBundledCodexPackageVersion = manifest.version;
+      report.actualBundledCodexPackageTarget = manifest.target;
+      report.actualBundledCodexNativeBinary = relative(app, nativeBinary);
+      report.actualBundledCodexNativeBinaryBytes = nativeFile.size;
+      report.actualBundledCodexNativeBinarySha256 =
+        await fileSha256(nativeBinary);
+      report.actualBundledCodexEntrypointKind = "official-package-launcher";
+      report.officialDeclaredEntrypointVerified = true;
+    } else report.actualBundledCodexEntrypointKind = "legacy-native-cli";
     await execute(
       "/usr/bin/codesign",
       ["--verify", "--strict", "--deep", app],
@@ -335,9 +368,9 @@ try {
     report.actualBundledCodexCliVersion = version.stdout.trim();
     report.actualBundledCodexAppServerSupported = true;
     report.officialAppSignatureVerified = true;
-    report.actualBundledCodexExecutableSha256 = createHash("sha256")
-      .update(await readFile(command.command))
-      .digest("hex");
+    report.actualBundledCodexEntrypointSha256 = await fileSha256(
+      command.command,
+    );
   }
   report.passed = true;
 } catch (error) {

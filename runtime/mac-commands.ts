@@ -211,12 +211,15 @@ export async function findMacCommand(
   }
   if (name === "codex") {
     for (const root of appRoots(options))
-      for (const app of ["Codex.app", "ChatGPT.app"]) {
-        // This is the app's agent binary, never the desktop UI executable.
-        const path = join(root, app, "Contents", "Resources", "codex");
-        if (await executable(path))
-          return { command: path, prefix: [], env: envFor(path) };
-      }
+      for (const app of ["Codex.app", "ChatGPT.app"])
+        for (const entry of [join("codex-cli", "bin", "codex"), "codex"]) {
+          // The current official Mac package declares codex-cli/bin/codex as
+          // its CLI launcher. Older packages used Resources/codex directly.
+          // Never launch the desktop UI executable in Contents/MacOS.
+          const path = join(root, app, "Contents", "Resources", entry);
+          if (await executable(path))
+            return { command: path, prefix: [], env: envFor(path) };
+        }
   }
   return null;
 }

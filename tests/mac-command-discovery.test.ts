@@ -162,6 +162,30 @@ test("Codex bundled agent is found without confusing the desktop UI executable f
   assert.equal(await findDesktopApp("codex", f.options), app);
 });
 
+test("Codex discovers the official Mac application's declared codex-cli/bin/codex launcher", async (t) => {
+  const f = await fixture(t);
+  const app = await f.app("ChatGPT.app");
+  const packageRoot = join(app, "Contents", "Resources", "codex-cli");
+  await f.executable(join(app, "Contents", "MacOS", "ChatGPT"));
+  await f.executable(
+    join(packageRoot, "CodexCLI.app", "Contents", "MacOS", "codex"),
+  );
+  const launcher = await f.executable(join(packageRoot, "bin", "codex"));
+  await writeFile(
+    join(packageRoot, "codex-package.json"),
+    JSON.stringify({
+      layoutVersion: 1,
+      target: "aarch64-apple-darwin",
+      entrypoint: "bin/codex",
+    }),
+  );
+  const found = await findCommand("codex", "", f.options);
+  assert.equal(found?.command, launcher);
+  assert.deepEqual(found?.prefix, []);
+  assert.equal(commandIdentity(found!), launcher);
+  assert.equal(await findDesktopApp("codex", f.options), app);
+});
+
 test("Cursor editor presence stays distinct from availability of its standalone Agent CLI", async (t) => {
   const f = await fixture(t);
   const app = await f.app("Cursor.app");
