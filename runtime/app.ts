@@ -1263,7 +1263,7 @@ export async function createRuntime(
     },
   );
   registerPlanningControls(register, state, project, changed);
-  registerIntelligence(register, state, project, changed, engine);
+  registerIntelligence(register, state, project, changed, engine, analyze);
   registerLocalAnalysis(register, project, engine, async (item, repoId) => {
     if (closed || analyses.has(item.id)) return;
     item.repoId = repoId;

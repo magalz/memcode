@@ -175,6 +175,7 @@ export function App() {
   >(null);
   const [projectMenu, setProjectMenu] = useState(false);
   const [joinTeamRequest, setJoinTeamRequest] = useState(0);
+  const [localSetupProjectId, setLocalSetupProjectId] = useState("");
   const [docsArticle, setDocsArticle] = useState("start");
   const [createEpicRequest, setCreateEpicRequest] = useState(0);
   const [account, setAccount] = useState<MemtraceAccount>();
@@ -351,6 +352,20 @@ export function App() {
     setStoryParent(parentId);
     setDialog("task");
   };
+  const openCodeAnalysis = async () => {
+    if (!project.path || project.example) {
+      if (state.team?.some((room) => room.projectId === project.id)) {
+        setLocalSetupProjectId(project.id);
+        setView("team");
+      } else setDialog("project");
+      return;
+    }
+    if (!runtime.memtraceAvailable && betaStatus && betaStatus.state !== "connected") {
+      setDialog("settings");
+      return;
+    }
+    await window.memcode.analyzeProject(project.id);
+  };
   const updateGuide = (patch: OnboardingPatch) => {
     if (patch.step === "code-review") setView("board");
     void act(() =>
@@ -410,7 +425,7 @@ export function App() {
       return;
     }
     if (action === "analyze") {
-      void act(() => window.memcode.analyzeProject(project.id));
+      void act(openCodeAnalysis);
       return;
     }
     const progress = guideProgress;
@@ -658,13 +673,7 @@ export function App() {
             }
             onClick={() => {
               if (project.analysis === "ready") setView("insights");
-              else if (project.path && !project.example)
-                void act(() => window.memcode.analyzeProject(project.id));
-              else if (
-                state.team?.some((team) => team.projectId === project.id)
-              )
-                setView("team");
-              else setDialog("project");
+              else void act(openCodeAnalysis);
             }}
           >
             <span
@@ -798,8 +807,11 @@ export function App() {
               state={state}
               project={project}
               joinRequested={joinTeamRequest}
+              localSetupRequested={localSetupProjectId === project.id}
+              onLocalSetupHandled={() => setLocalSetupProjectId("")}
               onJoinHandled={() => setJoinTeamRequest(0)}
               onWorkers={() => setView("workers")}
+              onInsights={() => setView("insights")}
               notify={notify}
               open={open}
               openArtifact={(artifact) => {
@@ -837,6 +849,13 @@ export function App() {
           )}
           {view === "insights" && (
             <InsightsPage
+              key={JSON.stringify([
+                project.id,
+                project.path,
+                project.repoId,
+                project.branch,
+              ])}
+              onAnalyze={openCodeAnalysis}
               state={state}
               project={project}
               open={open}
@@ -845,6 +864,13 @@ export function App() {
           )}
           {view === "improve" && (
             <Improve
+              key={JSON.stringify([
+                project.id,
+                project.path,
+                project.repoId,
+                project.branch,
+              ])}
+              onAnalyze={openCodeAnalysis}
               state={state}
               project={project}
               open={open}

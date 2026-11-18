@@ -33,6 +33,7 @@ interface Props {
   repository?: RepositoryDescriptor;
   notify: (message: string) => void;
   onWorkers: () => void;
+  onInsights?: () => void;
 }
 
 export function LocalProjectSetup({
@@ -40,6 +41,7 @@ export function LocalProjectSetup({
   repository,
   notify,
   onWorkers,
+  onInsights,
 }: Props) {
   const [inspection, setInspection] = useState<RepositoryInspection | null>(
     null,
@@ -141,10 +143,14 @@ export function LocalProjectSetup({
         }
       })
       .catch(() => {
-        if (live)
-          setError(
-            "Could not check existing repository setup. Reopen local setup to retry before cloning.",
-          );
+        if (!live) return;
+        // An attached checkout can still be inspected if clone status is unavailable.
+        if (project.path) setRecovering(false);
+        setError(
+          project.path
+            ? "Could not check repository setup. You can still inspect the connected checkout."
+            : "Could not check existing repository setup. Reopen local setup to retry before cloning.",
+        );
       });
     if (project.path)
       void window.memcode
@@ -461,6 +467,11 @@ export function LocalProjectSetup({
             </div>
           </div>
           <div className="repo-health-actions">
+            {project.analysis === "ready" && onInsights && (
+              <button className="button secondary" onClick={onInsights}>
+                Open Insights <ArrowRight size={13} />
+              </button>
+            )}
             <button
               className="repo-text-button"
               style={{ marginLeft: 0 }}

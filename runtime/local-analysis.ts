@@ -254,6 +254,7 @@ export async function localAnalysisDiagnostics(
   }
   const root = pathKey(project.path);
   const savedNote = project.analysisNote;
+  const savedAnalysis = project.analysis;
   const savedRepo = project.repoId;
   const savedCheckout = project.analysisCheckout;
   const [repositories, watches, jobs] = await Promise.all([
@@ -505,9 +506,11 @@ export async function localAnalysisDiagnostics(
     result.sourcePublication === "verified" &&
     sameCheckout() &&
     options.onRecovered &&
-    project.analysis === "error" &&
+    project.analysis === savedAnalysis &&
     project.analysisNote === savedNote &&
-    recoverablePublicationFailure(savedNote) &&
+    ((savedAnalysis === "error" && recoverablePublicationFailure(savedNote)) ||
+      (savedAnalysis === "idle" && (!savedNote ||
+        savedNote === "Local repository connected. Refresh code context before starting a worker."))) &&
     typeof repoId === "string"
   ) {
     await options.onRecovered(repoId);
