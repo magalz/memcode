@@ -82,6 +82,8 @@ test("only a stable certificate from the same owner recovers a saved publication
     ["newly bound checkout", {}, true, "Local repository connected. Refresh code context before starting a worker.", true, "idle"],
     ["idle with no saved failure", {}, true, undefined, true, "idle"],
     ["account changed", {}, true, "The engine account changed. Refresh local code context.", false, "idle"],
+    ["owned write in progress", {ready: false, status: "partial", reason: "index_write_in_progress", source_revision: "observed-source"}, true, refused, false],
+    ["stable after index write", {}, true, "Memtrace is still verifying the graph for epic/local after an index write. Retry to follow the existing graph.", true],
     ["stable verified publication", {}, true, refused, true],
     ["stable verified publication after timeout", {}, true, expired, true],
     [
@@ -171,6 +173,7 @@ test("only a stable certificate from the same owner recovers a saved publication
         : name === "replay and embeddings still running" ||
             name === "reasonless partial after timeout"
           ? "incomplete"
+          : name === "owned write in progress" ? "publishing"
           : "unverified",
       name,
     );

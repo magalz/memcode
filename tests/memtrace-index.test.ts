@@ -111,6 +111,29 @@ test("refresh preserves existing identity and requests incremental indexing of t
   assert.equal(f.calls.at(-1)?.name, "get_query_revision");
 });
 
+for (const existing of [false, true]) {
+  test(`worker analysis follows its owned writer with ${existing ? "zero new jobs on retry" : "one job on first start"}`, async () => {
+    const owned: Project = { ...project, analysisCheckout: "owned-worktree-v1",
+      analysis: "error", analysisNote: "Memtrace job completed, but current source on branch epic/local-context is not verified (index_write_in_progress). Retry to follow its publication; no duplicate index was queued." };
+    const published = { ...verified, checkout_mode: owned.analysisCheckout, graph_scope: "owned_worktree_graph", source_revision: "selected-source" };
+    const f = fixture(existing ? [repository] : [], published);
+    const original = f.engine.call;
+    let reads = 0;
+    f.engine.call = async (p, name, args) => {
+      const result = await original(p, name, args);
+      if (name !== "get_query_revision") return result;
+      if (++reads === 1) return { ...published, ready: false, status: "partial", reason: "index_write_in_progress", publication: {status:"partial"} };
+      assert.equal(args.expected_source_revision, published.source_revision);
+      return published;
+    };
+    try {
+      assert.equal(await f.engine.analyze(owned, () => {}, true), project.repoId);
+      assert.equal(f.calls.filter(c => c.name === "index_directory").length, existing ? 0 : 1);
+      assert.equal(reads, 2);
+    } finally { await f.engine.close(); }
+  });
+}
+
 test("job completion does not mark an unpublished graph ready", async () => {
   const f = fixture({ repos: [repository] }, {
     ready: false,

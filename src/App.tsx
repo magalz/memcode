@@ -169,6 +169,7 @@ export function App() {
     null,
   );
   const [storyEpic, setStoryEpic] = useState<string | undefined>();
+  const [storyStatus, setStoryStatus] = useState<string | undefined>();
   const [storyParent, setStoryParent] = useState<string | undefined>();
   const [dialog, setDialog] = useState<
     "task" | "project" | "settings" | "search" | "welcome" | null
@@ -297,6 +298,7 @@ export function App() {
       ) {
         setStoryEpic(undefined);
         setStoryParent(undefined);
+        setStoryStatus(undefined);
         setDialog("task");
       }
     };
@@ -347,7 +349,8 @@ export function App() {
     setSelectedId(task.id);
     setDialog(null);
   };
-  const create = (epicId?: string, parentId?: string) => {
+  const create = (epicId?: string, parentId?: string, statusId?: string) => {
+    setStoryStatus(statusId);
     setStoryEpic(epicId);
     setStoryParent(parentId);
     setDialog("task");
@@ -911,7 +914,7 @@ export function App() {
               project={project}
               runtime={runtime}
               open={open}
-              create={() => create()}
+              create={(statusId) => create(undefined, undefined, statusId)}
               notify={notify}
               act={act}
               addProject={() => setDialog("project")}
@@ -1161,6 +1164,7 @@ export function App() {
           defaultHarness={state.settings.defaultHarness}
           epics={epics}
           initialEpicId={storyEpic}
+          initialStatusId={storyStatus}
           cycles={state.cycles.filter(
             (cycle) => cycle.projectId === project.id,
           )}

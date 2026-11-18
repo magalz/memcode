@@ -76,6 +76,8 @@ export function LocalProjectSetup({
       ? "Branch mismatch"
       : diagnostics?.sourcePublication === "verified"
         ? "Aligned"
+        : diagnostics?.sourcePublication === "publishing"
+          ? "Publishing graph"
         : revision
           ? "Not yet verified"
           : "Unknown";
@@ -305,13 +307,13 @@ export function LocalProjectSetup({
     if (!publicationNeedsRetry || !project.path) return;
     let stopped = false,
       timer: ReturnType<typeof setTimeout>;
-    const deadline = Date.now() + 120_000;
+    const started = Date.now();
     const check = async () => {
       const report = await checkDiagnostics(true);
       if (
         !stopped &&
-        report?.sourcePublication === "incomplete" &&
-        Date.now() + 5_000 <= deadline
+        (report?.sourcePublication === "incomplete" || report?.sourcePublication === "publishing") &&
+        Date.now() + 5_000 <= started + (report.sourcePublication === "publishing" ? 600_000 : 120_000)
       )
         timer = setTimeout(check, 5_000);
     };
@@ -448,7 +450,9 @@ export function LocalProjectSetup({
             </span>
             <div>
               <strong>
-                {analyzing
+                {diagnostics?.sourcePublication === "publishing"
+                  ? "Memtrace is finishing the code graph"
+                  : analyzing
                   ? "Memtrace is understanding your local code…"
                   : project.analysis === "ready"
                     ? "Code context is ready"
@@ -457,7 +461,9 @@ export function LocalProjectSetup({
                       : "Prepare the context for your workers"}
               </strong>
               <p>
-                {publicationNeedsRetry
+                {diagnostics?.sourcePublication === "publishing"
+                  ? "Memtrace is writing the graph for this checkout. The worker can continue once the source is verified."
+                  : publicationNeedsRetry
                   ? sourceChangedBeforePublication(project.analysisNote)
                     ? "The source changed during verification. Once edits settle, retry analysis to verify the current checkout."
                     : "Memtrace still needs to verify this checkout. Retry analysis to refresh its graph."

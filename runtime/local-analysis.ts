@@ -11,6 +11,7 @@ import {
   certifiedPublication,
   exactRevisionSource,
   incompletePublication,
+  writingSourceRevision,
 } from "./memtrace-peer-index";
 import { recoverablePublicationFailure } from "../src/local-analysis";
 
@@ -399,6 +400,8 @@ export async function localAnalysisDiagnostics(
       if (exactOwner) {
         if (certifiedPublication(row(revision), project, repoId))
           result.sourcePublication = "verified";
+        else if (writingSourceRevision(row(revision), project, repoId))
+          result.sourcePublication = "publishing";
         else if (incompletePublication(row(revision)))
           result.sourcePublication = "incomplete";
       }

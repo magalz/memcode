@@ -150,6 +150,7 @@ export interface CodeReviewComparisonCoverage {
   omittedFunctions: number;
   notes: string[];
 }
+export type ReviewFileAttribution = "reservation" | "native-edit" | "verified-edits" | "legacy" | "discontinuous";
 export interface StoryReviewRun {
   version: 1;
   id: string;
@@ -178,7 +179,7 @@ export interface StoryReviewRun {
       path: string;
       beforeHash?: string;
       afterHash?: string;
-      attribution: "reservation" | "legacy" | "discontinuous";
+      attribution: ReviewFileAttribution;
       /** Own journal hashes stay intact when later disjoint peer edits are present. */
       projection?: {
         method: "unique-exact-context";

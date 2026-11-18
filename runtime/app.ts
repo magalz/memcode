@@ -30,7 +30,7 @@ import { browserRequestSchema } from "../src/browser";
 import { AgentBrowserManager } from "./browser/manager";
 import { TerminalManager } from "./terminals";
 import { terminalRequestSchema } from "../src/terminal";
-import { readWorkerChanges, WorkerChangeJournal } from "./changes";
+import { readDisplayedWorkerChanges, WorkerChangeJournal } from "./changes";
 import { canonicalArtifactRoots, resolveFile } from "./files";
 import { registerReview } from "./review";
 import { registerOnboarding } from "./onboarding";
@@ -253,6 +253,7 @@ export async function createRuntime(
         await codeReviews.beforeWorker(item.id);
       },
       (item) => codeReviews?.occupiedSlots(item) ?? 0,
+      (id) => analyze(id),
     ),
     preview = new PreviewManager(
       host,
@@ -290,6 +291,7 @@ export async function createRuntime(
     openExternal: (url) => host.call("open_memcode_identity", { url }),
   });
   team = new TeamSyncClient(state, store.dir, changed, {
+    onWorkerActivity: () => emit("workspace:state", store.state),
     identityProof: teamIdentity,
     identityAvailable: teamIdentity.available,
     serviceDiscovery: () => discoverOfficialTeamService(),
@@ -878,8 +880,6 @@ export async function createRuntime(
   register("task:qualify", identifier, (id) => assignStory(id));
   register("worker:start", identifier, async (id) => {
     const item = task(id);
-    if (project(item.projectId).analysis !== "ready")
-      await analyze(item.projectId);
     await workers.start(item, project(item.projectId));
   });
   register("worker:stop", identifier, (id) => workers.stop(id));
@@ -1457,7 +1457,7 @@ export async function createRuntime(
   register("preview:hide", z.undefined(), () => preview.hide());
   register("worker:changes", identifier, async (id) => {
     const item = task(id);
-    let changes = await readWorkerChanges(item);
+    let changes = await readDisplayedWorkerChanges(item);
     if (
       !changes.checkpoints.length &&
       item.run.baseline &&
@@ -1484,7 +1484,7 @@ export async function createRuntime(
           project(item.projectId),
           item,
         );
-        changes = await readWorkerChanges(item);
+        changes = await readDisplayedWorkerChanges(item);
         await changed();
       }
     }

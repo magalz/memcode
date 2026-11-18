@@ -14,7 +14,8 @@ export const recoverablePublicationFailure = (message?: string) =>
   message?.startsWith(
     "Memtrace's startup graph has not finished verifying this checkout and branch.",
   ) === true ||
-  /^Memtrace job completed, but current source on branch .+ is not verified(?: \(branch_publication_incomplete\))?\. Retry to follow its publication; no duplicate index was queued\.$/.test(
+  /^Memtrace is still verifying the graph for .+ after an index write\. Retry to follow the existing graph\.$/.test(message ?? "") ||
+  /^Memtrace job completed, but current source on branch .+ is not verified(?: \((?:branch_publication_incomplete|index_write_in_progress)\))?\. Retry to follow its publication; no duplicate index was queued\.$/.test(
     message ?? "",
   );
 
@@ -27,7 +28,7 @@ export type DiagnosticValue =
   | { [key: string]: DiagnosticValue };
 export type DiagnosticMetadata = Record<string, DiagnosticValue>;
 export interface LocalAnalysisDiagnostics {
-  sourcePublication: "verified" | "incomplete" | "unverified";
+  sourcePublication: "verified" | "publishing" | "incomplete" | "unverified";
   platform: string;
   project: {
     name: string;
