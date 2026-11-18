@@ -10,11 +10,12 @@ export interface PeerIndexWaitOptions {
   readTimeoutMs?: number;
   pollMs?: number;
   publicationMs?: number;
+  requireCertificate?: boolean;
   isCancelled?: () => boolean;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
 }
-const pathKey = (value: string) => {
+export const pathKey = (value: string) => {
   const normalized = value
     .replaceAll("\\", "/")
     .replace(/^\/\/\?\//, "")
@@ -26,6 +27,67 @@ const jobPath = (job: Json) =>
 const jobBranch = (job: Json) => job.branch ?? job.result?.branch;
 const usable = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= 500;
+
+export function exactRevisionSource(
+  value: Json | undefined,
+  project: Project,
+  repoId: string,
+) {
+  return (
+    !!project.path &&
+    value?.repo_id === repoId &&
+    typeof value.worktree === "string" &&
+    pathKey(value.worktree) === pathKey(project.path) &&
+    value.branch === project.branch &&
+    (project.analysisCheckout === "owned-worktree-v1"
+      ? value.checkout_mode === "owned-worktree-v1" &&
+        value.graph_scope === "owned_worktree_graph"
+      : value.checkout_mode !== "owned-worktree-v1" &&
+        value.graph_scope !== "owned_worktree_graph")
+  );
+}
+
+/** A saved failure may only be superseded by this checkout's stable native certificate. */
+export function certifiedPublication(
+  value: Json | undefined,
+  project: Project,
+  repoId: string,
+) {
+  return (
+    exactRevisionSource(value, project, repoId) &&
+    verifiedIndexRevision(value, project, repoId) &&
+    value?.status === "complete" &&
+    value.ambiguous_indexed_files !== true &&
+    (value.mismatched_files ?? 0) === 0 &&
+    value.publication?.status === "published" &&
+    value.requested_source_matches === true &&
+    value.requested_revision_matches === true &&
+    value.source_unchanged_during_observation === true &&
+    (value._meta?.graph_revision ?? value.graph_revision)
+      ?.publication_unchanged_during_call === true
+  );
+}
+
+/** The native reader can return a stable source with a partial graph and no reason code. */
+export function incompletePublication(value: Json | undefined) {
+  if (value?.ready !== false || value.status !== "partial") return false;
+  const reason =
+    value.reason ??
+    value._meta?.graph_revision?.reason ??
+    value.graph_revision?.reason;
+  if (reason) return reason === "branch_publication_incomplete";
+  return (
+    value.requested_source_matches === true &&
+    value.requested_revision_matches === true &&
+    value.source_unchanged_during_observation === true &&
+    value.default_branch_matches !== false &&
+    value.ambiguous_indexed_files !== true &&
+    value.mismatched_files === 0 &&
+    Number.isSafeInteger(value.source_file_count) &&
+    value.source_file_count >= 0 &&
+    value.indexed_file_count === value.source_file_count
+  );
+}
 
 /** Counts and a current repository summary are not a source/publication certificate. */
 export const verifiedIndexRevision = (
@@ -88,7 +150,9 @@ export async function waitForIndexPublication(
       ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))),
     path = pathKey(project.path ?? ""),
     branch = project.branch,
-    deadline = now() + (options.timeoutMs ?? 30_000),
+    deadline =
+      now() +
+      (options.timeoutMs ?? (options.requireCertificate ? 120_000 : 30_000)),
     pollMs = Math.max(1, options.pollMs ?? 1000);
   const assertActive = () => {
     if (
@@ -118,7 +182,7 @@ export async function waitForIndexPublication(
               ),
             Math.max(
               1,
-              Math.min(options.readTimeoutMs ?? 5000, deadline - now()),
+              Math.min(options.readTimeoutMs ?? 60_000, deadline - now()),
             ),
           );
         }),
@@ -137,7 +201,10 @@ export async function waitForIndexPublication(
       throw Error(
         `Memtrace job completed, but current source on branch ${branch} is not verified: Memtrace reported another repository, checkout or branch. Its result was not adopted.`,
       );
-    if (verifiedIndexRevision(revision, project, repoId)) return repoId;
+    const verify = options.requireCertificate
+      ? certifiedPublication
+      : verifiedIndexRevision;
+    if (verify(revision, project, repoId)) return repoId;
     reason =
       typeof revision?.reason === "string" ? revision.reason.slice(0, 200) : "";
     update(`Waiting for Memtrace to verify code context on branch ${branch}…`);
@@ -215,7 +282,14 @@ export async function waitForPeerIndex(
                   `Memtrace ${name} did not respond while inspecting the existing index.`,
                 ),
               ),
-            options.readTimeoutMs ?? 8000,
+            Math.max(
+              1,
+              Math.min(
+                options.readTimeoutMs ??
+                  (name === "get_query_revision" ? 60_000 : 8000),
+                deadline - now(),
+              ),
+            ),
           );
         }),
       ]);
@@ -253,14 +327,20 @@ export async function waitForPeerIndex(
       if (!usable(match?.repo_id)) return null;
       repoId = match.repo_id;
     }
-    const value = await read("get_query_revision", { repo_id: repoId });
+    const value = await read("get_query_revision", {
+      repo_id: repoId,
+      branch: requestedBranch,
+    });
     const exactSource =
       value?.repo_id === repoId &&
       typeof value.worktree === "string" &&
       pathKey(value.worktree) === requestedPath &&
       value.branch === requestedBranch;
     if (exactSource) backgroundObserved = true;
-    if (!verifiedIndexRevision(value, project, repoId)) return null;
+    const verify = options.requireCertificate
+      ? certifiedPublication
+      : verifiedIndexRevision;
+    if (!verify(value, project, repoId)) return null;
     if (!trackedJob && !exactSource) {
       const listed = await read("list_indexed_repositories", {});
       const repos = Array.isArray(listed)
@@ -380,7 +460,11 @@ export async function waitForPeerIndex(
         now,
         sleep,
         pollMs,
-        timeoutMs: Math.min(options.publicationMs ?? 30_000, deadline - now()),
+        timeoutMs: Math.min(
+          options.publicationMs ??
+            (options.requireCertificate ? 120_000 : 30_000),
+          deadline - now(),
+        ),
       });
     }
     if (!["pending", "running"].includes(followed.status))
