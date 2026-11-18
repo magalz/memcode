@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { errorMessage } from "../errors";
 import type { AppState, Project } from "../shared";
 import type { QualitySnapshot } from "../intelligence";
 
@@ -92,9 +93,11 @@ export function useCapture(
               : `Checkpoint recorded with ${result.status} coverage. Review its evidence notes.`,
           );
       } catch (reason) {
-        const error = reason instanceof Error ? reason.message : String(reason);
-        checkout.update({ ...checkout.state, busy: false, error });
-        if (announce && checkout.listeners.size) notify(error);
+        checkout.update({
+          ...checkout.state,
+          busy: false,
+          error: errorMessage(reason),
+        });
       } finally {
         checkout.pending = undefined;
       }

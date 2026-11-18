@@ -16,6 +16,7 @@ import { qualityValue } from "../intelligence";
 import { Empty, Spinner } from "./UI";
 import { StyleProfile } from "./StyleProfile";
 import {
+  AnalysisError,
   CaptureButtons,
   countLabel,
   DetailResults,
@@ -131,18 +132,20 @@ export function CodeInsights(props: IntelligenceProps) {
             : !project.path
               ? "Connect your local code."
               : "Analyze this checkout.";
-    const description =
-      problem ||
-      (project.example
-        ? "Choose a local project to see measurements from its source."
-        : indexing
-          ? project.analysisNote ||
-            "Your report will open when the local graph is ready."
-          : ready || busy
-            ? "Reading quality and complexity from this branch’s existing graph."
-            : !project.path
-              ? "Choose the project folder on this computer to see its code quality."
-              : "Memtrace measures the source for this branch and prepares a quality report.");
+    const description = problem ? (
+      <AnalysisError message={problem} />
+    ) : project.example ? (
+      "Choose a local project to see measurements from its source."
+    ) : indexing ? (
+      project.analysisNote ||
+      "Your report will open when the local graph is ready."
+    ) : ready || busy ? (
+      "Reading quality and complexity from this branch’s existing graph."
+    ) : !project.path ? (
+      "Choose the project folder on this computer to see its code quality."
+    ) : (
+      "Memtrace measures the source for this branch and prepares a quality report."
+    );
     return (
       <div className="code-insights-view">
         <section className="intelligence-intro">
@@ -197,11 +200,7 @@ export function CodeInsights(props: IntelligenceProps) {
         </span>
         <CaptureButtons project={project} busy={busy} capture={capture} />
       </div>
-      {report.error && (
-        <p className="intelligence-context-note" role="alert">
-          {report.error}
-        </p>
-      )}
+      {report.error && <AnalysisError message={report.error} savedCheckpoint />}
       <div
         className="intelligence-tabs"
         role="tablist"
@@ -405,9 +404,11 @@ export function CodeInsights(props: IntelligenceProps) {
           ) : (
             <div className="intelligence-small-empty">
               <Network size={20} />
-              <p role={detailError ? "alert" : undefined}>
-                {detailError || "Use refresh to read this part of the graph."}
-              </p>
+              {detailError ? (
+                <AnalysisError message={detailError} />
+              ) : (
+                <p>Use refresh to read this part of the graph.</p>
+              )}
             </div>
           )}
         </section>

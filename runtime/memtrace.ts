@@ -611,29 +611,31 @@ export class MemtraceEngine {
     };
     try {
       let discovered: any;
-      try {
+      const probe = async () => {
         await attach();
         discovered = await discover();
-      } catch (error) {
-        if (!pendingMemtraceOwner(error) && !disconnectedMemtraceClient(error))
-          throw error;
-        if (!local) {
+      };
+      if (local) {
+        // Guard the initial attachment too: an endpoint can still answer while
+        // a preceding project binding is shutting down this store.
+        await this.owners.ready(
+          { ...local, directory: launchDirectory },
+          command,
+          env,
+          probe,
+          reportProgress,
+        );
+      } else {
+        try {
+          await probe();
+        } catch (error) {
+          if (!pendingMemtraceOwner(error) && !disconnectedMemtraceClient(error))
+            throw error;
           // ClientPending is not a wrong store. Bootstrap only the selected
           // project, never the broad Folder Group or an unmarked parent.
           await disconnect();
           return this.open(project, true);
         }
-        await this.owners.ready(
-          { ...local, directory: launchDirectory },
-          command,
-          env,
-          async () => {
-            // Pending clients can retain a stale attachment during owner election.
-            await attach();
-            discovered = await discover();
-          },
-          reportProgress,
-        );
       }
       discovered = await waitForPrivateRepositoryDiscovery(
         discovered,

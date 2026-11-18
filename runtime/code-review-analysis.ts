@@ -707,7 +707,7 @@ async function analyzeStableGroup(
     symbols.splice(0, symbols.length, ...unique.slice(0, 24));
     if (unique.length > 24)
       limitations.add(
-        "Quality and impact are bounded to 24 changed functions; narrow the story or review the remainder separately.",
+        "Graph quality lookups and impact cover the first 24 affected functions. Captured-source measurements have separate coverage.",
       );
     if (!symbols.length)
       limitations.add(

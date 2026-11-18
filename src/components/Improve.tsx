@@ -23,6 +23,7 @@ import {
 import { Spinner } from "./UI";
 import { Select } from "./Select";
 import {
+  AnalysisError,
   CaptureButtons,
   checkpointLabel,
   countLabel,
@@ -247,9 +248,7 @@ export function Improve(props: IntelligenceProps) {
   };
   const feedback = error || setupError;
   const feedbackLine = feedback && (
-    <p className="intelligence-context-note" role="alert">
-      {feedback}
-    </p>
+    <AnalysisError message={feedback} savedCheckpoint={!!latest} />
   );
   const current =
     latest && points.some((point) => point.id === latest.id)

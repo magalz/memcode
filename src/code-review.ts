@@ -120,6 +120,7 @@ export interface CodeReviewMetric {
   halsteadVolume?: number | null;
   riskLevel?: string;
   before?: {
+    source?: "ast" | "unavailable";
     cognitive: number | null;
     cyclomatic: number | null;
     nesting: number | null;

@@ -1,19 +1,19 @@
 {
   "bundles": {
     "macos-aarch64": {
-      "id": "351f2efcf-beta.1",
+      "id": "1d0e8cb4a-beta.1",
       "engineVersion": "1.2.21",
       "purpose": "memcode-engine-beta",
       "platform": "macos",
       "arch": "aarch64",
-      "url": "https://d12b8r6xagt10r.cloudfront.net/releases/memtrace-engine/351f2efcf/351f2efcf-beta.1-macos-aarch64-ed2e29412730cf1e.zip",
-      "sha256": "ed2e29412730cf1ea6470b5d5cf040303e482fae8611f5424495c514f6bbdbb4",
-      "bytes": 75074022,
+      "url": "https://d12b8r6xagt10r.cloudfront.net/releases/memtrace-engine/1d0e8cb4a/1d0e8cb4a-beta.1-macos-aarch64-3ed166eb0081ff62.zip",
+      "sha256": "3ed166eb0081ff629a632af06a0c63ea67ca27134dd39637e6674dcd3539db36",
+      "bytes": 75074884,
       "files": [
         {
           "name": "memtrace",
-          "sha256": "d099bdfb9f5ad9c704b58d738d5928e5894c2a2c0dcab1d3b53f9ca070783d58",
-          "bytes": 168145408
+          "sha256": "55f65a3a0acfe49595eea8a0f92b08fd203f67109acd8fb2842f96a8b3293fb6",
+          "bytes": 168161936
         },
         {
           "name": "memcore-server",
@@ -57,7 +57,7 @@
         },
         {
           "name": "ENGINE-PROVENANCE.json",
-          "sha256": "bd7a7611d738099baf0566b1f17336eb9a233c31d640f73eb908c52926798444",
+          "sha256": "a2087584eb86340386f700b8154952ec457587ee3ed63666b056c07b8dd29a0c",
           "bytes": 2338
         }
       ]
