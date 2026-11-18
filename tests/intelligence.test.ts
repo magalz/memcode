@@ -507,6 +507,38 @@ test("concurrent checkpoint captures coalesce and examples cannot produce qualit
   );
 });
 
+test("a capture cannot save an empty report or a result for a checkout that changed while reading", async () => {
+  for (const rebind of [false, true]) {
+    const selected = { ...project, path: process.cwd() };
+    const state = initialState();
+    state.projects = [selected];
+    state.qualitySnapshots = [];
+    const data = fixture().results;
+    delete data.after.source_commit;
+    const engine = {
+      watch: readyWatch,
+      call: async (_project: Project, name: string) => {
+        if (name === "get_query_revision") return data.after;
+        if (rebind && name === "get_repository_stats") {
+          selected.path = selected.path + "-replacement";
+          return data.stats;
+        }
+        return {};
+      },
+    } as unknown as MemtraceEngine;
+    const handlers = new Map<string, (input: unknown) => Promise<any>>();
+    registerIntelligence(
+      (name, schema, handler) => handlers.set(name, async (input) => handler(schema.parse(input))),
+      () => state, () => selected, async () => {}, engine, unexpectedAnalysis,
+    );
+    await assert.rejects(
+      handlers.get("intelligence:refresh")!({ projectId: selected.id }),
+      rebind ? /project changed/ : /no measured quality data/,
+    );
+    assert.equal(state.qualitySnapshots.length, 0);
+  }
+});
+
 test("a ready project after restart reattaches its native watch before checkpoint queries without reindexing", async (t) => {
   const selected = { ...project, path: process.cwd() },
     state = initialState(),

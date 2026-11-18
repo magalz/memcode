@@ -40,7 +40,7 @@ test("only a stable certificate from the same owner recovers a saved publication
     worktree: item.path,
     branch: item.branch,
   };
-  for (const [name, patch, ownerCurrent, note, recovered] of [
+  for (const [name, patch, ownerCurrent, note, recovered, initial] of [
     [
       "replay and embeddings still running",
       {
@@ -79,6 +79,9 @@ test("only a stable certificate from the same owner recovers a saved publication
     ],
     ["owner retired during capture", {}, false, refused, false],
     ["unrelated saved error", {}, true, "Authorization failed", false],
+    ["newly bound checkout", {}, true, "Local repository connected. Refresh code context before starting a worker.", true, "idle"],
+    ["idle with no saved failure", {}, true, undefined, true, "idle"],
+    ["account changed", {}, true, "The engine account changed. Refresh local code context.", false, "idle"],
     ["stable verified publication", {}, true, refused, true],
     ["stable verified publication after timeout", {}, true, expired, true],
     [
@@ -123,7 +126,7 @@ test("only a stable certificate from the same owner recovers a saved publication
       false,
     ],
   ] as const) {
-    item.analysis = "error";
+    item.analysis = initial ?? "error";
     item.analysisNote = note;
     const observed = await localAnalysisDiagnostics(
       item,
@@ -160,10 +163,10 @@ test("only a stable certificate from the same owner recovers a saved publication
         },
       },
     );
-    assert.equal(item.analysis, recovered ? "ready" : "error", name);
+    assert.equal(item.analysis, recovered ? "ready" : initial ?? "error", name);
     assert.equal(
       observed.sourcePublication,
-      recovered || name === "unrelated saved error"
+      recovered || name === "unrelated saved error" || name === "account changed"
         ? "verified"
         : name === "replay and embeddings still running" ||
             name === "reasonless partial after timeout"
