@@ -5,27 +5,19 @@
 
 Give Claude Code a bug to fix while Codex works on the next feature and you review what Cursor changed. Each story keeps its conversation, diff, artifacts and review together. Open a card and you can pick up where the agent left off.
 
-MemCode matches the model and reasoning effort to the code behind each story. When the work comes back, review its findings, measured quality changes and verification in the same card.
-
 [![MemCode walkthrough showing a mobile menu story moving from the board into implementation and code review](docs/media/memcode-tour.gif)](https://www.memtrace.io/memcode#walkthrough)
-
-### Smart routing. Give each story the model it needs.
-
-Let straightforward changes use lighter models. Give complex changes that reach across the project stronger models and more reasoning. MemCode uses Memtrace to measure the relevant code's complexity and nesting, trace affected code and execution flows, and select an eligible model from your connected coding agents.
-
-You can see the measurements behind the recommendation and choose your own worker or model. The routing rules are transparent, and recommendations based on incomplete evidence are clearly marked.
-
-### Code review grounded in the code itself.
-
-**See whether the change improves code quality before you accept it.** Memtrace parses the captured source and compares the same functions before and after: maintainability, cognitive and cyclomatic complexity, and nesting. You can inspect individual functions, native detector findings and the code the change could affect.
-
-Recorded checks are tied to the reviewed source snapshot, so you can see what was verified. Open a finding at its source, ask the reviewer to explain it, or send selected findings back to the implementation worker for a fix. The review shows the coverage behind each result and keeps final acceptance in your hands.
 
 ### From a story to a change you can ship
 
 1. **Write the outcome.** “Pressing Escape should close the mobile menu and return focus to the button.” Add the story to an epic. Group stories into a cycle when you want to track what shipped.
-2. **Let MemCode match the model to the work.** Inspect the suggested worker, model and reasoning effort, or choose your own. Workers on one epic coordinate edits on its branch. Another epic can run alongside it in its own Git worktree.
-3. **Review the result with evidence.** Move the story to **Code review**. Compare quality before and after, inspect findings and checks tied to the change, and send fixes back to the worker. Accept the story when you're satisfied with the change.
+2. **Pick a worker, or let MemCode route it.** Memtrace measures complexity in the relevant code and traces what a change could affect. Inspect the suggested model and effort, or choose your own. Workers on one epic coordinate edits on its branch. Another epic can run alongside it in its own Git worktree.
+3. **Review what changed.** Move the story to **Code review**. Open a finding at the source, compare complexity before and after, and see which checks ran on this change. Ask the reviewer a question, send a follow-up to the worker, or accept the story.
+
+### Smart routing and measured code review
+
+**Give each story the model it needs.** MemCode measures complexity and nesting in the relevant code, traces what the change could affect, and selects a model and reasoning effort from your connected coding agents. Straightforward changes can use lighter models; complex work gets stronger reasoning. Inspect the recommendation or choose your own worker and model.
+
+**See what the change did to code quality.** Memtrace parses the actual source and compares the same functions before and after: maintainability, cognitive and cyclomatic complexity, and nesting. Review findings include source locations, detector evidence and affected code. Recorded checks stay tied to the reviewed source snapshot. Open a finding, ask the reviewer about it, or send selected fixes back to the worker before accepting the story. The review keeps measurement coverage visible and final acceptance in your hands.
 
 ### Start building
 
