@@ -69,11 +69,14 @@ preferences retained their SHA-256 fingerprints.
 The bundle and runtime matched the signed archive. The upgrade kept the QA
 graph identity, six projects, 19 stories, saved reviews, worker approvals and
 settings. The installed runtime transcribed the known audio fixture in
-474 ms and ranked the expected local result first in 3,247 ms. The confined
-profile produced no short access proof during the test, so the signed
-upgrade's account retention remains unverified. The earlier two ordinary
-reopens of the approved QA app still cover the same application's sign-in
-persistence.
+474 ms and ranked the expected local result first in 3,247 ms.
+
+The first confinement run could not see the existing Keychain entry. The
+repeat used that same approval through the isolated home and preserved the
+account and device during the exact signed upgrade. The beta.18 app issued a
+current access proof with both identities matching the beta.17 proof. The
+normal installation and preferences again matched their starting hashes.
+No fresh approval was requested and no credential file was copied.
 
 ## Packages for Windows
 
