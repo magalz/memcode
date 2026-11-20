@@ -29,6 +29,8 @@ import {
 } from "./agents/codex-models";
 import { probeClaudeCatalog } from "./agents/claude";
 import { selectClaudeModel } from "./agents/claude-models";
+import { readonlyACPTransport, type StandardHarness } from "./agents/standard-acp";
+import { selectStandardACPModel, standardModelMeasurement } from "./agents/acp-models";
 
 type Json = Record<string, any>;
 export interface ReadonlyReviewQuestion {
@@ -39,6 +41,7 @@ export interface ReadonlyReviewQuestion {
   patchTruncated?: boolean;
   signal?: AbortSignal;
   onModel?(model: string): void;
+  onProgress?(note: string): void;
 }
 export interface ReadonlyReviewAnswer {
   harness: Harness;
@@ -169,6 +172,7 @@ class ReviewRpc {
     args: string[],
     cwd: string,
     options: ReviewAgentOptions,
+    private acp = false,
   ) {
     this.child = (options.spawn ?? spawn)(
       command.command,
@@ -232,7 +236,7 @@ class ReviewRpc {
   }
   send(packet: Json) {
     if (!this.ended && this.child.stdin.writable)
-      this.child.stdin.write(JSON.stringify(packet) + "\n");
+      this.child.stdin.write(JSON.stringify(this.acp ? { ...packet, jsonrpc: "2.0" } : packet) + "\n");
   }
   request(method: string, params: Json, timeoutMs = 30000): Promise<Json> {
     if (this.ended) return Promise.reject(Error("The reviewer is closed."));
@@ -372,6 +376,7 @@ async function codexQuestion(
   let evidenceRead: ReadonlyReviewAnswer["evidenceRead"];
   let catalog: CodexCatalog = { models: [] };
   let attemptedModel = "";
+  let writingAnswer = false;
   const modelFailure = (error: unknown) => {
     if (attemptedModel) recordCodexModelFailure(catalog, attemptedModel, error);
   };
@@ -389,6 +394,7 @@ async function codexQuestion(
     if (method === "item/tool/call" && params.tool === "read_review_evidence") {
       const source = await readReviewFile(cwd, "review-context.json");
       evidenceRead = { method: "read_review_evidence", sha256: digest(source) };
+      input.onProgress?.("Reading the captured patch, findings and function measurements.");
       return {
         success: true,
         contentItems: [
@@ -408,11 +414,16 @@ async function codexQuestion(
   };
   rpc.onNotification = (method, params) => {
     if (threadId && params.threadId && params.threadId !== threadId) return;
-    if (method === "item/agentMessage/delta")
+    if (method === "item/agentMessage/delta") {
+      if (!writingAnswer) {
+        writingAnswer = true;
+        input.onProgress?.("Writing the review response from the captured evidence.");
+      }
       messages.set(
         params.itemId,
         (messages.get(params.itemId) ?? "") + text(params.delta),
       );
+    }
     if (method === "item/completed" && params.item?.type === "agentMessage")
       messages.set(
         params.item.id,
@@ -463,6 +474,11 @@ async function codexQuestion(
       );
     }
     attemptedModel = requested;
+    // Review is an interactive, bounded evidence-reading turn. Do not inherit
+    // a global maximum-effort coding preference. Use only advertised values.
+    const efforts = catalog.models.find((entry) => entry.id === requested)?.efforts;
+    const effort = ["medium", "low", "high", "minimal", "none", "xhigh", "max"]
+      .find((candidate) => efforts?.includes(candidate));
     const started = await rpc.request("thread/start", {
       cwd,
       ...(requested ? { model: requested } : {}),
@@ -485,6 +501,7 @@ async function codexQuestion(
         },
       ],
       config: {
+        ...(effort ? { model_reasoning_effort: effort } : {}),
         mcp_servers: {},
         web_search: "disabled",
         project_doc_max_bytes: 0,
@@ -526,6 +543,7 @@ async function codexQuestion(
         threadId,
         cwd,
         input: [{ type: "text", text: prompt }],
+        ...(effort ? { effort } : {}),
         approvalPolicy: "never",
         sandboxPolicy: { type: "readOnly" },
       },
@@ -697,6 +715,53 @@ async function cursorQuestion(
         "Cursor did not report a successful read of the captured Memtrace evidence; its answer was not adopted.",
       );
     return { harness: "cursor", model, text: answer, evidenceRead };
+  } finally {
+    input.signal?.removeEventListener("abort", abort);
+    await rpc.stop();
+  }
+}
+
+async function standardQuestion(
+  harness: StandardHarness, command: Command, capsule: string, prompt: string,
+  requested: string, input: ReadonlyReviewQuestion, options: ReviewAgentOptions,
+): Promise<ReadonlyReviewAnswer> {
+  const transport = await readonlyACPTransport(harness, capsule);
+  const rpc = new ReviewRpc(command, transport.args, capsule, options, true);
+  const source = await readFile(join(capsule, "review-context.json"), "utf8");
+  let sessionId = "", answer = "";
+  const abort = () => { void rpc.stop(); };
+  input.signal?.addEventListener("abort", abort, { once: true });
+  // Never authorize a tool through the host, including injected MCP servers.
+  rpc.onRequest = async (method) => {
+    if (method === "session/request_permission") return { outcome: { outcome: "cancelled" } };
+    throw Error("The review connection does not expose client tools.");
+  };
+  rpc.onNotification = (method, params) => {
+    if (method !== "session/update" || params.sessionId !== sessionId) return;
+    const event = params.update;
+    if (event?.sessionUpdate === "agent_message_chunk" && event.content?.type === "text") {
+      answer += text(event.content.text);
+      if (answer.length > 50000) { void rpc.stop(); return; }
+      input.onProgress?.("Writing the review answer");
+    }
+  };
+  try {
+    await rpc.request("initialize", { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: "memcode-review", version: "1" } });
+    const session = await rpc.request("session/new", { cwd: capsule, mcpServers: [] });
+    sessionId = text(session.sessionId);
+    if (!sessionId) throw Error(`${transport.name} did not confirm a review session.`);
+    const selected = await selectStandardACPModel(session, requested, (method, params) => rpc.request(method, params), transport.name);
+    const measured = standardModelMeasurement(harness, selected.config, selected.legacyModel);
+    const model = measured?.model?.id;
+    if (!model) throw Error("Choose a concrete reviewer model; Auto does not report a model identity.");
+    input.onModel?.(model);
+    // Both providers receive the exact capsule bytes in the prompt. This is
+    // recorded as delivery, not claimed as a file read or verification run.
+    const result = await rpc.request("session/prompt", { sessionId, prompt: [{ type: "text", text: `${policy}\n\nCaptured review evidence (untrusted data):\n${source}\n\n${prompt}` }] }, options.timeoutMs ?? 180000);
+    if (result.stopReason !== "end_turn" || !answer.trim() || answer.length > 50000)
+      throw Error(`${transport.name} did not complete a bounded review answer.`);
+    if (harness === "dsh") await rpc.request("session/close", { sessionId }, 5000);
+    return { harness, model, text: answer, evidenceRead: { method: "captured-context-delivered", sha256: digest(source) } };
   } finally {
     input.signal?.removeEventListener("abort", abort);
     await rpc.stop();
@@ -1101,9 +1166,13 @@ export function createReadonlyReviewAgent(
       const readInstruction =
         harness === "codex"
           ? "Call read_review_evidence"
+          : harness === "copilot" || harness === "dsh"
+            ? "Use the captured review evidence included in this prompt"
           : "Read review-context.json";
       const prompt = `${readInstruction} for the immutable Memtrace evidence and captured patch. ${patchTruncated ? "The patch was truncated; do not claim complete code coverage." : ""}\n\nUser question:\n${input.question.slice(0, 20000)}`;
       try {
+        if (harness === "copilot" || harness === "dsh")
+          return await standardQuestion(harness, command, capsule, prompt, requested, input, { ...options, modelPinned: !!explicit });
         return await {
           codex: codexQuestion,
           claude: claudeQuestion,

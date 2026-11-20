@@ -92,6 +92,7 @@ export async function projectMcpWorkspace(
   options: {
     checkoutMode?: "owned-worktree-v1";
     managedGraphRoot?: string;
+    currentSourceOnly?: boolean;
   } = {},
 ) {
   const directory = await realpath(projectPath);
@@ -99,7 +100,9 @@ export async function projectMcpWorkspace(
   // Owned epic manifests must remain underneath the linked checkout. The
   // managed primary graph lives in the profile so a standalone CLI can keep
   // its existing checkout-local graph and indexing history.
-  const managedRoot = ownedWorktree ? undefined : options.managedGraphRoot;
+  const managedRoot = ownedWorktree ? undefined : options.currentSourceOnly
+    ? join(options.managedGraphRoot ?? join(directory, ".memcode"), "current-source")
+    : options.managedGraphRoot;
   const graphDirectory = managedRoot
     ? await managedProjectDirectory(managedRoot, directory)
     : directory;
@@ -144,7 +147,13 @@ const connectionOverrides = [
   "WORKSPACE_FOLDER_PATHS",
 ];
 
-async function hasSingleFolderMember(directory: string, scopeFile: string) {
+const standaloneManifest = "standalone-workspace.toml";
+
+async function hasStandaloneFolderScope(
+  directory: string,
+  profileRoot: string,
+  scopeFile: string,
+) {
   const bytes = await readFile(scopeFile, "utf8").catch(
     (error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") return null;
@@ -155,11 +164,25 @@ async function hasSingleFolderMember(directory: string, scopeFile: string) {
   const scope = JSON.parse(bytes);
   if (
     scope?.version !== 1 ||
-    scope.scope_source?.kind !== "folder" ||
     !Array.isArray(scope.members) ||
     scope.members.length !== 1
   )
     return false;
+  const source = scope.scope_source;
+  if (source?.kind === "manifest") {
+    // The native owner records the app's manifest after the first attachment.
+    if (
+      typeof source.manifest_path !== "string" ||
+      !(await isKind(profileRoot, "directory"))
+    )
+      return false;
+    const bindingRoot = await managedProjectDirectory(profileRoot, directory);
+    if (
+      admissionPath(source.manifest_path) !==
+      admissionPath(join(bindingRoot, standaloneManifest))
+    )
+      return false;
+  } else if (source?.kind !== "folder") return false;
   const member = scope.members[0]?.path;
   if (
     typeof member !== "string" ||
@@ -203,14 +226,15 @@ export async function standaloneMcpWorkspace(
   const scopeFile = join(dataDirectory, ".memtrace-store-scope.json");
   for (const path of [dataDirectory, jobDirectory, scopeFile])
     await rejectRedirectedGraphPath(path);
-  if (!(await hasSingleFolderMember(directory, scopeFile))) return null;
+  if (!(await hasStandaloneFolderScope(directory, profileRoot, scopeFile)))
+    return null;
   const bindingRoot = await managedProjectDirectory(profileRoot, directory);
   // The native stdio client elects owners by its working directory. Its
   // launch folder must not resolve to the canonical Git checkout of an epic.
   await assertProfileOutsideGit(bindingRoot);
   await rejectRedirectedGraphPath(bindingRoot);
   await mkdir(bindingRoot, { recursive: true, mode: 0o700 });
-  const workspaceFile = join(bindingRoot, "standalone-workspace.toml");
+  const workspaceFile = join(bindingRoot, standaloneManifest);
   await ensureProjectManifest(workspaceFile, singleMemberManifest(directory));
   return { workspaceFile, dataDirectory, jobDirectory };
 }

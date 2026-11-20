@@ -149,6 +149,17 @@ test("managed project graphs open under the app profile without touching a legac
     await projectMcpWorkspace(project, { managedGraphRoot: graphRoot }),
     managed,
   );
+  const current = await projectMcpWorkspace(project, {
+    managedGraphRoot: graphRoot,
+    currentSourceOnly: true,
+  });
+  assert.notEqual(current.dataDirectory, managed.dataDirectory);
+  assert.notEqual(current.dataDirectory, legacy.dataDirectory);
+  assert.equal(await readFile(current.workspaceFile, "utf8"), await readFile(managed.workspaceFile, "utf8"));
+  assert.equal(await readFile(owner, "utf8"), existingOwner);
+  assert.deepEqual(await projectMcpWorkspace(project, {
+    managedGraphRoot: graphRoot, currentSourceOnly: true,
+  }), current);
 });
 
 test("standalone MemCode binds the original folder store from outside the linked workers' repository", async (t) => {
@@ -178,6 +189,14 @@ test("standalone MemCode binds the original folder store from outside the linked
     ),
   );
   assert.equal(await readFile(scope, "utf8"), source(project));
+  const publishedByMemCode = JSON.stringify({
+    version: 1,
+    scope_source: { kind: "manifest", manifest_path: binding.workspaceFile },
+    members: [{ path: project, repo_id: "repo" }],
+  });
+  await writeFile(scope, publishedByMemCode);
+  assert.deepEqual(await standaloneMcpWorkspace(project, profile, {}), binding);
+  assert.equal(await readFile(scope, "utf8"), publishedByMemCode);
   assert.equal(
     await standaloneMcpWorkspace(project, profile, {
       MEMTRACE_MEMDB_ENDPOINT: "http://localhost:9000",
@@ -209,7 +228,7 @@ test("standalone workspace discovery leaves an unbound or operator-managed store
     join(project, ".memdb", ".memtrace-store-scope.json"),
     JSON.stringify({
       version: 1,
-      scope_source: { kind: "manifest" },
+      scope_source: { kind: "manifest", manifest_path: join(root, "operator.toml") },
       members: [{ path: project }],
     }),
   );

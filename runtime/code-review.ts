@@ -84,6 +84,9 @@ const timestamp = () => new Date().toISOString();
 const terminal = (run: StoryReviewRun) =>
   !["queued", "running"].includes(run.state);
 const clone = <T>(value: T): T => structuredClone(value);
+const hasCompleteEvidence = (run: StoryReviewRun) =>
+  !run.coverage.limitations.length && run.impact.complete &&
+  run.checks.length > 0 && run.checks.every((check) => check.state === "passed");
 const findingEvidenceHash = ({
   evidenceHash: _prior,
   ...finding
@@ -789,6 +792,15 @@ export class CodeReviewManager {
           "verification",
           "Linking actual checks to this exact worker contribution and source snapshot.",
         );
+        // The model explains the completed deterministic evidence. Its own
+        // pending answer must not make linked, finished checks appear pending.
+        await this.exclusive(taskId, async () => {
+          assertActive();
+          for (const item of run.phases)
+            if (item.state === "running") item.state = "complete";
+          run.coverage.complete = hasCompleteEvidence(run);
+          await this.persist(saved);
+        });
 
         if (this.hooks.reviewer) {
           await this.reviewAnswer(
@@ -826,11 +838,7 @@ export class CodeReviewManager {
         } else {
           final.state = "completed";
           final.coverage.limitations = [...new Set(final.coverage.limitations)];
-          final.coverage.complete =
-            !final.coverage.limitations.length &&
-            final.impact.complete &&
-            final.checks.length > 0 &&
-            final.checks.every((check) => check.state === "passed");
+          final.coverage.complete = hasCompleteEvidence(final);
           final.outcome ??=
             final.findings.length ||
             final.checks.some((check) => check.state === "failed")
@@ -882,7 +890,9 @@ export class CodeReviewManager {
     const linked =
       check &&
       check.linked &&
-      capture.implementationRunIds.includes(check.runId) &&
+      // A completed follow-up can verify this story's earlier edits without
+      // producing another edit checkpoint. The current pass, changes revision
+      // and exact captured source bind its check; edit run IDs are provenance.
       check.runId === task.run.changeRunId &&
       check.revision === task.changesRevision &&
       task.run.finishedSourceBinding === capture.sourceBinding &&
@@ -1301,6 +1311,16 @@ export class CodeReviewManager {
           this.saved.get(task.id) !== saved
         )
           return;
+        const progress = (note: string, model?: string) => {
+          void this.exclusive(task.id, async () => {
+            if (!this.closed && !controller.signal.aborted &&
+                this.saved.get(task.id) === saved && run.reviewer?.state === "running") {
+              if (model) run.reviewer.model = model;
+              run.reviewer.note = note;
+              await this.persist(saved);
+            }
+          }).catch(() => {});
+        };
         const result = await reviewer.ask({
           task,
           review: clone(run),
@@ -1308,19 +1328,8 @@ export class CodeReviewManager {
           patch: saved.patch,
           patchTruncated: saved.patchTruncated,
           signal: controller.signal,
-          onModel: (model) => {
-            void this.exclusive(task.id, async () => {
-              if (
-                !this.closed &&
-                !controller.signal.aborted &&
-                this.saved.get(task.id) === saved &&
-                run.reviewer
-              ) {
-                run.reviewer.model = model;
-                await this.persist(saved);
-              }
-            }).catch(() => {});
-          },
+          onModel: (model) => progress("Reviewing the captured patch and measured evidence.", model),
+          onProgress: (note) => progress(note),
         });
         await this.exclusive(task.id, async () => {
           if (

@@ -29,7 +29,18 @@ if(harness==='codex' && record.args.some((arg,i)=>arg==='in_app_chat' && record.
 if(harness==='claude' && scenario!=='safe' && scenario!=='writable' && (record.args.includes('--restricted') || (scenario==='unsupported' && record.args.includes('--safe-mode')))){
  const flag=record.args.includes('--restricted')?'--restricted':'--safe-mode';process.stderr.write("error: unknown option '"+flag+"'\\n");process.exit(1);
 }
-if(harness==='claude' && record.args[record.args.indexOf('--input-format')+1]==='stream-json'){
+if(harness==='copilot'||harness==='dsh'){
+ const lines=readline.createInterface({input:process.stdin});
+ lines.on('line',line=>{const p=JSON.parse(line);record.requests.push(p);save();
+  if(p.jsonrpc!=='2.0')process.exit(24);
+  const reply=result=>send({jsonrpc:'2.0',id:p.id,result});
+  if(!p.method)return;
+  if(p.method==='initialize')return reply({});
+  if(p.method==='session/new')return reply({sessionId:'standard-review',models:{currentModelId:'requested-model',availableModels:[{modelId:'requested-model',name:'Tested model'}]}});
+  if(p.method==='session/prompt'){record.prompted=true;record.prompt=p.params.prompt;save();send({jsonrpc:'2.0',method:'session/update',params:{sessionId:'standard-review',update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'Captured patch reviewed.'}}}});return reply({stopReason:'end_turn'});}
+  if(p.method==='session/close')return reply({});
+ });
+}else if(harness==='claude' && record.args[record.args.indexOf('--input-format')+1]==='stream-json'){
  const lines=readline.createInterface({input:process.stdin});
  lines.on('line',line=>{const p=JSON.parse(line);if(p.request?.subtype==='initialize')send({type:'control_response',response:{subtype:'success',request_id:p.request_id,response:{models:[{value:'requested-model'}]}}});});
  lines.on('close',()=>process.exit(0));
@@ -47,7 +58,7 @@ if(harness==='claude' && record.args[record.args.indexOf('--input-format')+1]===
  if(p.method==='initialize')send({id:p.id,result:harness==='cursor'?{authMethods:[]}:{}});
  if(p.method==='config/read')send({id:p.id,result:{config:{mcp_servers:{}}}});
  if(p.method==='account/read')send({id:p.id,result:{account:{type:'chatgpt',id:'fixture'}}});
- if(p.method==='model/list')send({id:p.id,result:{data:[{model:'requested-model',isDefault:true}]}});
+ if(p.method==='model/list')send({id:p.id,result:{data:[{model:'requested-model',isDefault:true,...(scenario==='no-efforts'?{}:{supportedReasoningEfforts:[{reasoningEffort:'max'},{reasoningEffort:'medium'}]})}]}});
  if(p.method==='thread/start')send({id:p.id,result:{thread:{id:'codex-thread'},model:'actual-codex',approvalPolicy:'never',sandbox:{type:scenario==='writable'?'workspaceWrite':'readOnly'}}});
  if(p.method==='mcpServerStatus/list')send({id:p.id,result:{data:scenario==='mcp'?[{name:'mutator',tools:{write:{}}}]:[],nextCursor:null}});
  if(p.method==='turn/start'){record.prompted=true;record.contextRead=fs.readFileSync('review-context.json','utf8').includes('snapshot');save();send({id:p.id,result:{turn:{id:'turn'}}});send({id:'evidence-probe',method:'item/tool/call',params:{tool:'read_review_evidence',arguments:{}}});}
@@ -123,6 +134,21 @@ async function fixture(harness: Harness, scenario = "safe") {
   };
 }
 
+for (const harness of ["copilot", "dsh"] as const) test(`${harness} review uses strict JSON-RPC and delivers captured evidence without writable tools`, async () => {
+  const f = await fixture(harness);
+  try {
+    const result = await f.agent.ask({ task: f.task, review: f.review, question: "Explain", patch: "export const retained = true;" });
+    assert.equal(result.model, "requested-model");
+    assert.equal(result.evidenceRead?.method, "captured-context-delivered");
+    const record = await f.record();
+    assert.ok(record.requests.every((packet: any) => packet.jsonrpc === "2.0"));
+    assert.match(record.prompt[0].text, /export const retained = true/);
+    const init = record.requests.find((packet: any) => packet.method === "initialize");
+    assert.equal(init.params.clientCapabilities.terminal, false);
+    assert.deepEqual(record.requests.find((packet: any) => packet.method === "session/new").params.mcpServers, []);
+  } finally { await f.close(); }
+});
+
 test("Codex review requires a native readOnly handshake and denies file-change approval", async () => {
   const f = await fixture("codex");
   try {
@@ -140,6 +166,8 @@ test("Codex review requires a native readOnly handshake and denies file-change a
         .sandbox,
       "read-only",
     );
+    assert.equal(record.requests.find((p: any) => p.method === "thread/start").params.config.model_reasoning_effort, "medium");
+    assert.equal(record.requests.find((p: any) => p.method === "turn/start").params.effort, "medium");
     assert.equal(
       record.replies.find((p: any) => p.id === "write-probe").result.decision,
       "decline",
@@ -148,6 +176,20 @@ test("Codex review requires a native readOnly handshake and denies file-change a
       (await readdir(join(f.profile, "code-reviews", "agent-context"))).length,
       0,
     );
+  } finally {
+    await f.close();
+  }
+});
+
+test("review effort is not invented when an older Codex catalog does not advertise it", async () => {
+  const f = await fixture("codex", "no-efforts");
+  const progress: string[] = [];
+  try {
+    await f.agent.ask({ task: f.task, review: f.review, question: "Explain", onProgress: note => progress.push(note) });
+    const record = await f.record();
+    assert.equal(record.requests.find((p: any) => p.method === "turn/start").params.effort, undefined);
+    assert.equal(record.requests.find((p: any) => p.method === "thread/start").params.config.model_reasoning_effort, undefined);
+    assert.ok(progress.some(note => note.includes("Reading the captured patch")));
   } finally {
     await f.close();
   }

@@ -297,6 +297,16 @@ test("non-owned legacy preparation keeps its existing behavior and starts no ext
   assert.deepEqual(f.calls, []);
 });
 
+test("a primary-folder epic verifies its separate current-source graph instead of the history graph", async () => {
+  const f = fixture();
+  delete f.project.analysisCheckout;
+  f.project.analysisCurrentSource = true;
+  const result = await f.run();
+  assert.equal(result.analysisCurrentSource, true);
+  assert.equal(result.repoId, f.project.repoId);
+  assert.deepEqual(f.calls, ["analyze:cached"]);
+});
+
 test("late publication recovery repairs the current owner without retirement, reopening or cached analysis", async () => {
   const f = fixture();
   f.reads.splice(0, 1, f.certificate("partial"), f.certificate());
@@ -357,6 +367,19 @@ function transition(
   };
   return value;
 }
+
+test("review reads again when the native graph starts publishing during inspection", async () => {
+  const f = fixture();
+  const starting = f.certificate("partial");
+  starting._meta.graph_revision = {
+    before: { status: "unavailable", token: null },
+    after: { status: "partial", token: "pending" },
+    publication_unchanged_during_call: false,
+  };
+  f.reads.splice(0, 1, starting, f.certificate());
+  await f.run();
+  assert.deepEqual(f.calls, ["watch", "get_query_revision", "get_query_revision"]);
+});
 
 test("a native publication completed during inspection requires a fresh strict read, not another index", async () => {
   for (const shape of [
