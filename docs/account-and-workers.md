@@ -134,3 +134,30 @@ are omitted and Memtrace sign-in opens only the official claim host. Actual
 installed status checks on the Windows development machine confirmed the Codex,
 Claude Code and Cursor CLIs had existing provider authentication, without granting
 production consent.
+
+### DeepSeek Harness setup and ACP profiles
+
+When DeepSeek Harness (`dsh`) is not on `PATH` and DeepSeek Harness Desktop is
+installed, **Workers** detects the Desktop app and runs its bundled
+`command-manager.js` helper with the Desktop app’s bundled Node runtime and a
+verified inspect fingerprint. On Windows, MemCode refreshes the user `PATH`
+in-process after installation; on macOS, if `/usr/local/bin/dsh` returns
+`EACCES` or `EPERM`, MemCode directs the user to **Manage dsh Command…** in
+DeepSeek Harness Desktop without invoking `osascript`.
+
+MemCode scans `$DSH_HOME/profiles/*` for ACP profiles (`@deepseek-ai/dsh-acp-app`
+or `@deepseek-ai/dsh-acp`), excluding conflicting web/Desktop bundles,
+`node_modules`, and temporary `memcode-dryrun-*` directories. When
+`settings.dshProfile` is unset, MemCode automatically selects a customized ACP
+profile if present; when no ACP profile exists (or only non-ACP profiles are
+found), setup guides the user through creating one before connecting.
+
+Desktop-to-ACP provider sync compares Desktop `llm-pi-ai` entries in
+`cordis.patch.yml` and `@deepseek-ai/dsh-llm` `registerAdapter` plugins against
+the active ACP profile. Inline API secrets and unsafe YAML tags are skipped,
+and `link:` local plugins stay unchecked by default. Selected providers are
+tested first in an isolated `memcode-dryrun-*` staging profile with strict
+ACP stdout validation so failing providers are isolated with a **Retry without
+broken providers** action before the target profile is modified; verified imports
+apply with snapshot rollback. ACP model catalogs preserve provider group
+headings and full `["provider", "model"]` identifiers in Worker Assignment.
