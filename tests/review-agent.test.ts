@@ -524,3 +524,41 @@ test("review cleanup terminates the exact Node launcher and its long-running gra
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
 });
+
+test("dsh review agent resolves active custom ACP profile when settings.dshProfile is unset", async () => {
+  const dshHome = await mkdtemp(join(tmpdir(), "memcode-review-dsh-home-"));
+  const prevDshHome = process.env.DSH_HOME;
+  process.env.DSH_HOME = dshHome;
+  const f = await fixture("dsh");
+  try {
+    await mkdir(join(dshHome, "profiles", "acp"), { recursive: true });
+    await writeFile(
+      join(dshHome, "profiles", "acp", "package.json"),
+      JSON.stringify({ dsh: { profile: { bundles: ["@deepseek-ai/dsh-acp-app"] } } }),
+    );
+    await mkdir(join(dshHome, "profiles", "custom-acp"), { recursive: true });
+    await writeFile(
+      join(dshHome, "profiles", "custom-acp", "package.json"),
+      JSON.stringify({
+        dsh: { profile: { bundles: ["@deepseek-ai/dsh-acp-app"] } },
+        dependencies: { "dsh-sample-provider": "^0.4.6" },
+      }),
+    );
+    assert.equal(f.state.settings.dshProfile, undefined);
+    const answer = await f.agent.ask({
+      task: f.task,
+      review: f.review,
+      question: "Summarize the review.",
+    });
+    assert.equal(answer.harness, "dsh");
+    const recorded = (await f.record()) as { args: string[] };
+    const profileIdx = recorded.args.indexOf("--profile");
+    assert.ok(profileIdx >= 0);
+    assert.equal(recorded.args[profileIdx + 1], "custom-acp");
+  } finally {
+    if (prevDshHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = prevDshHome;
+    await rm(dshHome, { recursive: true, force: true });
+    await f.close();
+  }
+});

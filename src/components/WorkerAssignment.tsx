@@ -64,6 +64,7 @@ export function WorkerAssignment({
     setRefreshedModels(undefined);
     setModelsError("");
   }, [task.harness]);
+  const dshRuntime = runtime.harnesses.find((h) => h.id === "dsh");
   const remoteCatalog =
     refreshedModels ??
     runtime.harnesses.find((h) => h.id === task.harness)?.models ??
@@ -183,6 +184,17 @@ export function WorkerAssignment({
             </small>
           )}
       </label>
+      {task.harness === "dsh" && catalog.length > 0 && (
+        <small className="assignment-model-note">
+          Models from ACP profile{" "}
+          <code>{dshRuntime?.activeProfile || settings.dshProfile || "acp"}</code>
+          . Open{" "}
+          <button type="button" className="text-button" onClick={onConnections}>
+            Workers
+          </button>{" "}
+          or Settings to switch profiles or import Desktop providers.
+        </small>
+      )}
       <div className="inspector-field">
         <span>Execution</span>
         <span>

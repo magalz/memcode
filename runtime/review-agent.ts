@@ -31,6 +31,7 @@ import { probeClaudeCatalog } from "./agents/claude";
 import { selectClaudeModel } from "./agents/claude-models";
 import { readonlyACPTransport, type StandardHarness } from "./agents/standard-acp";
 import { selectStandardACPModel, standardModelMeasurement } from "./agents/acp-models";
+import { inspectDshProfiles } from "./dsh-profiles";
 
 type Json = Record<string, any>;
 export interface ReadonlyReviewQuestion {
@@ -65,6 +66,7 @@ export interface ReviewAgentOptions {
   policy?: string;
   modelPinned?: boolean;
   localModel?: boolean;
+  dshProfile?: string;
   commandFor?: typeof findCommand;
   /** Test transport injection; product callers use the installed approved CLI. */
   spawn?: typeof spawn;
@@ -735,7 +737,11 @@ async function standardQuestion(
   harness: StandardHarness, command: Command, capsule: string, prompt: string,
   requested: string, input: ReadonlyQuestionHooks, options: ReviewAgentOptions,
 ): Promise<ReadonlyReviewAnswer> {
-  const transport = await readonlyACPTransport(harness, capsule);
+  const transport = await readonlyACPTransport(
+    harness,
+    capsule,
+    harness === "dsh" ? options.dshProfile : undefined,
+  );
   const rpc = new ReviewRpc(command, transport.args, capsule, options, true);
   const source = await readFile(join(capsule, "review-context.json"), "utf8");
   let sessionId = "", answer = "";
@@ -1233,8 +1239,23 @@ export async function askInCapsule(
       : "Read review-context.json";
   const prompt = question.prompt(readInstruction);
   try {
-    if (harness === "copilot" || harness === "dsh")
-      return await standardQuestion(harness, command, capsule, prompt, requested, input, { ...options, modelPinned: !!explicit });
+    if (harness === "copilot" || harness === "dsh") {
+      const dshProfile =
+        harness === "dsh"
+          ? options.dshProfile ??
+            (
+              await inspectDshProfiles(settings?.dshProfile).catch(
+                () => undefined,
+              )
+            )?.activeProfile ??
+            settings?.dshProfile
+          : undefined;
+      return await standardQuestion(harness, command, capsule, prompt, requested, input, {
+        ...options,
+        modelPinned: !!explicit,
+        ...(dshProfile !== undefined ? { dshProfile } : {}),
+      });
+    }
     return await {
       codex: codexQuestion,
       claude: claudeQuestion,

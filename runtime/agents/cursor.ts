@@ -192,17 +192,43 @@ export function startStandardACPSession(transport: ACPTransport, options: AgentS
   return runCursorSession(options, undefined, transport);
 }
 
-export async function probeStandardACPCatalog(transport: ACPTransport, command: Command): Promise<ModelOption[]> {
+export async function probeStandardACPCatalog(
+  transport: ACPTransport,
+  command: Command,
+  probeOptions?: { strictStdout?: boolean },
+): Promise<ModelOption[]> {
   const cwd = await mkdtemp(join(tmpdir(), `memcode-${transport.id}-catalog-`));
   let models: ModelOption[] = [];
+  let inspected = false;
+  let stdoutNoiseError: string | undefined;
   try {
-    const session = runCursorSession({ command, cwd, env: childEnv(), model: "", effort: "low", prompt: "", briefPath: "", toolArgs: [],
-      onEvent: () => {}, requestInput: async () => ({ cancelled: true }),
-    }, result => { models = standardACPCatalog(result); }, transport);
-    const timer = setTimeout(() => { void session.stop(); }, 15000);
+    const session = runCursorSession({
+      command,
+      cwd,
+      env: childEnv(),
+      model: "",
+      effort: "low",
+      prompt: "",
+      briefPath: "",
+      toolArgs: [],
+      onEvent: (event) => {
+        if (probeOptions?.strictStdout && event.type === "error" && !stdoutNoiseError) {
+          stdoutNoiseError = event.message;
+        }
+      },
+      requestInput: async () => ({ cancelled: true }),
+    }, (result) => {
+      inspected = true;
+      models = standardACPCatalog(result);
+    }, transport);
+    const timer = setTimeout(() => { void session.stop(); }, 25000);
     try {
       const result = await session.completion;
       if (result.exitCode !== 0) throw Error(result.error || `${transport.name}'s model catalog did not respond.`);
+      if (probeOptions?.strictStdout) {
+        if (stdoutNoiseError) throw Error(stdoutNoiseError);
+        if (!inspected) throw Error(`${transport.name}'s model catalog did not respond cleanly.`);
+      }
     } finally { clearTimeout(timer); }
     return models;
   } finally {

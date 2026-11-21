@@ -676,6 +676,15 @@ export function SettingsDialog({
   const models =
     runtime.harnesses.find((harness) => harness.id === draft.defaultHarness)
       ?.models ?? [];
+  const dshRuntime = runtime.harnesses.find((harness) => harness.id === "dsh");
+  const dshProfiles = dshRuntime?.profiles?.length
+    ? dshRuntime.profiles
+    : [draft.dshProfile || dshRuntime?.activeProfile || "acp"];
+  const selectedDshProfile =
+    draft.dshProfile || dshRuntime?.activeProfile || dshProfiles[0] || "acp";
+  const dshProfileOptions = dshProfiles.includes(selectedDshProfile)
+    ? dshProfiles
+    : [selectedDshProfile, ...dshProfiles];
   const previousSettings = useRef(settings);
   useEffect(() => {
     const previous = previousSettings.current;
@@ -888,6 +897,29 @@ export function SettingsDialog({
                   )}
                   <small>Automatic stories use this override. Story assignments take precedence.</small>
                 </label>
+                {(draft.defaultHarness === "dsh" ||
+                  (dshRuntime?.available &&
+                    (dshRuntime.profiles?.length ?? 0) > 0)) && (
+                  <label className="field">
+                    <span>DeepSeek Harness ACP profile</span>
+                    <Select
+                      aria-label="DeepSeek Harness ACP profile"
+                      value={selectedDshProfile}
+                      onValueChange={(dshProfile) =>
+                        setDraft({ ...draft, dshProfile })
+                      }
+                    >
+                      {dshProfileOptions.map((profile) => (
+                        <option key={profile} value={profile}>
+                          {profile}
+                        </option>
+                      ))}
+                    </Select>
+                    <small>
+                      Models and providers are loaded from this ACP profile.
+                    </small>
+                  </label>
+                )}
                 <label className="checkbox-label">
                   <input
                     type="checkbox"
