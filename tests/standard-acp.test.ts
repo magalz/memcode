@@ -191,6 +191,22 @@ createInterface({input:process.stdin}).on('close',()=>process.exit(0)).on('line'
       probeStandardCatalog("dsh", cmd, "acp", { strictStdout: true }),
       /unreadable ACP message/i,
     );
+
+    const emptyScript = join(cwd, "empty-acp.mjs");
+    await writeFile(emptyScript, `
+import { createInterface } from 'node:readline';
+const send = x => process.stdout.write(JSON.stringify(x)+'\\n');
+createInterface({input:process.stdin}).on('close',()=>process.exit(0)).on('line', line => {
+  const x = JSON.parse(line);
+  if (x.method === 'initialize') return send({jsonrpc:'2.0',id:x.id,result:{agentCapabilities:{}}});
+  if (x.method === 'session/new') return send({jsonrpc:'2.0',id:x.id,result:{sessionId:'s1',configOptions:[]}});
+  if (x.method === 'session/close') return send({jsonrpc:'2.0',id:x.id,result:{}});
+});
+`);
+    await assert.rejects(
+      probeStandardCatalog("dsh", { command: process.execPath, prefix: [emptyScript] }, "acp", { strictStdout: true }),
+      /empty model catalog/i,
+    );
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
@@ -220,6 +236,30 @@ test("discoverHarnesses tracks active dshProfile in cache and supports invalidat
     invalidateHarnessCache("dsh");
     const [refreshed] = await discoverHarnesses(false, "dsh", { dshProfile: "work" });
     assert.ok(refreshed.profiles?.includes("extra"));
+
+    // Non-ACP configured profile must not launch the binary for a catalog probe
+    const webDir = join(dshHome, "profiles", "web-only");
+    await mkdir(webDir, { recursive: true });
+    await writeFile(join(webDir, "package.json"), JSON.stringify({ dsh: { profile: { bundles: ["@deepseek-ai/dsh-web-app"] } } }));
+    const binDir = join(dshHome, "bin");
+    const dshBin = join(binDir, "node_modules", "@deepseek-ai", "dsh", "lib");
+    await mkdir(dshBin, { recursive: true });
+    const spawnMarker = join(dshHome, "spawned.txt");
+    await writeFile(
+      join(dshBin, "bin.js"),
+      `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(spawnMarker)}, "ran"); process.exit(1);\n`,
+    );
+    const prevPath = process.env.PATH;
+    process.env.PATH = binDir;
+    try {
+      invalidateHarnessCache("dsh");
+      const [webResult] = await discoverHarnesses(true, "dsh", { dshProfile: "web-only" });
+      assert.equal(webResult.activeProfile, "web-only");
+      assert.deepEqual(webResult.models, []);
+      await assert.rejects(() => readFile(spawnMarker, "utf8"));
+    } finally {
+      process.env.PATH = prevPath;
+    }
   } finally {
     invalidateHarnessCache("dsh");
     if (prevDshHome === undefined) delete process.env.DSH_HOME;

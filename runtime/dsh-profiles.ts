@@ -23,7 +23,10 @@ export function resolveDshHome(env: NodeJS.ProcessEnv = process.env): string {
   return env.DSH_HOME?.trim() || join(homedir(), ".dsh");
 }
 
-export function normalizeDshProfile(value?: string): string {
+export function normalizeDshProfile(
+  value?: string,
+  options?: { allowStaging?: boolean },
+): string {
   const trimmed = value?.trim();
   if (!trimmed) return defaultDshProfile;
   if (trimmed.toLowerCase() === "desktop") {
@@ -31,6 +34,9 @@ export function normalizeDshProfile(value?: string): string {
   }
   if (trimmed.toLowerCase() === "node_modules") {
     throw new Error('Profile name "node_modules" is reserved and cannot be used as an ACP profile.');
+  }
+  if (!options?.allowStaging && isTemporaryDryRunProfile(trimmed)) {
+    throw new Error(`Profile name "${trimmed}" is reserved for MemCode temporary dry-run staging.`);
   }
   if (!PROFILE_NAME_RE.test(trimmed)) {
     throw new Error(

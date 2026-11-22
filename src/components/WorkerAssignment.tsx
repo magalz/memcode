@@ -60,15 +60,13 @@ export function WorkerAssignment({
   const [refreshedModels, setRefreshedModels] = useState<ModelOption[]>();
   const [refreshingModels, setRefreshingModels] = useState(false);
   const [modelsError, setModelsError] = useState("");
+  const currentHarness = runtime.harnesses.find((h) => h.id === task.harness);
+  const dshRuntime = runtime.harnesses.find((h) => h.id === "dsh");
   useEffect(() => {
     setRefreshedModels(undefined);
     setModelsError("");
-  }, [task.harness]);
-  const dshRuntime = runtime.harnesses.find((h) => h.id === "dsh");
-  const remoteCatalog =
-    refreshedModels ??
-    runtime.harnesses.find((h) => h.id === task.harness)?.models ??
-    [];
+  }, [task.harness, dshRuntime?.activeProfile, currentHarness?.models]);
+  const remoteCatalog = refreshedModels ?? currentHarness?.models ?? [];
   const catalog =
     settings.localModel && task.harness === "codex"
       ? [task.modelOverride, settings.model]

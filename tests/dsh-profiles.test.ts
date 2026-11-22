@@ -32,6 +32,7 @@ test("resolveDshHome, normalizeDshProfile, and isTemporaryDryRunProfile validate
   assert.throws(() => normalizeDshProfile("desktop"), /desktop/i);
   assert.throws(() => normalizeDshProfile("DeSkToP"), /desktop/i);
   assert.throws(() => normalizeDshProfile("node_modules"), /node_modules/i);
+  assert.throws(() => normalizeDshProfile("memcode-dryrun-deadbeef"), /reserved/i);
   assert.throws(() => normalizeDshProfile("../bad"), /Invalid DeepSeek Harness profile/);
   assert.throws(() => normalizeDshProfile("-leading-dash"), /Invalid DeepSeek Harness profile/);
   assert.throws(() => normalizeDshProfile("a".repeat(65)), /Invalid DeepSeek Harness profile/);

@@ -604,7 +604,7 @@ export function WorkerConnections({
                   Done
                 </button>
               </footer>
-            ) : selected.harness === "dsh" && !readyToApprove ? null : !readyToApprove ? (
+            ) : selected.harness === "dsh" && !dshReady ? null : !readyToApprove ? (
               <div className="connection-sign-in">
                 {selected.connectionIssue ? (
                   <p>{selected.note}</p>

@@ -14,16 +14,24 @@ export function hasJsTag(value: unknown): boolean {
   return Object.values(value).some((item) => hasJsTag(item));
 }
 
+const SECRET_KEY_RE = /(?:api[_-]?key|secret|token|password|authorization|cookie|credentials?)/i;
+const SECRET_VALUE_RE = /^(?:Bearer|Basic)\s+\S+/i;
+
+function hasNonEmptyCredentialValue(value: unknown): boolean {
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.some((item) => hasNonEmptyCredentialValue(item));
+  if (value && typeof value === "object") {
+    return Object.values(value).some((item) => hasNonEmptyCredentialValue(item));
+  }
+  return false;
+}
+
 export function hasInlineSecret(obj: unknown): boolean {
+  if (typeof obj === "string") return SECRET_VALUE_RE.test(obj.trim());
   if (!obj || typeof obj !== "object") return false;
   if (Array.isArray(obj)) return obj.some((item) => hasInlineSecret(item));
   for (const [key, value] of Object.entries(obj)) {
-    if (
-      key !== "apiKeyEnv" &&
-      /(?:api[_-]?key|secret|token|password)/i.test(key) &&
-      typeof value === "string" &&
-      value.trim().length > 0
-    ) {
+    if (key !== "apiKeyEnv" && SECRET_KEY_RE.test(key) && hasNonEmptyCredentialValue(value)) {
       return true;
     }
     if (hasInlineSecret(value)) return true;
@@ -67,15 +75,19 @@ function countIndent(line: string): number {
   return i;
 }
 
-function findUnquotedColon(text: string): number {
+function findUnquotedColon(text: string, allowTightQuotedColon = false): number {
   let quote: "'" | '"' | null = null;
   let depth = 0;
+  let justClosedQuote = false;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (quote === "'") {
       if (ch === "'") {
         if (text[i + 1] === "'") i++;
-        else quote = null;
+        else {
+          quote = null;
+          justClosedQuote = depth === 0;
+        }
       }
       continue;
     }
@@ -84,17 +96,31 @@ function findUnquotedColon(text: string): number {
         i++;
         continue;
       }
-      if (ch === '"') quote = null;
+      if (ch === '"') {
+        quote = null;
+        justClosedQuote = depth === 0;
+      }
       continue;
     }
     if (ch === "'" || ch === '"') {
       quote = ch;
+      justClosedQuote = false;
       continue;
     }
-    if (ch === "[" || ch === "{") depth++;
-    else if ((ch === "]" || ch === "}") && depth > 0) depth--;
-    else if (ch === ":" && depth === 0 && (i + 1 === text.length || /\s/.test(text[i + 1]))) {
+    if (ch === "[" || ch === "{") {
+      depth++;
+      justClosedQuote = false;
+    } else if ((ch === "]" || ch === "}") && depth > 0) {
+      depth--;
+      justClosedQuote = false;
+    } else if (
+      ch === ":" &&
+      depth === 0 &&
+      (i + 1 === text.length || /\s/.test(text[i + 1]) || (allowTightQuotedColon && justClosedQuote))
+    ) {
       return i;
+    } else if (!/\s/.test(ch)) {
+      justClosedQuote = false;
     }
   }
   return -1;
@@ -127,6 +153,15 @@ function unescapeDoubleQuoted(raw: string): string {
   });
 }
 
+function assertSupportedYamlToken(trimmed: string): void {
+  if (/^&[^\s,\]}]+/.test(trimmed) || /^\*[^\s,\]}]+/.test(trimmed)) {
+    throw new Error("YAML anchors and aliases are not supported in cordis.patch.yml.");
+  }
+  if (/^![^!]|^!!(?!js(?:\/[A-Za-z0-9_-]+)?(?:\s|$))/i.test(trimmed)) {
+    throw new Error("Unsupported YAML tag in cordis.patch.yml.");
+  }
+}
+
 function parseScalar(raw: string, ctx: { hasJsExpression: boolean }): { value: unknown; taggedJs: boolean } {
   let trimmed = raw.trim();
   let taggedJs = false;
@@ -137,6 +172,7 @@ function parseScalar(raw: string, ctx: { hasJsExpression: boolean }): { value: u
     trimmed = (jsMatch[1] ?? "").trim();
     if (!trimmed) return { value: undefined, taggedJs: true };
   }
+  assertSupportedYamlToken(trimmed);
   if (trimmed === "" || trimmed === "null" || trimmed === "~") return { value: null, taggedJs };
   if (trimmed === "true") return { value: true, taggedJs };
   if (trimmed === "false") return { value: false, taggedJs };
@@ -219,16 +255,22 @@ function parseFlow(text: string, ctx: { hasJsExpression: boolean }): { value: un
     if (!inner) return { value: taggedJs ? markJsExpr(obj) : obj, taggedJs };
     let anyJs = taggedJs;
     for (const part of splitFlowItems(inner)) {
-      const colon = findUnquotedColon(part);
-      if (colon === -1) continue;
+      const colon = findUnquotedColon(part, true);
+      if (colon === -1) {
+        throw new Error("Unsupported or malformed YAML flow mapping entry in cordis.patch.yml.");
+      }
       const key = unquoteKey(part.slice(0, colon));
+      if (key === "<<") {
+        throw new Error("YAML merge keys are not supported in cordis.patch.yml.");
+      }
       const res = parseFlow(part.slice(colon + 1), ctx);
       if (res.taggedJs) anyJs = true;
       obj[key] = res.value;
     }
     return { value: anyJs ? markJsExpr(obj) : obj, taggedJs: anyJs };
   }
-  return parseScalar(trimmed, ctx);
+  const scalar = parseScalar(trimmed, ctx);
+  return { value: scalar.value, taggedJs: taggedJs || scalar.taggedJs };
 }
 
 function isFlowComplete(text: string): boolean {
@@ -347,11 +389,15 @@ class YamlParser {
       const next = stripInlineComment(this.lines[this.index++]).trim();
       if (next) acc += " " + next;
     }
+    if (!isFlowComplete(acc)) {
+      throw new Error("Incomplete YAML flow collection in cordis.patch.yml.");
+    }
     return acc;
   }
 
   private parseValue(rawVal: string, parentIndent: number): { value: unknown; taggedJs: boolean } {
     const val = rawVal.trim();
+    assertSupportedYamlToken(val);
     const jsOnly = /^!!js(?:\/[A-Za-z0-9_-]+)?$/.exec(val);
     if (jsOnly) {
       this.hasJsExpression = true;
@@ -396,6 +442,9 @@ class YamlParser {
     const obj: Record<string, unknown> = {};
     let anyJs = false;
     if (seed) {
+      if (seed.key === "<<") {
+        throw new Error("YAML merge keys are not supported in cordis.patch.yml.");
+      }
       const res = this.parseValue(seed.rawVal, seed.lineIndent);
       if (res.taggedJs) anyJs = true;
       obj[seed.key] = res.value;
@@ -409,6 +458,9 @@ class YamlParser {
       if (colon === -1) break;
       this.index++;
       const key = unquoteKey(next.text.slice(0, colon));
+      if (key === "<<") {
+        throw new Error("YAML merge keys are not supported in cordis.patch.yml.");
+      }
       const rawVal = next.text.slice(colon + 1);
       const res = this.parseValue(rawVal, next.indent);
       if (res.taggedJs) anyJs = true;
@@ -463,6 +515,37 @@ class YamlParser {
     return { value: anyJs ? markJsExpr(arr) : arr, taggedJs: anyJs };
   }
 
+  parseTopLevel(): { value: unknown; taggedJs: boolean } {
+    let next = this.peekContent();
+    if (!next) return { value: [], taggedJs: false };
+    if (next.text === "---") {
+      this.index++;
+      next = this.peekContent();
+      if (!next) return { value: [], taggedJs: false };
+    }
+    if (next.text === "...") {
+      this.index++;
+      if (this.peekContent() !== null) {
+        throw new Error("Multiple YAML documents are not supported in cordis.patch.yml.");
+      }
+      return { value: [], taggedJs: false };
+    }
+    const parsed = this.parseBlock();
+    const trailing = this.peekContent();
+    if (trailing?.text === "...") {
+      this.index++;
+      if (this.peekContent() !== null) {
+        throw new Error("Incomplete or unsupported YAML in cordis.patch.yml.");
+      }
+    } else if (trailing !== null) {
+      throw new Error("Incomplete or unsupported YAML in cordis.patch.yml.");
+    }
+    if (!Array.isArray(parsed.value)) {
+      throw new Error("Expected a top-level YAML list in cordis.patch.yml.");
+    }
+    return parsed;
+  }
+
   parseBlock(expectedIndent?: number): { value: unknown; taggedJs: boolean } {
     const next = this.peekContent();
     if (!next) return { value: [], taggedJs: false };
@@ -488,9 +571,8 @@ class YamlParser {
 
 export function parseDshPatchYaml(text: string): { entries: any[]; hasJsExpression: boolean } {
   const parser = new YamlParser(text);
-  const parsed = parser.parseBlock();
-  const entries = Array.isArray(parsed.value) ? parsed.value : [];
-  return { entries, hasJsExpression: parser.hasJsExpression };
+  const parsed = parser.parseTopLevel();
+  return { entries: parsed.value as any[], hasJsExpression: parser.hasJsExpression };
 }
 
 function needsQuotes(text: string): boolean {

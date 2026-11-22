@@ -3,7 +3,7 @@ import { probeClaudeCatalog } from "./agents/claude";
 import { codexCatalogGeneration } from "./agents/codex-models";
 import { probeCursorCatalog } from "./agents/cursor";
 import { probeStandardCatalog } from "./agents/standard-acp";
-import { inspectDshProfiles } from "./dsh-profiles";
+import { inspectDshProfiles, defaultDshProfile } from "./dsh-profiles";
 import {
   commandIdentity,
   findCommand,
@@ -56,8 +56,17 @@ async function discoverOne(
   if (command && id === "claude") models = await probeClaudeCatalog(command);
   if (command && id === "copilot")
     models = await probeStandardCatalog(id, command).catch(() => []);
-  if (command && id === "dsh")
-    models = await probeStandardCatalog(id, command, dshInfo?.activeProfile).catch(() => []);
+  if (command && id === "dsh") {
+    const canProbeDsh =
+      !dshInfo?.activeProfileIssue ||
+      (dshInfo.activeProfileIssue === "missing" &&
+        dshInfo.activeProfile === defaultDshProfile);
+    if (canProbeDsh) {
+      models = await probeStandardCatalog(id, command, dshInfo?.activeProfile).catch(
+        () => [],
+      );
+    }
+  }
   return {
     id,
     name: harnessNames[id],

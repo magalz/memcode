@@ -228,6 +228,7 @@ export async function probeStandardACPCatalog(
       if (probeOptions?.strictStdout) {
         if (stdoutNoiseError) throw Error(stdoutNoiseError);
         if (!inspected) throw Error(`${transport.name}'s model catalog did not respond cleanly.`);
+        if (models.length === 0) throw Error(`${transport.name} returned an empty model catalog.`);
       }
     } finally { clearTimeout(timer); }
     return models;

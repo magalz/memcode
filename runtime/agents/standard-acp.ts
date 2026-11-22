@@ -8,7 +8,9 @@ import { writeFile } from "node:fs/promises";
 export type StandardHarness = "copilot" | "dsh";
 export function standardTransport(
   id: StandardHarness,
-  options?: Partial<Pick<AgentSessionOptions, "effort" | "permissionMode" | "dshProfile">>,
+  options?: Partial<Pick<AgentSessionOptions, "effort" | "permissionMode" | "dshProfile">> & {
+    allowStaging?: boolean;
+  },
 ): ACPTransport {
   return id === "copilot"
     ? {
@@ -19,7 +21,12 @@ export function standardTransport(
     : {
         id,
         name: "DeepSeek Harness",
-        args: ["--profile", normalizeDshProfile(options?.dshProfile)],
+        args: [
+          "--profile",
+          normalizeDshProfile(options?.dshProfile, {
+            allowStaging: options?.allowStaging,
+          }),
+        ],
       };
 }
 export function startStandardSession(id: StandardHarness, options: AgentSessionOptions) {
@@ -34,10 +41,13 @@ export function probeStandardCatalog(
   id: StandardHarness,
   command: Command,
   dshProfile?: string,
-  options?: { strictStdout?: boolean },
+  options?: { strictStdout?: boolean; allowStaging?: boolean },
 ) {
   return probeStandardACPCatalog(
-    standardTransport(id, id === "dsh" ? { dshProfile } : undefined),
+    standardTransport(
+      id,
+      id === "dsh" ? { dshProfile, allowStaging: options?.allowStaging } : undefined,
+    ),
     command,
     options,
   );

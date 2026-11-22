@@ -28,6 +28,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 const STALE_DRYRUN_AGE_MS = 60 * 60 * 1000;
+const DRYRUN_MARKER = ".memcode-dryrun";
 const SNAPSHOT_FILES = ["package.json", "cordis.patch.yml", "pnpm-lock.yaml"] as const;
 const STAGING_COPY_FILES = [
   "package.json",
@@ -98,9 +99,22 @@ async function readJsonSafe(path: string): Promise<Record<string, unknown>> {
   }
 }
 
+async function readPatchStrict(path: string): Promise<{ entries: any[]; hasJsExpression: boolean }> {
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { entries: [], hasJsExpression: false };
+    }
+    throw error;
+  }
+  return parseDshPatchYaml(text);
+}
+
 async function readPatchSafe(path: string): Promise<{ entries: any[]; hasJsExpression: boolean }> {
   try {
-    return parseDshPatchYaml(await readFile(path, "utf8"));
+    return await readPatchStrict(path);
   } catch {
     return { entries: [], hasJsExpression: false };
   }
@@ -208,8 +222,14 @@ async function computeDesktopDiff(
     };
   }
 
-  const [desktopPatch, desktopPkg, targetPatch, targetPkg, homePatch] = await Promise.all([
-    readPatchSafe(join(desktopDir, "cordis.patch.yml")),
+  let desktopPatch: { entries: any[]; hasJsExpression: boolean } = { entries: [], hasJsExpression: false };
+  let desktopPatchUnsupported = false;
+  try {
+    desktopPatch = await readPatchStrict(join(desktopDir, "cordis.patch.yml"));
+  } catch {
+    desktopPatchUnsupported = true;
+  }
+  const [desktopPkg, targetPatch, targetPkg, homePatch] = await Promise.all([
     readJsonSafe(join(desktopDir, "package.json")),
     readPatchSafe(join(targetDir, "cordis.patch.yml")),
     readJsonSafe(join(targetDir, "package.json")),
@@ -218,6 +238,12 @@ async function computeDesktopDiff(
 
   const providers: DshDesktopProviderCandidate[] = [];
   const skipped: DshSkippedDesktopItem[] = [];
+  if (desktopPatchUnsupported) {
+    skipped.push({
+      name: "cordis.patch.yml",
+      reason: "Desktop cordis.patch.yml uses unsupported YAML syntax and was skipped.",
+    });
+  }
   const piAiProviders = new Map<string, Record<string, unknown>>();
   const pluginConfigRows = new Map<string, Record<string, unknown>>();
 
@@ -459,6 +485,14 @@ async function applySelectedToProfileDir(
   env: NodeJS.ProcessEnv,
   onPluginStart?: (id: string, pkgName: string) => void,
 ): Promise<void> {
+  const patchPath = join(profileDir, "cordis.patch.yml");
+  const currentPatch = await readPatchStrict(patchPath);
+  if (currentPatch.hasJsExpression) {
+    throw new Error(
+      "Target profile cordis.patch.yml contains !!js expressions and cannot be modified safely.",
+    );
+  }
+
   const byId = new Map(data.diff.providers.map((p) => [p.id, p]));
   for (const id of selectedIds) {
     if (!id.startsWith("plugin:")) continue;
@@ -482,8 +516,6 @@ async function applySelectedToProfileDir(
     );
   }
 
-  const patchPath = join(profileDir, "cordis.patch.yml");
-  const currentPatch = await readPatchSafe(patchPath);
   const merged = mergePatchEntries(currentPatch.entries, selectedIds, data);
   await writeFile(patchPath, stringifyDshPatchYaml(merged), "utf8");
 }
@@ -496,6 +528,7 @@ async function cleanupStaleDryRunDirs(profilesDir: string): Promise<void> {
       if (!entry.isDirectory() || !isTemporaryDryRunProfile(entry.name)) continue;
       const dir = join(profilesDir, entry.name);
       try {
+        if (!(await exists(join(dir, DRYRUN_MARKER)))) continue;
         const info = await stat(dir);
         if (now - info.mtimeMs > STALE_DRYRUN_AGE_MS) {
           await rm(dir, { recursive: true, force: true });
@@ -542,7 +575,8 @@ export async function dryRunDshMigration(
   const probeCmd = withDshHomeCommand(command, dshHome, env);
   const probe: StrictAcpProbe =
     options?.probe ??
-    ((profile, cmd) => probeStandardCatalog("dsh", cmd, profile, { strictStdout: true }));
+    ((profile, cmd) =>
+      probeStandardCatalog("dsh", cmd, profile, { strictStdout: true, allowStaging: true }));
 
   if (selectedIds.length === 0) {
     const previewModels = await probe(normalizedTarget, probeCmd);
@@ -562,6 +596,7 @@ export async function dryRunDshMigration(
     const stagingName = `memcode-dryrun-${randomBytes(4).toString("hex")}`;
     const stagingDir = join(profilesDir, stagingName);
     await mkdir(stagingDir, { recursive: true });
+    await writeFile(join(stagingDir, DRYRUN_MARKER), "memcode-dryrun\n", "utf8");
     try {
       for (const file of STAGING_COPY_FILES) {
         const src = join(targetDir, file);
@@ -569,7 +604,9 @@ export async function dryRunDshMigration(
           await copyFile(src, join(stagingDir, file));
         }
       }
-      await applySelectedToProfileDir(command, stagingName, stagingDir, ids, data, dshHome, env);
+      if (ids.length > 0) {
+        await applySelectedToProfileDir(command, stagingName, stagingDir, ids, data, dshHome, env);
+      }
       return await probe(stagingName, probeCmd);
     } finally {
       await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
@@ -585,7 +622,27 @@ export async function dryRunDshMigration(
       failed: [],
       previewModels,
     };
-  } catch {
+  } catch (combinedError) {
+    try {
+      await runStaging([]);
+    } catch (baselineError) {
+      const baselineMessage = `Existing ACP profile failed validation before applying Desktop providers: ${extractErrorMessage(baselineError)}`;
+      return {
+        ok: false,
+        targetProfile: normalizedTarget,
+        passedIds: [],
+        failed: [
+          {
+            id: `profile:${normalizedTarget}`,
+            name: normalizedTarget,
+            reason: baselineMessage,
+          },
+        ],
+        previewModels: [],
+        error: baselineMessage,
+      };
+    }
+
     const passedIds: string[] = [];
     const failed: DshProviderFailure[] = [];
     for (const id of selectedIds) {
@@ -601,12 +658,17 @@ export async function dryRunDshMigration(
         });
       }
     }
+    const combinationError =
+      failed.length === 0
+        ? `Selected providers passed individually but failed when combined: ${extractErrorMessage(combinedError)}`
+        : undefined;
     return {
       ok: false,
       targetProfile: normalizedTarget,
       passedIds,
       failed,
       previewModels: [],
+      ...(combinationError ? { error: combinationError } : {}),
     };
   }
 }
@@ -621,13 +683,15 @@ export async function applyDshMigration(
   appliedIds: string[];
   failed: DshProviderFailure[];
   models: ModelOption[];
+  error?: string;
 }> {
   const env = options?.env ?? process.env;
   const { dshHome, normalizedTarget, targetDir } = await assertExistingAcpProfile(targetProfile, env);
   const probeCmd = withDshHomeCommand(command, dshHome, env);
   const probe: StrictAcpProbe =
     options?.probe ??
-    ((profile, cmd) => probeStandardCatalog("dsh", cmd, profile, { strictStdout: true }));
+    ((profile, cmd) =>
+      probeStandardCatalog("dsh", cmd, profile, { strictStdout: true, allowStaging: true }));
 
   if (selectedIds.length === 0) {
     const models = await probe(normalizedTarget, probeCmd);
@@ -642,8 +706,19 @@ export async function applyDshMigration(
     const path = join(targetDir, file);
     try {
       snapshots.set(file, await readFile(path));
-    } catch {
-      snapshots.set(file, null);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        snapshots.set(file, null);
+      } else {
+        const reason = `Cannot read existing profile file "${file}" before migration: ${extractErrorMessage(error)}`;
+        return {
+          ok: false,
+          appliedIds: [],
+          failed: [{ id: `profile:${normalizedTarget}`, name: normalizedTarget, reason }],
+          models: [],
+          error: reason,
+        };
+      }
     }
   }
 
@@ -681,21 +756,58 @@ export async function applyDshMigration(
       models,
     };
   } catch (error) {
+    const rollbackErrors: string[] = [];
     for (const [file, content] of snapshots) {
       const path = join(targetDir, file);
-      if (content === null) {
-        await rm(path, { force: true }).catch(() => {});
-      } else {
-        await writeFile(path, content).catch(() => {});
+      try {
+        if (content === null) {
+          await rm(path, { force: true });
+        } else {
+          await writeFile(path, content);
+        }
+      } catch (rbError) {
+        rollbackErrors.push(`${file}: ${extractErrorMessage(rbError)}`);
       }
     }
     for (const pkgName of selectedPlugins) {
       if (!preExistingPlugins.has(pkgName)) {
-        await rm(join(targetDir, "node_modules", ...pkgName.split("/")), {
-          recursive: true,
-          force: true,
-        }).catch(() => {});
+        try {
+          await rm(join(targetDir, "node_modules", ...pkgName.split("/")), {
+            recursive: true,
+            force: true,
+          });
+        } catch (rbError) {
+          rollbackErrors.push(`node_modules/${pkgName}: ${extractErrorMessage(rbError)}`);
+        }
       }
+    }
+    const reason = extractErrorMessage(error);
+    if (rollbackErrors.length > 0) {
+      const recoveryDir = join(
+        dshHome,
+        "memcode-recovery",
+        `${normalizedTarget}-${Date.now()}-${randomBytes(3).toString("hex")}`,
+      );
+      let recoveryNote = "";
+      try {
+        await mkdir(recoveryDir, { recursive: true });
+        for (const [file, content] of snapshots) {
+          if (content !== null) {
+            await writeFile(join(recoveryDir, file), content);
+          }
+        }
+        recoveryNote = ` Recovery snapshots saved to ${recoveryDir}.`;
+      } catch (backupError) {
+        recoveryNote = ` Could not write recovery snapshots (${extractErrorMessage(backupError)}).`;
+      }
+      const fullError = `Migration failed (${reason}) and rollback could not restore all files (${rollbackErrors.join("; ")}).${recoveryNote}`;
+      return {
+        ok: false,
+        appliedIds: [],
+        failed: [{ id: activeId, name: activeName, reason: fullError }],
+        models: [],
+        error: fullError,
+      };
     }
     return {
       ok: false,
@@ -704,10 +816,11 @@ export async function applyDshMigration(
         {
           id: activeId,
           name: activeName,
-          reason: extractErrorMessage(error),
+          reason,
         },
       ],
       models: [],
+      error: reason,
     };
   }
 }

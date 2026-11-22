@@ -10,6 +10,7 @@ import {
 } from "../runtime/dsh-migration";
 import {
   hasInlineSecret,
+  hasJsTag,
   parseDshPatchYaml,
   stringifyDshPatchYaml,
 } from "../runtime/dsh-yaml";
@@ -133,6 +134,24 @@ test("dsh-yaml parses subset YAML, preserves !!js comment safety, detects real !
   assert.equal(hasInlineSecret({ nested: [{ client_secret: "abc" }] }), true);
   assert.equal(hasInlineSecret({ accessToken: "tok" }), true);
   assert.equal(hasInlineSecret({ password: "pw" }), true);
+  assert.equal(hasInlineSecret({ headers: { Authorization: "Bearer tok" } }), true);
+  assert.equal(hasInlineSecret({ cookie: "session=abc" }), true);
+  assert.equal(hasInlineSecret({ credentials: { user: "u", value: "v" } }), true);
+  assert.equal(hasInlineSecret({ custom: "Basic dXNlcjpwYXNz" }), true);
+
+  // Flow-embedded !!js and JSON-style flow mappings
+  const jsonFlow = parseDshPatchYaml('[{"id":"ui-theme","config":{"fontSize":14}}]\n');
+  assert.deepEqual(jsonFlow.entries, [{ id: "ui-theme", config: { fontSize: 14 } }]);
+
+  const flowJsScalar = parseDshPatchYaml("- id: x\n  items: [!!js/function '() => 1']\n");
+  assert.equal(flowJsScalar.hasJsExpression, true);
+  assert.equal(hasJsTag(flowJsScalar.entries[0].items), true);
+
+  // Unsupported or incomplete YAML fails closed instead of truncating
+  assert.throws(() => parseDshPatchYaml("- id: &a foo\n  ref: *a\n"));
+  assert.throws(() => parseDshPatchYaml("id: not-a-list\n"));
+  assert.throws(() => parseDshPatchYaml("- id: ok\n  note: first\n    wrapped-continuation\n"));
+  assert.throws(() => parseDshPatchYaml("- id: unclosed\n  items: [1, 2\n"));
 });
 
 test("diffDshDesktopModels filters pi-ai providers, plugins, secrets, !!js, and link specs", async (t) => {
@@ -274,11 +293,16 @@ test("dryRunDshMigration never mutates target profile, cleans staging dirs, and 
     ]),
   );
 
-  // Stale dryrun directory > 1h old should be cleaned
+  // Stale marked dryrun directory > 1h old should be cleaned; unmarked user directory must stay untouched
   const staleDir = join(dshHome, "profiles", "memcode-dryrun-deadbeef");
   await mkdir(staleDir, { recursive: true });
+  await writeFile(join(staleDir, ".memcode-dryrun"), "memcode-dryrun\n");
+  const userDir = join(dshHome, "profiles", "memcode-dryrun-feedface");
+  await mkdir(userDir, { recursive: true });
+  await writeFile(join(userDir, "package.json"), "{}");
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
   await utimes(staleDir, twoHoursAgo, twoHoursAgo);
+  await utimes(userDir, twoHoursAgo, twoHoursAgo);
 
   const mockCli = join(dshHome, "mock-dsh-acp.mjs");
   await writeFile(
@@ -348,8 +372,9 @@ createInterface({ input: process.stdin }).on("close", () => process.exit(0)).on(
   assert.match(result.failed[0].reason, /unreadable|JSON|NOISY_STDOUT/i);
 
   assert.equal(await exists(staleDir), false);
-  const leftover = (await readdir(join(dshHome, "profiles"))).filter((n) =>
-    n.startsWith("memcode-dryrun-"),
+  assert.equal(await exists(userDir), true);
+  const leftover = (await readdir(join(dshHome, "profiles"))).filter(
+    (n) => n.startsWith("memcode-dryrun-") && n !== "memcode-dryrun-feedface",
   );
   assert.deepEqual(leftover, []);
 
@@ -456,4 +481,79 @@ if (argv[0] === "plugin") {
   assert.ok(mergedPatch.entries.find((e) => e.id === "llm-pi-ai")?.config?.providers?.["custom-provider"]);
   assert.equal(mergedPatch.entries.find((e) => e.id === "good")?.config?.enabled, true);
   assert.equal(await exists(join(targetDir, "node_modules", "dsh-good")), true);
+});
+
+test("dryRunDshMigration fails fast on broken baseline, surfaces combination conflicts, and blocks !!js targets", async (t) => {
+  const { dshHome, env, desktopDir, targetDir } = await setupMigrationFixture(t);
+
+  await writeFile(
+    join(desktopDir, "cordis.patch.yml"),
+    stringifyDshPatchYaml([
+      {
+        id: "llm-pi-ai",
+        config: {
+          providers: {
+            p1: { displayName: "P1", apiKeyEnv: "K1", models: [{ id: "m1", name: "m1" }] },
+            p2: { displayName: "P2", apiKeyEnv: "K2", models: [{ id: "m2", name: "m2" }] },
+          },
+        },
+      },
+    ]),
+  );
+
+  const calls: string[] = [];
+  const noopCmd = { command: process.execPath, prefix: ["-e", "process.exit(0)"] };
+
+  // 1. Broken baseline stops immediately without attributing blame to providers
+  const brokenBase = await dryRunDshMigration(
+    noopCmd,
+    "custom-acp",
+    ["pi-ai:p1", "pi-ai:p2"],
+    {
+      env,
+      probe: async (profile) => {
+        calls.push(profile);
+        throw new Error("baseline crashed");
+      },
+    },
+  );
+  assert.equal(brokenBase.ok, false);
+  assert.equal(brokenBase.failed.length, 1);
+  assert.equal(brokenBase.failed[0].id, "profile:custom-acp");
+  assert.equal(calls.length, 2); // combined attempt + single baseline check only
+
+  // 2. Combination conflict: each provider passes alone, combined fails -> ok:false with error
+  let comboCall = 0;
+  const combo = await dryRunDshMigration(
+    noopCmd,
+    "custom-acp",
+    ["pi-ai:p1", "pi-ai:p2"],
+    {
+      env,
+      probe: async () => {
+        comboCall++;
+        if (comboCall === 1) throw new Error("p1+p2 incompatible");
+        return [{ id: "m1", label: "M1", group: "G", source: "acp" }];
+      },
+    },
+  );
+  assert.equal(combo.ok, false);
+  assert.deepEqual(combo.failed, []);
+  assert.match(combo.error ?? "", /p1\+p2 incompatible/);
+
+  // 3. Target cordis.patch.yml containing !!js is refused rather than stripping tags
+  const taggedTarget = "- id: hook\n  fn: !!js/function '() => 1'\n";
+  await writeFile(join(targetDir, "cordis.patch.yml"), taggedTarget);
+  const blockedApply = await applyDshMigration(
+    noopCmd,
+    "custom-acp",
+    ["pi-ai:p1"],
+    {
+      env,
+      probe: async () => [{ id: "m1", label: "M1", group: "G", source: "acp" }],
+    },
+  );
+  assert.equal(blockedApply.ok, false);
+  assert.match(blockedApply.error ?? "", /!!js expressions/);
+  assert.equal(await readFile(join(targetDir, "cordis.patch.yml"), "utf8"), taggedTarget);
 });

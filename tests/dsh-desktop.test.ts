@@ -22,14 +22,15 @@ async function createDesktopFixture(
   const root = await mkdtemp(join(tmpdir(), "memcode-dsh-desktop-"));
   t.after(() => rm(root, { recursive: true, force: true }));
 
-  const desktopAppPath = options.mac
+  const mac = options.mac ?? process.platform === "darwin";
+  const desktopAppPath = mac
     ? join(root, "Applications", "DeepSeek Harness.app")
     : join(root, "DeepSeek Harness", "DeepSeek Harness.exe");
-  const resourcesDir = options.mac
+  const resourcesDir = mac
     ? join(desktopAppPath, "Contents", "Resources")
     : join(dirname(desktopAppPath), "resources");
 
-  if (options.mac) {
+  if (mac) {
     await mkdir(join(desktopAppPath, "Contents"), { recursive: true });
     await writeFile(join(desktopAppPath, "Contents", "Info.plist"), "<plist/>");
   } else {
@@ -51,7 +52,7 @@ async function createDesktopFixture(
     "runtime",
     "cli",
     "bin",
-    options.mac && process.platform !== "win32" ? "dsh" : "dsh.cmd",
+    mac && process.platform !== "win32" ? "dsh" : "dsh.cmd",
   );
   await writeFile(launcherPath, "echo dsh\n");
 

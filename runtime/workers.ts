@@ -247,7 +247,7 @@ export class WorkerManager {
     private readonly terminals?: TerminalManager,
     private readonly sessionFactory: typeof startHarnessSession = startHarnessSession,
     private readonly teamClaims?: TeamWorkerClaims,
-    private readonly assertAccountSession?: () => void,
+    private readonly assertAccountSession?: (harness?: WorkItem["harness"]) => void,
     private readonly mayDispatch: (project?: Project) => boolean = () => true,
     private readonly telemetry?: WorkerTelemetry,
     private readonly retrievalAssistant?: () => Promise<RetrievalAssistant>,
@@ -567,7 +567,7 @@ export class WorkerManager {
     let permissionMode = effectivePermissionMode(task, permissionSettings);
     // Keep this synchronous with the Preparing transition: account changes
     // reject active workers, and queued passes use this same entry point.
-    this.assertAccountSession?.();
+    this.assertAccountSession?.(task.harness);
     // A personal record and an invitation-created record may reuse the same
     // checkout. Only one project identity may drive its branch at a time.
     const checkoutKey = (value: string) =>
@@ -593,7 +593,7 @@ export class WorkerManager {
       try {
         await this.reviewStarting(task);
         continuing();
-        this.assertAccountSession?.();
+        this.assertAccountSession?.(task.harness);
         if (task.assignment !== "auto")
           assertWorkerConnected(this.state(), task.harness);
         if (isActive(task) || this.children.has(task.id))
@@ -1119,6 +1119,9 @@ export class WorkerManager {
         .join("\n\n");
       const briefPath = join(workerRoot, "brief.md").replaceAll("\\", "/");
       await writeFile(join(workspace, briefPath), prompt, "utf8");
+      if (task.harness === "dsh") {
+        this.assertAccountSession?.("dsh");
+      }
       const dshProfile =
         task.harness === "dsh"
           ? (

@@ -133,6 +133,7 @@ export interface DshDryRunResult {
   passedIds: string[];
   failed: DshProviderFailure[];
   previewModels: ModelOption[];
+  error?: string;
 }
 export interface DshApplyMigrationResult {
   ok: boolean;
@@ -141,6 +142,7 @@ export interface DshApplyMigrationResult {
   failed: DshProviderFailure[];
   models: ModelOption[];
   runtime: RuntimeInfo;
+  error?: string;
 }
 export interface RouteDecision {
   policyVersion: "memcode-envelope-v2" | "memcode-evidence-v3" | "memcode-evidence-v4";

@@ -205,10 +205,12 @@ export function DshSetupFlow({
         targetProfile: status.activeProfile,
         selectedIds: ids,
       });
-      if (dryRun.failed.length > 0) {
+      if (!dryRun.ok || dryRun.failed.length > 0) {
         const failedIds = new Set(dryRun.failed.map((item) => item.id));
         setDryRunResult(dryRun);
-        setSelectedIds((current) => current.filter((id) => !failedIds.has(id)));
+        if (failedIds.size > 0) {
+          setSelectedIds((current) => current.filter((id) => !failedIds.has(id)));
+        }
         return;
       }
       const applied = await window.memcode.applyDshMigration({
@@ -217,7 +219,7 @@ export function DshSetupFlow({
       });
       onRuntime?.(applied.runtime);
       await onRefreshStatus();
-      if (applied.failed.length > 0) {
+      if (!applied.ok || applied.failed.length > 0) {
         const failedIds = new Set(applied.failed.map((item) => item.id));
         setDryRunResult({
           ok: false,
@@ -225,8 +227,11 @@ export function DshSetupFlow({
           passedIds: applied.appliedIds,
           failed: applied.failed,
           previewModels: applied.models,
+          ...(applied.error ? { error: applied.error } : {}),
         });
-        setSelectedIds((current) => current.filter((id) => !failedIds.has(id)));
+        if (failedIds.size > 0) {
+          setSelectedIds((current) => current.filter((id) => !failedIds.has(id)));
+        }
         return;
       }
       const summary = {
@@ -622,30 +627,45 @@ export function DshSetupFlow({
                     </div>
                   )}
 
-                  {dryRunResult && dryRunResult.failed.length > 0 && (
-                    <div className="dsh-setup-warning" role="alert">
-                      <AlertTriangle size={14} />
-                      <div>
-                        <strong>
-                          Dry-run failed — “{dryRunResult.targetProfile}” was not
-                          modified
-                        </strong>
-                        <ul>
-                          {dryRunResult.failed.map((failure) => (
-                            <li key={failure.id}>
-                              <strong>{failure.name}</strong>: {failure.reason}
-                            </li>
-                          ))}
-                        </ul>
-                        <small>
-                          Failing providers have been unchecked below.
-                        </small>
+                  {dryRunResult && (!dryRunResult.ok || dryRunResult.failed.length > 0) && (() => {
+                    const providerFailures = dryRunResult.failed.filter(
+                      (item) => !item.id.startsWith("profile:"),
+                    );
+                    return (
+                      <div className="dsh-setup-warning" role="alert">
+                        <AlertTriangle size={14} />
+                        <div>
+                          <strong>
+                            Dry-run failed — “{dryRunResult.targetProfile}” was not
+                            modified
+                          </strong>
+                          {dryRunResult.failed.length > 0 ? (
+                            <ul>
+                              {dryRunResult.failed.map((failure) => (
+                                <li key={failure.id}>
+                                  <strong>{failure.name}</strong>: {failure.reason}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p>
+                              {dryRunResult.error ||
+                                "Selected providers failed when combined. Review your selection and try again."}
+                            </p>
+                          )}
+                          {providerFailures.length > 0 && (
+                            <small>
+                              Failing providers have been unchecked below.
+                            </small>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   <div className="dsh-setup-actions">
-                    {dryRunResult && dryRunResult.failed.length > 0 ? (
+                    {dryRunResult &&
+                    dryRunResult.failed.some((item) => !item.id.startsWith("profile:")) ? (
                       <button
                         type="button"
                         className="button primary"
