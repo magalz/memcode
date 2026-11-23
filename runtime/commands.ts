@@ -1,6 +1,15 @@
-import { access, readdir, stat } from "node:fs/promises";
+import { access, readdir, readFile, stat } from "node:fs/promises";
 import { constants } from "node:fs";
-import { delimiter, dirname, isAbsolute, join } from "node:path";
+import {
+  basename,
+  delimiter,
+  dirname,
+  isAbsolute,
+  join,
+  normalize,
+  resolve,
+  sep,
+} from "node:path";
 import { homedir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -165,6 +174,89 @@ async function direct(
   return null;
 }
 
+const WINDOWS_DSH_SHIM =
+  /^\s*"%~dp0\\?([^"%\r\n]+\.exe)"\s+--expose-internals\s+"%~dp0\\?([^"%\r\n]+\.(?:c|m)?js)"\s+%\*\s*$/i;
+
+async function dshInstallCommand(
+  executable: string,
+  script: string,
+): Promise<Command | null> {
+  // Bind the entry to the installation that owns the executable, so a changed
+  // .exe cannot keep a saved worker approval for the same script identity.
+  if (basename(executable).toLowerCase() !== "deepseek harness.exe")
+    return null;
+  const appAsar = join(dirname(executable), "resources", "app.asar");
+  if (!script.toLowerCase().startsWith((appAsar + sep).toLowerCase()))
+    return null;
+  // A leftover shim from an uninstall must not look "installed", and must not
+  // block the node_modules fallback in the same directory.
+  if (!(await exists(executable)) || !(await exists(appAsar))) return null;
+  return {
+    command: executable,
+    prefix: ["--expose-internals", script],
+    identity: script,
+    env: { ELECTRON_RUN_AS_NODE: "1" },
+  };
+}
+
+/**
+ * A saved dsh identity points inside the installer's app.asar, which ordinary
+ * filesystem access cannot read. Rebuild the command from the owning
+ * installation before the configured-path existence check rejects it.
+ */
+async function savedArchiveCommand(
+  name: string,
+  configured: string,
+): Promise<Command | null> {
+  if (name !== "dsh" || process.platform !== "win32" || !isAbsolute(configured))
+    return null;
+  const normalized = normalize(configured);
+  // A saved identity must be the exact entry the shim resolved. Reject `..`
+  // segments that would redirect an approved identity to another installation.
+  if (normalized.toLowerCase() !== configured.toLowerCase()) return null;
+  const parts = normalized.split(sep);
+  const archive = parts.findLastIndex(
+    (part) => part.toLowerCase() === "app.asar",
+  );
+  if (
+    archive < 2 ||
+    parts[archive - 1]?.toLowerCase() !== "resources" ||
+    archive === parts.length - 1 ||
+    !/\.(?:c|m)?js$/i.test(parts[parts.length - 1])
+  )
+    return null;
+  const install = parts.slice(0, archive - 1).join(sep);
+  return dshInstallCommand(join(install, "DeepSeek Harness.exe"), normalized);
+}
+
+/**
+ * The launcher installed by the official DeepSeek Harness CLI is a .cmd shim
+ * that delegates to an Electron executable. Worker sessions spawn with
+ * `shell: false`, which cannot run a batch file on Windows. Normalize the shim
+ * into the executable, argument prefix and environment the installer declares,
+ * so every existing argument-array spawn site works unchanged.
+ */
+async function windowsShimCommand(path: string): Promise<Command | null> {
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch {
+    return null;
+  }
+  // Only a line that fully matches the official launcher shape counts. A
+  // comment or echo that merely mentions the flag cannot shadow the real line.
+  let match: RegExpMatchArray | null = null;
+  for (const line of text.split(/\r?\n/)) {
+    match = line.match(WINDOWS_DSH_SHIM);
+    if (match) break;
+  }
+  if (!match) return null;
+  const base = dirname(path);
+  const command = resolve(base, match[1]);
+  const script = resolve(base, match[2]);
+  return dshInstallCommand(command, script);
+}
+
 async function cursorRuntime(): Promise<Command | null> {
   const root = join(homedir(), "AppData", "Local", "cursor-agent", "versions");
   try {
@@ -267,6 +359,8 @@ export async function findCommand(
   options: MacCommandOptions & { platform?: NodeJS.Platform } = {},
 ): Promise<Command | null> {
   if (configured) {
+    const archived = await savedArchiveCommand(name, configured);
+    if (archived) return archived;
     if (!isAbsolute(configured) || !(await exists(configured))) return null;
     if (/\.(cjs|mjs|js)$/i.test(configured))
       return {
@@ -297,19 +391,31 @@ export async function findCommand(
         .filter(Boolean),
     ),
   ];
+  const extensions =
+    process.platform === "win32"
+      ? name === "dsh"
+        ? [".exe", ".cmd"]
+        : [".exe"]
+      : [""];
   for (const dir of dirs) {
     const names = name === "cursor" ? ["cursor-agent", "agent"] : [name];
     for (const candidate of names) {
-      const path = join(
-        dir,
-        candidate + (process.platform === "win32" ? ".exe" : ""),
-      );
-      if ((await exists(path)) && (await stat(path)).isFile())
+      for (const extension of extensions) {
+        const path = join(dir, candidate + extension);
+        if (!((await exists(path)) && (await stat(path)).isFile())) continue;
+        // A batch shim cannot be passed to spawn with `shell: false`.
+        if (extension === ".cmd") {
+          const normalized =
+            name === "dsh" ? await windowsShimCommand(path) : null;
+          if (normalized) return normalized;
+          continue;
+        }
         return {
           command: path,
           prefix: [],
           ...(name === "cursor" ? { env: { CURSOR_INVOKED_AS: "agent" } } : {}),
         };
+      }
     }
     const packageEntry =
       name === "memtrace"
