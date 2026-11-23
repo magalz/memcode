@@ -1,8 +1,19 @@
+/** Set on a value that is itself tagged `!!js`, or that contains one that is. */
 const JS_EXPR = Symbol("dsh.jsExpression");
+/** Set only on a collection that carries an explicit `!!js` tag of its own. */
+const JS_EXPLICIT = Symbol("dsh.jsExplicitTag");
 
 function markJsExpr<T>(value: T): T {
   if (value && typeof value === "object") {
     Object.defineProperty(value, JS_EXPR, { value: true, enumerable: false, configurable: true });
+  }
+  return value;
+}
+
+function markExplicitJs<T>(value: T): T {
+  if (value && typeof value === "object") {
+    markJsExpr(value);
+    Object.defineProperty(value, JS_EXPLICIT, { value: true, enumerable: false, configurable: true });
   }
   return value;
 }
@@ -14,11 +25,75 @@ export function hasJsTag(value: unknown): boolean {
   return Object.values(value).some((item) => hasJsTag(item));
 }
 
-const SECRET_KEY_RE = /(?:api[_-]?key|secret|token|password|authorization|cookie|credentials?)/i;
+/**
+ * Whether this collection itself was written with an explicit `!!js` tag.
+ * Unlike {@link hasJsTag}, a marker propagated from a tagged descendant does
+ * not count, so safe siblings of a tagged value stay distinguishable.
+ */
+export function hasExplicitJsTag(value: unknown): boolean {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    (value as Record<symbol, unknown>)[JS_EXPLICIT] === true
+  );
+}
+
 const SECRET_VALUE_RE = /^(?:Bearer|Basic)\s+\S+/i;
+const SECRET_HEAD_WORDS = new Set([
+  "secret",
+  "password",
+  "passwd",
+  "passphrase",
+  "pwd",
+  "token",
+  "authorization",
+  "auth",
+  "cookie",
+  "cookies",
+  "credential",
+  "credentials",
+  "apikey",
+  "privatekey",
+]);
+const SECRET_KEY_QUALIFIERS = new Set([
+  "api",
+  "private",
+  "access",
+  "secret",
+  "signing",
+  "session",
+  "encryption",
+  "client",
+  "license",
+  "subscription",
+]);
+
+function keyWords(key: string): string[] {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+/**
+ * A key whose value is itself a credential. The head noun decides, so
+ * `accessToken` and `privateKey` count while `maxTokens`, `tokenLimit` and the
+ * `apiKeyEnv` indirection (the name of an environment variable) do not.
+ */
+function isCredentialKey(key: string): boolean {
+  const words = keyWords(key);
+  const head = words.at(-1);
+  if (!head || head === "env") return false;
+  if (SECRET_HEAD_WORDS.has(head)) return true;
+  return head === "key" && (words.length === 1 || SECRET_KEY_QUALIFIERS.has(words[words.length - 2]));
+}
 
 function hasNonEmptyCredentialValue(value: unknown): boolean {
   if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "number" || typeof value === "bigint") return true;
+  if (typeof value === "boolean") return value;
   if (Array.isArray(value)) return value.some((item) => hasNonEmptyCredentialValue(item));
   if (value && typeof value === "object") {
     return Object.values(value).some((item) => hasNonEmptyCredentialValue(item));
@@ -31,9 +106,7 @@ export function hasInlineSecret(obj: unknown): boolean {
   if (!obj || typeof obj !== "object") return false;
   if (Array.isArray(obj)) return obj.some((item) => hasInlineSecret(item));
   for (const [key, value] of Object.entries(obj)) {
-    if (key !== "apiKeyEnv" && SECRET_KEY_RE.test(key) && hasNonEmptyCredentialValue(value)) {
-      return true;
-    }
+    if (isCredentialKey(key) && hasNonEmptyCredentialValue(value)) return true;
     if (hasInlineSecret(value)) return true;
   }
   return false;
@@ -126,31 +199,96 @@ function findUnquotedColon(text: string, allowTightQuotedColon = false): number 
   return -1;
 }
 
-function unquoteKey(raw: string): string {
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2) {
-    return trimmed.slice(1, -1).replace(/''/g, "'");
+/**
+ * A quoted scalar, or `undefined` when the text is not one. Text that opens a
+ * quote without being exactly one quoted scalar is rejected rather than read as
+ * a plain string that dsh would parse differently.
+ */
+function quotedScalar(trimmed: string): string | undefined {
+  const quote = trimmed[0];
+  if (quote !== "'" && quote !== '"') return undefined;
+  const inner = trimmed.slice(1, -1);
+  if (trimmed.length >= 2 && trimmed.endsWith(quote)) {
+    if (quote === "'" && !/'/.test(inner.replace(/''/g, ""))) return inner.replace(/''/g, "'");
+    if (quote === '"' && !/"/.test(inner.replace(/\\[\s\S]/g, ""))) return unescapeDoubleQuoted(inner);
   }
-  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
-    return unescapeDoubleQuoted(trimmed.slice(1, -1));
-  }
-  return trimmed;
+  throw new Error("Unsupported multi-line or malformed quoted YAML scalar in cordis.patch.yml.");
 }
 
+const ESCAPES: Readonly<Record<string, string>> = {
+  "0": "\0",
+  a: "\x07",
+  b: "\b",
+  t: "\t",
+  "\t": "\t",
+  n: "\n",
+  v: "\v",
+  f: "\f",
+  r: "\r",
+  e: "\x1b",
+  " ": " ",
+  '"': '"',
+  "/": "/",
+  "\\": "\\",
+  N: "\x85",
+  _: "\xa0",
+  L: "\u2028",
+  P: "\u2029",
+};
+
 function unescapeDoubleQuoted(raw: string): string {
-  return raw.replace(/\\(u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|.)/g, (_, seq: string) => {
-    if (seq === "n") return "\n";
-    if (seq === "r") return "\r";
-    if (seq === "t") return "\t";
-    if (seq === "0") return "\0";
-    if (seq === "\\") return "\\";
-    if (seq === '"') return '"';
-    if (seq === "/") return "/";
-    if (seq.startsWith("u") || seq.startsWith("x")) {
-      return String.fromCharCode(Number.parseInt(seq.slice(1), 16));
+  return raw.replace(/\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[\s\S])/g, (_, seq: string) => {
+    if (seq.length === 1) {
+      if (Object.prototype.hasOwnProperty.call(ESCAPES, seq)) return ESCAPES[seq];
+      throw new Error(`Unsupported YAML escape "\\${seq}" in cordis.patch.yml.`);
     }
-    return seq;
+    const code = Number.parseInt(seq.slice(1), 16);
+    if (code > 0x10ffff) throw new Error("Invalid YAML unicode escape in cordis.patch.yml.");
+    return String.fromCodePoint(code);
   });
+}
+
+/**
+ * Resolve a plain (unquoted) scalar the way dsh's YAML 1.2 core schema does,
+ * so a value keeps its type when MemCode rewrites the patch. Plain forms whose
+ * type MemCode cannot reproduce exactly are refused instead of guessed.
+ */
+function resolvePlain(text: string): unknown {
+  if (text === "" || /^(?:~|null|Null|NULL)$/.test(text)) return null;
+  if (/^(?:true|True|TRUE)$/.test(text)) return true;
+  if (/^(?:false|False|FALSE)$/.test(text)) return false;
+  if (/^[-+]?[0-9]+$/.test(text)) return Number(text);
+  const radix = /^([-+]?)0(x[0-9a-fA-F]+|o[0-7]+|b[01]+)$/.exec(text);
+  if (radix) {
+    const value = Number.parseInt(radix[2].slice(1), { x: 16, o: 8, b: 2 }[radix[2][0] as "x" | "o" | "b"]);
+    return radix[1] === "-" ? -value : value;
+  }
+  if (/^[-+]?[0-9]+(?:\.[0-9]*)?(?:[eE][-+]?[0-9]+)?$/.test(text) || /^\.[0-9]+(?:[eE][-+]?[0-9]+)?$/.test(text)) {
+    return Number(text);
+  }
+  if (/^[-+]?\.(?:inf|Inf|INF)$/.test(text)) return text.startsWith("-") ? -Infinity : Infinity;
+  if (/^\.(?:nan|NaN|NAN)$/.test(text)) return Number.NaN;
+  // Underscore digit separators and timestamps load as numbers or dates in
+  // dsh, with edge rules MemCode does not reproduce.
+  if (
+    (text.includes("_") &&
+      (/^[-+]?[0-9][0-9_]*(?:\.[0-9_]*)?(?:[eE][-+]?[0-9]+)?$/.test(text) ||
+        /^\.[0-9_]+(?:[eE][-+]?[0-9]+)?$/.test(text) ||
+        /^[-+]?0[xob][0-9a-fA-F_]+$/.test(text))) ||
+    /^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}(?:$|[Tt ])/.test(text)
+  ) {
+    throw new Error(`Unsupported YAML scalar "${text}" in cordis.patch.yml.`);
+  }
+  return text;
+}
+
+function unquoteKey(raw: string): string {
+  const trimmed = raw.trim();
+  const quoted = quotedScalar(trimmed);
+  if (quoted !== undefined) return quoted;
+  // dsh resolves a plain key's type first and then uses its string form.
+  const resolved = resolvePlain(trimmed);
+  return resolved === null ? "null" : String(resolved);
 }
 
 function assertSupportedYamlToken(trimmed: string): void {
@@ -173,19 +311,9 @@ function parseScalar(raw: string, ctx: { hasJsExpression: boolean }): { value: u
     if (!trimmed) return { value: undefined, taggedJs: true };
   }
   assertSupportedYamlToken(trimmed);
-  if (trimmed === "" || trimmed === "null" || trimmed === "~") return { value: null, taggedJs };
-  if (trimmed === "true") return { value: true, taggedJs };
-  if (trimmed === "false") return { value: false, taggedJs };
-  if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(trimmed)) {
-    return { value: Number(trimmed), taggedJs };
-  }
-  if (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2) {
-    return { value: trimmed.slice(1, -1).replace(/''/g, "'"), taggedJs };
-  }
-  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
-    return { value: unescapeDoubleQuoted(trimmed.slice(1, -1)), taggedJs };
-  }
-  return { value: trimmed, taggedJs };
+  const quoted = quotedScalar(trimmed);
+  if (quoted !== undefined) return { value: quoted, taggedJs };
+  return { value: resolvePlain(trimmed), taggedJs };
 }
 
 function splitFlowItems(inner: string): string[] {
@@ -235,11 +363,13 @@ function parseFlow(text: string, ctx: { hasJsExpression: boolean }): { value: un
     taggedJs = true;
     trimmed = (jsMatch[1] ?? "").trim();
   }
+  const mark = <T>(value: T, anyJs: boolean): T =>
+    taggedJs ? markExplicitJs(value) : anyJs ? markJsExpr(value) : value;
   if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
     const inner = trimmed.slice(1, -1).trim();
     if (!inner) {
       const arr: unknown[] = [];
-      return { value: taggedJs ? markJsExpr(arr) : arr, taggedJs };
+      return { value: mark(arr, false), taggedJs };
     }
     let anyJs = taggedJs;
     const arr = splitFlowItems(inner).map((item) => {
@@ -247,12 +377,12 @@ function parseFlow(text: string, ctx: { hasJsExpression: boolean }): { value: un
       if (res.taggedJs) anyJs = true;
       return res.value;
     });
-    return { value: anyJs ? markJsExpr(arr) : arr, taggedJs: anyJs };
+    return { value: mark(arr, anyJs), taggedJs: anyJs };
   }
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
     const inner = trimmed.slice(1, -1).trim();
     const obj: Record<string, unknown> = {};
-    if (!inner) return { value: taggedJs ? markJsExpr(obj) : obj, taggedJs };
+    if (!inner) return { value: mark(obj, false), taggedJs };
     let anyJs = taggedJs;
     for (const part of splitFlowItems(inner)) {
       const colon = findUnquotedColon(part, true);
@@ -267,7 +397,7 @@ function parseFlow(text: string, ctx: { hasJsExpression: boolean }): { value: un
       if (res.taggedJs) anyJs = true;
       obj[key] = res.value;
     }
-    return { value: anyJs ? markJsExpr(obj) : obj, taggedJs: anyJs };
+    return { value: mark(obj, anyJs), taggedJs: anyJs };
   }
   const scalar = parseScalar(trimmed, ctx);
   return { value: scalar.value, taggedJs: taggedJs || scalar.taggedJs };
@@ -354,33 +484,36 @@ class YamlParser {
     while (trailingEmpty < rawLines.length && rawLines[rawLines.length - 1 - trailingEmpty] === "") {
       trailingEmpty++;
     }
-    const bodyLines = chomp === "+" ? rawLines : rawLines.slice(0, rawLines.length - trailingEmpty);
+    const contentLines = rawLines.slice(0, rawLines.length - trailingEmpty);
 
     let body: string;
     if (style === "|") {
-      body = bodyLines.join("\n");
+      body = contentLines.join("\n");
     } else {
-      const parts: string[] = [];
-      for (let i = 0; i < bodyLines.length; i++) {
-        const current = bodyLines[i];
-        if (i === 0) {
-          parts.push(current);
+      // Folding joins two adjacent normal lines with a space. A line that is
+      // more indented keeps its surrounding line breaks, and each empty line
+      // between two normal lines stands for one line break.
+      let previous: "normal" | "more" | null = null;
+      let empty = 0;
+      body = "";
+      for (const line of contentLines) {
+        if (line === "") {
+          empty++;
           continue;
         }
-        const prev = bodyLines[i - 1];
-        if (current === "") {
-          parts.push("\n");
-        } else if (prev === "") {
-          parts.push(current);
-        } else {
-          parts.push(" " + current);
-        }
+        const kind = /^[ \t]/.test(line) ? "more" : "normal";
+        if (previous === null) body += "\n".repeat(empty);
+        else if (previous === "normal" && kind === "normal") body += empty ? "\n".repeat(empty) : " ";
+        else body += "\n".repeat(empty + 1);
+        body += line;
+        previous = kind;
+        empty = 0;
       }
-      body = parts.join("");
     }
 
-    if (chomp === "-" || bodyLines.length === 0) return body;
-    return body + "\n";
+    if (contentLines.length === 0) return chomp === "+" ? "\n".repeat(trailingEmpty) : "";
+    if (chomp === "-") return body;
+    return body + "\n" + (chomp === "+" ? "\n".repeat(trailingEmpty) : "");
   }
 
   private collectFlow(firstPart: string): string {
@@ -404,7 +537,7 @@ class YamlParser {
       const next = this.peekContent();
       if (next && next.indent > parentIndent) {
         const parsed = this.parseBlock(next.indent);
-        return { value: markJsExpr(parsed.value ?? {}), taggedJs: true };
+        return { value: markExplicitJs(parsed.value ?? {}), taggedJs: true };
       }
       return { value: undefined, taggedJs: true };
     }
@@ -417,7 +550,7 @@ class YamlParser {
       }
       if (inner.startsWith("[") || inner.startsWith("{")) {
         const res = parseFlow(this.collectFlow(inner), this);
-        return { value: markJsExpr(res.value), taggedJs: true };
+        return { value: markExplicitJs(res.value), taggedJs: true };
       }
       return { value: parseScalar(val, this).value, taggedJs: true };
     }
@@ -575,26 +708,51 @@ export function parseDshPatchYaml(text: string): { entries: any[]; hasJsExpressi
   return { entries: parsed.value as any[], hasJsExpression: parser.hasJsExpression };
 }
 
+/** Whether a plain (unquoted) spelling would load back as this exact string. */
+function plainKeepsString(text: string): boolean {
+  // YAML 1.1 booleans are strings under dsh's core schema; quote them anyway
+  // so no older reader turns them into booleans.
+  if (/^(?:y|Y|yes|Yes|YES|n|N|no|No|NO|on|On|ON|off|Off|OFF|<<|=)$/.test(text)) return false;
+  try {
+    return resolvePlain(text) === text;
+  } catch {
+    return false;
+  }
+}
+
 function needsQuotes(text: string): boolean {
   if (text === "") return true;
   if (/^\s|\s$/.test(text)) return true;
-  if (text === "true" || text === "false" || text === "null" || text === "~") return true;
-  if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(text)) return true;
+  if (!plainKeepsString(text)) return true;
   if (/^[-?:,\[\]{}#&*!|>'"%@`]/.test(text)) return true;
   if (/:(?:\s|$)/.test(text) || /\s#/.test(text)) return true;
   return false;
 }
 
 function formatKey(key: string): string {
-  if (/^[A-Za-z0-9._-]+$/.test(key) && key !== "true" && key !== "false" && key !== "null") {
-    return key;
-  }
+  if (/^[A-Za-z0-9._-]+$/.test(key) && !needsQuotes(key)) return key;
   return formatString(key);
 }
 
+const DOUBLE_QUOTED_ESCAPES: Readonly<Record<string, string>> = {
+  "\\": "\\\\",
+  '"': '\\"',
+  "\0": "\\0",
+  "\b": "\\b",
+  "\t": "\\t",
+  "\n": "\\n",
+  "\v": "\\v",
+  "\f": "\\f",
+  "\r": "\\r",
+};
+
 function formatString(value: string): string {
-  if (/[\x00-\x1f\x7f]/.test(value)) {
-    return JSON.stringify(value);
+  // Control and other non-printable characters are only safe escaped.
+  if (/[\x00-\x1f\x7f-\x9f\u2028\u2029\ufeff]/.test(value)) {
+    return `"${value.replace(
+      /[\x00-\x1f\x7f-\x9f"\\\u2028\u2029\ufeff]/g,
+      (ch) => DOUBLE_QUOTED_ESCAPES[ch] ?? `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    )}"`;
   }
   if (!needsQuotes(value)) return value;
   return `'${value.replace(/'/g, "''")}'`;
@@ -602,7 +760,14 @@ function formatString(value: string): string {
 
 function formatScalar(value: unknown): string {
   if (value === null || value === undefined) return "null";
-  if (typeof value === "boolean" || typeof value === "number") return String(value);
+  if (typeof value === "boolean") return String(value);
+  if (typeof value === "number") {
+    if (Number.isNaN(value)) return ".nan";
+    if (value === Infinity) return ".inf";
+    if (value === -Infinity) return "-.inf";
+    if (Object.is(value, -0)) return "-0.0";
+    return String(value);
+  }
   return formatString(String(value));
 }
 

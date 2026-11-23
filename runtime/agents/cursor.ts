@@ -220,7 +220,7 @@ export async function probeStandardACPCatalog(
     }, (result) => {
       inspected = true;
       models = standardACPCatalog(result);
-    }, transport);
+    }, transport, probeOptions?.strictStdout === true);
     const timer = setTimeout(() => { void session.stop(); }, 25000);
     try {
       const result = await session.completion;
@@ -237,7 +237,20 @@ export async function probeStandardACPCatalog(
   }
 }
 
-function runCursorSession(options: AgentSessionOptions, inspect?: (session: Json) => void, transport?: ACPTransport): AgentSession {
+/** A JSON-RPC 2.0 request, notification or response, as ACP sends them. */
+function isJsonRpcMessage(message: Json): boolean {
+  if (message.jsonrpc !== "2.0") return false;
+  if (typeof message.method === "string") return true;
+  return hasId(message) && ("result" in message || "error" in message);
+}
+
+function runCursorSession(
+  options: AgentSessionOptions,
+  inspect?: (session: Json) => void,
+  transport?: ACPTransport,
+  /** Treat any stdout line that is not a JSON-RPC message as an error. */
+  strictStdout = false,
+): AgentSession {
   const brand = transport?.name ?? "Cursor";
   // Current ACP ignores --auto-review even though interactive Cursor supports it.
   // Never silently run an allowlist/bypass session labelled as Smart auto.
@@ -673,7 +686,18 @@ function runCursorSession(options: AgentSessionOptions, inspect?: (session: Json
   const lines = createInterface({ input: child.stdout! });
   lines.on("line", (line) => {
     try {
-      incoming(record(JSON.parse(line)));
+      const message = record(JSON.parse(line));
+      // JSON log lines such as {"message":"starting"} are ignored by incoming();
+      // a strict probe must still see that stdout is not a clean ACP stream.
+      if (strictStdout && !isJsonRpcMessage(message)) {
+        emit({
+          type: "error",
+          message: `${brand} wrote a JSON line that is not an ACP message to stdout.`,
+          fatal: false,
+        });
+        return;
+      }
+      incoming(message);
     } catch {
       emit({
         type: "error",

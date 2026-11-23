@@ -117,7 +117,36 @@ test("inspectDshProfiles requests profile creation when no ACP profiles exist", 
   const inspected = await inspectDshProfiles(undefined, { DSH_HOME: dshHome });
   assert.equal(inspected.needsProfileCreation, true);
   assert.equal(inspected.activeProfile, "acp");
+  assert.equal(inspected.activeProfileIssue, undefined);
   assert.equal(inspected.desktopProfilePresent, false);
+});
+
+test("inspectDshProfiles flags a non-ACP default directory and never selects unusable names", async (t) => {
+  const dshHome = await makeTempDshHome(t);
+  const profilesDir = join(dshHome, "profiles");
+  const env = { DSH_HOME: dshHome };
+  const acpBundles = JSON.stringify({
+    dependencies: { "dsh-sample-provider": "0.4.6" },
+    dsh: { profile: { bundles: ["@deepseek-ai/dsh-acp-app"] } },
+  });
+  // Customized ACP profiles whose names dsh cannot be given.
+  for (const name of ["acp copy", "_backup"]) {
+    await mkdir(join(profilesDir, name), { recursive: true });
+    await writeFile(join(profilesDir, name, "package.json"), acpBundles);
+  }
+  // An existing "acp" directory that is a web profile, not ACP.
+  await mkdir(join(profilesDir, "acp"), { recursive: true });
+  await writeFile(
+    join(profilesDir, "acp", "package.json"),
+    JSON.stringify({ dsh: { profile: { bundles: ["@deepseek-ai/dsh-web-app"] } } }),
+  );
+
+  const inspected = await inspectDshProfiles(undefined, env);
+  assert.deepEqual(inspected.acpProfiles, []);
+  assert.deepEqual(inspected.nonAcpProfiles.map((p) => p.name), ["acp"]);
+  assert.equal(inspected.activeProfile, "acp");
+  assert.equal(inspected.activeProfileIssue, "non-acp");
+  assert.equal(inspected.needsProfileCreation, true);
 });
 
 test("createDshAcpProfile uses correct CLI flags for shipped acp vs custom profile names", async (t) => {

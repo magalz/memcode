@@ -70,7 +70,11 @@ if(harness==='copilot'||harness==='dsh'){
 setInterval(()=>{},1000);
 `;
 
-async function fixture(harness: Harness, scenario = "safe") {
+async function fixture(
+  harness: Harness,
+  scenario = "safe",
+  extra: Parameters<typeof createReadonlyReviewAgent>[2] = {},
+) {
   const root = await mkdtemp(join(tmpdir(), "memcode-readonly-review-"));
   const script = join(root, "provider.mjs"),
     record = join(root, "record.json"),
@@ -115,6 +119,7 @@ async function fixture(harness: Harness, scenario = "safe") {
     coverage: { complete: false, limitations: [] },
   } as unknown as StoryReviewRun;
   const agent = createReadonlyReviewAgent(profile, () => state, {
+    ...extra,
     timeoutMs: 10000,
     commandFor: async () => ({
       command: process.execPath,
@@ -522,6 +527,35 @@ test("review cleanup terminates the exact Node launcher and its long-running gra
   } finally {
     await stopReviewProcess(child);
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("dsh reviews hold setup admission for the whole process and start only when admitted", async () => {
+  const events: string[] = [];
+  let admit = true;
+  const f = await fixture("dsh", "safe", {
+    dshAdmission: () => {
+      if (!admit) throw new Error("Wait for DeepSeek Harness setup to finish before starting a DeepSeek Harness review.");
+      events.push("admitted");
+      return () => events.push("released");
+    },
+  });
+  try {
+    const answer = await f.agent.ask({ task: f.task, review: f.review, question: "Summarize the review." });
+    assert.equal(answer.harness, "dsh");
+    assert.deepEqual(events, ["admitted", "released"]);
+    assert.equal(((await f.record()) as { prompted: boolean }).prompted, true);
+
+    admit = false;
+    await rm(join(f.root, "record.json"), { force: true });
+    await assert.rejects(
+      f.agent.ask({ task: f.task, review: f.review, question: "Again." }),
+      /Wait for DeepSeek Harness setup to finish/,
+    );
+    await assert.rejects(readFile(join(f.root, "record.json")), "no reviewer process started");
+    assert.deepEqual(events, ["admitted", "released"]);
+  } finally {
+    await f.close();
   }
 });
 

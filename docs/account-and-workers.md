@@ -154,10 +154,21 @@ found), setup guides the user through creating one before connecting.
 
 Desktop-to-ACP provider sync compares Desktop `llm-pi-ai` entries in
 `cordis.patch.yml` and `@deepseek-ai/dsh-llm` `registerAdapter` plugins against
-the active ACP profile. Inline API secrets and unsafe YAML tags are skipped,
-and `link:` local plugins stay unchecked by default. Selected providers are
-tested first in an isolated `memcode-dryrun-*` staging profile with strict
-ACP stdout validation so failing providers are isolated with a **Retry without
-broken providers** action before the target profile is modified; verified imports
-apply with snapshot rollback. ACP model catalogs preserve provider group
-headings and full `["provider", "model"]` identifiers in Worker Assignment.
+the active ACP profile. Inline credentials and unsafe YAML tags are skipped,
+and `link:`/`file:` local plugins stay unchecked by default; a relative local
+path is resolved against the Desktop profile. When `$DSH_HOME/cordis.patch.yml`
+sets `llm-pi-ai`, it replaces every profile's providers, so custom providers are
+not offered for import into a profile and the list says why.
+
+Selected providers are tested first in an isolated `memcode-dryrun-*` staging
+profile that gets its own copy of the target's dependency tree. The unchanged
+profile is checked first; then each provider must actually contribute models to
+the strict ACP catalog. Failing providers are isolated with a **Retry without
+broken providers** action before the target profile is modified. **Import**
+applies only the plan that dry-run verified and refuses if Desktop, the home
+patch or the target changed in between. A failed import restores the profile
+files, reinstalls the restored lockfile and reports whether rollback completed.
+DeepSeek Harness reviews, plans and workers do not start while setup changes the
+profile, and setup waits for running dsh reviews; quitting MemCode waits for an
+import to finish. ACP model catalogs preserve provider group headings and full
+`["provider", "model"]` identifiers in Worker Assignment.

@@ -50,6 +50,15 @@ export function isTemporaryDryRunProfile(name: string): boolean {
   return /^memcode-dryrun-[a-f0-9]+$/i.test(name);
 }
 
+/** A directory name MemCode can pass to `dsh --profile` as a user profile. */
+function isSelectableProfileName(name: string): boolean {
+  try {
+    return normalizeDshProfile(name) === name;
+  } catch {
+    return false;
+  }
+}
+
 function patchInsertsAcp(entries: unknown[]): boolean {
   for (const entry of entries) {
     if (!entry || typeof entry !== "object") continue;
@@ -130,15 +139,9 @@ export async function inspectDshProfiles(
     const entries = await readdir(profilesDir, { withFileTypes: true });
     for (const entry of entries) {
       const name = entry.name;
-      const lower = name.toLowerCase();
-      if (
-        lower === "desktop" ||
-        lower === "node_modules" ||
-        name.startsWith(".") ||
-        isTemporaryDryRunProfile(name)
-      ) {
-        continue;
-      }
+      // Desktop, node_modules, staging and names dsh cannot be given (such as
+      // "acp copy" or "_backup") are never offered or selected automatically.
+      if (!isSelectableProfileName(name)) continue;
       const fullPath = join(profilesDir, name);
       if (!entry.isDirectory() && !(await isDirectory(fullPath))) continue;
       const summary = await classifyProfileDir(fullPath, name);
@@ -204,9 +207,12 @@ export async function inspectDshProfiles(
     };
   }
 
+  // An existing "acp" directory that is not ACP must not be launched as one.
+  const defaultIsNonAcp = nonAcpProfiles.some((p) => p.name === defaultDshProfile);
   return {
     dshHome,
     activeProfile: defaultDshProfile,
+    ...(defaultIsNonAcp ? { activeProfileIssue: "non-acp" as const } : {}),
     acpProfiles,
     nonAcpProfiles,
     desktopProfilePresent,

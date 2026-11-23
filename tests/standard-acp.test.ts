@@ -207,6 +207,30 @@ createInterface({input:process.stdin}).on('close',()=>process.exit(0)).on('line'
       probeStandardCatalog("dsh", { command: process.execPath, prefix: [emptyScript] }, "acp", { strictStdout: true }),
       /empty model catalog/i,
     );
+
+    // A JSON log line is still stdout pollution, not an ACP message.
+    const loggingScript = join(cwd, "json-log-acp.mjs");
+    await writeFile(loggingScript, `
+import { createInterface } from 'node:readline';
+process.stdout.write(JSON.stringify({ message: 'starting' }) + '\\n');
+const send = x => process.stdout.write(JSON.stringify(x)+'\\n');
+createInterface({input:process.stdin}).on('close',()=>process.exit(0)).on('line', line => {
+  const x = JSON.parse(line);
+  if (x.method === 'initialize') return send({jsonrpc:'2.0',id:x.id,result:{agentCapabilities:{}}});
+  if (x.method === 'session/new') return send({jsonrpc:'2.0',id:x.id,result:{sessionId:'s1',configOptions:[{id:'model',category:'model',currentValue:'m1',options:[{value:'m1',name:'Model 1'}]}]}});
+  if (x.method === 'session/close') return send({jsonrpc:'2.0',id:x.id,result:{}});
+});
+`);
+    const logging = { command: process.execPath, prefix: [loggingScript] };
+    assert.equal((await probeStandardCatalog("dsh", logging, "acp"))[0]?.id, "m1");
+    await assert.rejects(
+      probeStandardCatalog("dsh", logging, "acp", { strictStdout: true }),
+      /not an ACP message/i,
+    );
+
+    // An unusable profile name rejects, so a caller's .catch() always applies.
+    const invalid = probeStandardCatalog("dsh", cmd, "acp copy");
+    await assert.rejects(invalid, /Invalid DeepSeek Harness profile/);
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }

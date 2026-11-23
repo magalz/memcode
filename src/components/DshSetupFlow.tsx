@@ -52,6 +52,12 @@ export function DshSetupFlow({
   const [profileName, setProfileName] = useState("acp");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [dryRunResult, setDryRunResult] = useState<DshDryRunResult | null>(null);
+  // Which step produced dryRunResult, and whether a failed import was rolled back.
+  const [failure, setFailure] = useState<{ phase: "dry-run" | "import"; restored: boolean }>({
+    phase: "dry-run",
+    restored: true,
+  });
+  const [diffError, setDiffError] = useState("");
   const [migrationResult, setMigrationResult] = useState<{
     appliedCount: number;
     modelCount: number;
@@ -64,6 +70,7 @@ export function DshSetupFlow({
       nextStatus.cliInstalled &&
       !nextStatus.needsProfileCreation &&
       !nextStatus.activeProfileIssue;
+    setDiffError("");
     if (!profileReady || !nextStatus.desktopProfilePresent) {
       setDiff(null);
       setSelectedIds([]);
@@ -79,8 +86,10 @@ export function DshSetupFlow({
           .map((provider) => provider.id),
       );
     } catch (err) {
-      setError((err as Error).message);
+      // A failed comparison says nothing about whether providers are in sync.
+      setDiffError((err as Error).message || "The comparison could not be completed.");
       setDiff(null);
+      setSelectedIds([]);
     } finally {
       setDiffLoading(false);
     }
@@ -113,7 +122,9 @@ export function DshSetupFlow({
     status.cliInstalled &&
     !status.needsProfileCreation &&
     !status.activeProfileIssue;
-  const hasPendingProviders = !!diff && diff.providers.length > 0;
+  const hasPendingProviders =
+    (!!diff && diff.providers.length > 0) ||
+    (!!diffError && status?.desktopProfilePresent === true);
   const ready =
     !loading &&
     !diffLoading &&
@@ -200,12 +211,14 @@ export function DshSetupFlow({
     setBusyAction("migrate");
     setError("");
     setDryRunResult(null);
+    setFailure({ phase: "dry-run", restored: true });
     try {
       const dryRun = await window.memcode.dryRunDshMigration({
         targetProfile: status.activeProfile,
         selectedIds: ids,
       });
-      if (!dryRun.ok || dryRun.failed.length > 0) {
+      // Import only what the combined dry-run verified, through its plan.
+      if (!dryRun.ok || dryRun.failed.length > 0 || !dryRun.planId) {
         const failedIds = new Set(dryRun.failed.map((item) => item.id));
         setDryRunResult(dryRun);
         if (failedIds.size > 0) {
@@ -213,14 +226,13 @@ export function DshSetupFlow({
         }
         return;
       }
-      const applied = await window.memcode.applyDshMigration({
-        targetProfile: status.activeProfile,
-        selectedIds: dryRun.passedIds.length > 0 ? dryRun.passedIds : ids,
-      });
+      setBusyAction("import");
+      const applied = await window.memcode.applyDshMigration({ planId: dryRun.planId });
       onRuntime?.(applied.runtime);
       await onRefreshStatus();
       if (!applied.ok || applied.failed.length > 0) {
         const failedIds = new Set(applied.failed.map((item) => item.id));
+        setFailure({ phase: "import", restored: applied.restored !== false });
         setDryRunResult({
           ok: false,
           targetProfile: applied.targetProfile,
@@ -617,12 +629,13 @@ export function DshSetupFlow({
                     </details>
                   )}
 
-                  {busyAction === "migrate" && (
+                  {(busyAction === "migrate" || busyAction === "import") && (
                     <div className="dsh-setup-inline-status" role="status">
                       <Spinner />
                       <span>
-                        Testing selected providers in an isolated dry-run… Your
-                        active profile is unchanged.
+                        {busyAction === "migrate"
+                          ? "Testing selected providers in an isolated dry-run… Your active profile is unchanged."
+                          : `Importing the verified providers into “${diff.targetProfile}”…`}
                       </span>
                     </div>
                   )}
@@ -636,8 +649,11 @@ export function DshSetupFlow({
                         <AlertTriangle size={14} />
                         <div>
                           <strong>
-                            Dry-run failed — “{dryRunResult.targetProfile}” was not
-                            modified
+                            {failure.phase === "dry-run"
+                              ? `Dry-run failed — “${dryRunResult.targetProfile}” was not modified`
+                              : failure.restored
+                                ? `Import failed — “${dryRunResult.targetProfile}” was restored to its previous state`
+                                : `Import failed — “${dryRunResult.targetProfile}” may need manual recovery`}
                           </strong>
                           {dryRunResult.failed.length > 0 ? (
                             <ul>
@@ -681,7 +697,7 @@ export function DshSetupFlow({
                         disabled={selectedIds.length === 0 || !!busyAction}
                         onClick={() => void runMigration(selectedIds)}
                       >
-                        {busyAction === "migrate" ? <Spinner /> : null}
+                        {busyAction === "migrate" || busyAction === "import" ? <Spinner /> : null}
                         Test &amp; Import Selected
                       </button>
                     )}
@@ -689,6 +705,44 @@ export function DshSetupFlow({
                 </>
               )}
             </>
+          ) : diffError ? (
+            <div className="dsh-setup-warning" role="alert">
+              <AlertTriangle size={14} />
+              <div>
+                <strong>Desktop providers could not be compared</strong>
+                <p>{diffError}</p>
+                {skippedSync ? (
+                  <small>
+                    Skipped Desktop import. Using the current models in{" "}
+                    <code>{status.activeProfile}</code>.
+                  </small>
+                ) : null}
+                <div className="dsh-setup-actions">
+                  <button
+                    type="button"
+                    className="button secondary"
+                    disabled={!!busyAction || diffLoading}
+                    onClick={() => void loadDiff(status)}
+                  >
+                    <RefreshCw size={12} />
+                    Retry comparison
+                  </button>
+                  {!skippedSync && (
+                    <button
+                      type="button"
+                      className="text-button"
+                      disabled={!!busyAction}
+                      onClick={() => {
+                        if (alreadyConnected) onClose();
+                        else setSkippedSync(true);
+                      }}
+                    >
+                      Skip / Use current models
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="dsh-setup-note">
               <span>

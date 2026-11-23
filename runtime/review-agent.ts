@@ -67,6 +67,11 @@ export interface ReviewAgentOptions {
   modelPinned?: boolean;
   localModel?: boolean;
   dshProfile?: string;
+  /**
+   * Admits a dsh reader process while no setup operation rewrites its
+   * profile; returns the release to call once the process has exited.
+   */
+  dshAdmission?: () => () => void;
   commandFor?: typeof findCommand;
   /** Test transport injection; product callers use the installed approved CLI. */
   spawn?: typeof spawn;
@@ -1240,21 +1245,28 @@ export async function askInCapsule(
   const prompt = question.prompt(readInstruction);
   try {
     if (harness === "copilot" || harness === "dsh") {
-      const dshProfile =
-        harness === "dsh"
-          ? options.dshProfile ??
-            (
-              await inspectDshProfiles(settings?.dshProfile).catch(
-                () => undefined,
-              )
-            )?.activeProfile ??
-            settings?.dshProfile
-          : undefined;
-      return await standardQuestion(harness, command, capsule, prompt, requested, input, {
-        ...options,
-        modelPinned: !!explicit,
-        ...(dshProfile !== undefined ? { dshProfile } : {}),
-      });
+      // A dsh reader must not start while setup may be rewriting its profile,
+      // and setup must not start while it reads; admission covers both.
+      const release = harness === "dsh" ? options.dshAdmission?.() : undefined;
+      try {
+        const dshProfile =
+          harness === "dsh"
+            ? options.dshProfile ??
+              (
+                await inspectDshProfiles(settings?.dshProfile).catch(
+                  () => undefined,
+                )
+              )?.activeProfile ??
+              settings?.dshProfile
+            : undefined;
+        return await standardQuestion(harness, command, capsule, prompt, requested, input, {
+          ...options,
+          modelPinned: !!explicit,
+          ...(dshProfile !== undefined ? { dshProfile } : {}),
+        });
+      } finally {
+        release?.();
+      }
     }
     return await {
       codex: codexQuestion,

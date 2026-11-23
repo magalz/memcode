@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { createHash, randomBytes } from "node:crypto";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import type {
   DshDesktopDiff,
@@ -12,7 +12,7 @@ import type {
   ModelOption,
 } from "../src/shared";
 import { probeStandardCatalog } from "./agents/standard-acp";
-import { childEnv, exists, type Command } from "./commands";
+import { childEnv, type Command } from "./commands";
 import {
   inspectDshProfiles,
   isTemporaryDryRunProfile,
@@ -20,6 +20,7 @@ import {
   resolveDshHome,
 } from "./dsh-profiles";
 import {
+  hasExplicitJsTag,
   hasInlineSecret,
   hasJsTag,
   parseDshPatchYaml,
@@ -29,19 +30,35 @@ import {
 const execFileAsync = promisify(execFile);
 const STALE_DRYRUN_AGE_MS = 60 * 60 * 1000;
 const DRYRUN_MARKER = ".memcode-dryrun";
-const SNAPSHOT_FILES = ["package.json", "cordis.patch.yml", "pnpm-lock.yaml"] as const;
-const STAGING_COPY_FILES = [
+const DRYRUN_MARKER_TEXT = "memcode-dryrun\n";
+/** Every file `dsh plugin add` or a patch import can change, restored on rollback. */
+const PROFILE_FILES = [
   "package.json",
   "cordis.patch.yml",
   "pnpm-workspace.yaml",
   "pnpm-lock.yaml",
 ] as const;
+type ProfileFile = (typeof PROFILE_FILES)[number];
+type ProfileSnapshot = Map<ProfileFile, Buffer | null>;
 
 export type StrictAcpProbe = (profile: string, command: Command) => Promise<ModelOption[]>;
+
+/**
+ * What a successful dry-run verified. Apply accepts only this plan and refuses
+ * to mutate the profile when Desktop, the home patch, or the target changed.
+ */
+export interface DshMigrationPlan {
+  fingerprint: string;
+  targetProfile: string;
+  selectedIds: string[];
+  /** Catalog entries the dry-run saw appear; apply must show every one. */
+  expectedModelIds: string[];
+}
 
 interface DesktopPatchData {
   piAiProviders: Map<string, Record<string, unknown>>;
   pluginConfigRows: Map<string, Record<string, unknown>>;
+  homePatch: Buffer | null;
   diff: DshDesktopDiff;
 }
 
@@ -90,6 +107,15 @@ async function isDirectory(path: string): Promise<boolean> {
   }
 }
 
+async function readOptional(path: string): Promise<Buffer | null> {
+  try {
+    return await readFile(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 async function readJsonSafe(path: string): Promise<Record<string, unknown>> {
   try {
     const parsed = JSON.parse(await readFile(path, "utf8"));
@@ -100,16 +126,8 @@ async function readJsonSafe(path: string): Promise<Record<string, unknown>> {
 }
 
 async function readPatchStrict(path: string): Promise<{ entries: any[]; hasJsExpression: boolean }> {
-  let text: string;
-  try {
-    text = await readFile(path, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { entries: [], hasJsExpression: false };
-    }
-    throw error;
-  }
-  return parseDshPatchYaml(text);
+  const text = await readOptional(path);
+  return text === null ? { entries: [], hasJsExpression: false } : parseDshPatchYaml(text.toString("utf8"));
 }
 
 async function readPatchSafe(path: string): Promise<{ entries: any[]; hasJsExpression: boolean }> {
@@ -120,29 +138,68 @@ async function readPatchSafe(path: string): Promise<{ entries: any[]; hasJsExpre
   }
 }
 
+/** Snapshot every profile file; an unreadable existing file aborts instead of reading as absent. */
+async function readProfileSnapshot(profileDir: string): Promise<ProfileSnapshot> {
+  const snapshot: ProfileSnapshot = new Map();
+  for (const file of PROFILE_FILES) {
+    try {
+      snapshot.set(file, await readOptional(join(profileDir, file)));
+    } catch (error) {
+      throw new Error(`Cannot read existing profile file "${file}": ${extractErrorMessage(error)}`);
+    }
+  }
+  return snapshot;
+}
+
+function isPiAiRow(entry: unknown): entry is Record<string, unknown> {
+  return (
+    isPlainObject(entry) &&
+    (entry.id === "llm-pi-ai" || entry.name === "@deepseek-ai/dsh-llm-pi-ai")
+  );
+}
+
+/**
+ * The llm-pi-ai providers one patch layer sets. A row that sets `config`
+ * replaces the whole configuration of earlier layers and rows, so only the
+ * last such row counts. Providers under an explicitly `!!js`-tagged entry,
+ * config or providers container are never offered, but an untagged sibling of
+ * a tagged provider still is.
+ */
 function extractPiAiProviders(entries: unknown[]): {
   providers: Map<string, Record<string, unknown>>;
   tainted: boolean;
+  configured: boolean;
 } {
-  const providers = new Map<string, Record<string, unknown>>();
+  let providers = new Map<string, Record<string, unknown>>();
   let tainted = false;
+  let configured = false;
   for (const entry of entries) {
-    if (!isPlainObject(entry)) continue;
-    if (entry.id !== "llm-pi-ai" && entry.name !== "@deepseek-ai/dsh-llm-pi-ai") continue;
+    if (!isPiAiRow(entry)) continue;
+    if (hasExplicitJsTag(entry)) {
+      configured = true;
+      providers = new Map();
+      tainted = true;
+      continue;
+    }
+    if (!Object.prototype.hasOwnProperty.call(entry, "config")) continue;
+    configured = true;
+    providers = new Map();
+    tainted = false;
     const config = entry.config;
-    if (!isPlainObject(config)) continue;
+    if (!isPlainObject(config) || hasExplicitJsTag(config)) {
+      tainted = hasJsTag(entry);
+      continue;
+    }
     const rawProviders = config.providers;
-    if (!isPlainObject(rawProviders)) {
-      if (hasJsTag(config)) tainted = true;
+    if (!isPlainObject(rawProviders) || hasExplicitJsTag(rawProviders)) {
+      tainted = hasJsTag(config);
       continue;
     }
     for (const [providerId, providerConfig] of Object.entries(rawProviders)) {
-      if (isPlainObject(providerConfig)) {
-        providers.set(providerId, providerConfig);
-      }
+      if (isPlainObject(providerConfig)) providers.set(providerId, providerConfig);
     }
   }
-  return { providers, tainted };
+  return { providers, tainted, configured };
 }
 
 function extractModelIds(providerConfig: Record<string, unknown>): string[] {
@@ -173,16 +230,21 @@ function findMatchingPluginRow(
   return undefined;
 }
 
-function buildPluginSpec(pkgName: string, rawSpec: unknown): {
+function buildPluginSpec(pkgName: string, rawSpec: unknown, desktopDir: string): {
   spec: string;
   source: "registry" | "local-link";
   defaultSelected: boolean;
   warning?: string;
 } {
   const trimmed = typeof rawSpec === "string" ? rawSpec.trim() : "";
-  if (trimmed.startsWith("link:") || trimmed.startsWith("file:")) {
+  const local = /^(link|file):([\s\S]*)$/.exec(trimmed);
+  if (local) {
+    // dsh runs plugin commands inside the selected profile directory, so a
+    // relative path must be resolved against Desktop's profile, not copied.
+    const path = local[2];
+    const absolute = isAbsolute(path) || /^[A-Za-z]:[\\/]/.test(path) || /^\\\\/.test(path);
     return {
-      spec: trimmed,
+      spec: `${local[1]}:${absolute ? path : resolve(desktopDir, path)}`,
       source: "local-link",
       defaultSelected: false,
       warning: "Local linked plugin may add non-LLM hooks or require Desktop services.",
@@ -208,11 +270,20 @@ async function computeDesktopDiff(
   const dshHome = resolveDshHome(env);
   const desktopDir = join(dshHome, "profiles", "desktop");
   const targetDir = join(dshHome, "profiles", normalizedTarget);
+  const homePatchPath = join(dshHome, "cordis.patch.yml");
+  let homePatchBytes: Buffer | null = null;
+  let homePatchUnreadable = false;
+  try {
+    homePatchBytes = await readOptional(homePatchPath);
+  } catch {
+    homePatchUnreadable = true;
+  }
 
   if (!(await isDirectory(desktopDir))) {
     return {
       piAiProviders: new Map(),
       pluginConfigRows: new Map(),
+      homePatch: homePatchBytes,
       diff: {
         targetProfile: normalizedTarget,
         desktopPresent: false,
@@ -229,11 +300,17 @@ async function computeDesktopDiff(
   } catch {
     desktopPatchUnsupported = true;
   }
-  const [desktopPkg, targetPatch, targetPkg, homePatch] = await Promise.all([
+  let homePatch: { entries: any[]; hasJsExpression: boolean } = { entries: [], hasJsExpression: false };
+  let homePatchUnsupported = homePatchUnreadable;
+  try {
+    homePatch = homePatchBytes === null ? homePatch : parseDshPatchYaml(homePatchBytes.toString("utf8"));
+  } catch {
+    homePatchUnsupported = true;
+  }
+  const [desktopPkg, targetPatch, targetPkg] = await Promise.all([
     readJsonSafe(join(desktopDir, "package.json")),
     readPatchSafe(join(targetDir, "cordis.patch.yml")),
     readJsonSafe(join(targetDir, "package.json")),
-    readPatchSafe(join(dshHome, "cordis.patch.yml")),
   ]);
 
   const providers: DshDesktopProviderCandidate[] = [];
@@ -248,18 +325,19 @@ async function computeDesktopDiff(
   const pluginConfigRows = new Map<string, Record<string, unknown>>();
 
   const desktopPiAi = extractPiAiProviders(desktopPatch.entries);
+  // dsh composes the profile patch first and the home patch last; a home row
+  // that sets llm-pi-ai's config replaces the profile's provider list.
+  const homePiAi = extractPiAiProviders(homePatch.entries);
+  const effective = homePiAi.configured ? homePiAi : extractPiAiProviders(targetPatch.entries);
   const existingModels = new Map<string, Set<string>>();
-  for (const patch of [homePatch, targetPatch]) {
-    const extracted = extractPiAiProviders(patch.entries);
-    for (const [providerId, cfg] of extracted.providers) {
-      let set = existingModels.get(providerId);
-      if (!set) {
-        set = new Set<string>();
-        existingModels.set(providerId, set);
-      }
-      for (const modelId of extractModelIds(cfg)) set.add(modelId);
-    }
+  for (const [providerId, cfg] of effective.providers) {
+    existingModels.set(providerId, new Set(extractModelIds(cfg)));
   }
+  const maskedReason = homePatchUnsupported
+    ? `${homePatchPath} could not be read or uses unsupported YAML, so MemCode cannot tell whether it replaces this profile's providers.`
+    : homePiAi.configured
+      ? `${homePatchPath} sets llm-pi-ai for every profile and would hide this import. Add the provider there instead.`
+      : undefined;
 
   if (desktopPiAi.tainted) {
     skipped.push({
@@ -286,6 +364,10 @@ async function computeDesktopDiff(
       const existing = existingModels.get(providerId);
       const missingModels = existing ? models.filter((m) => !existing.has(m)) : undefined;
       if (existing && (!missingModels || missingModels.length === 0)) continue;
+      if (maskedReason) {
+        skipped.push({ name: providerId, reason: maskedReason });
+        continue;
+      }
 
       piAiProviders.set(providerId, cfg);
       const displayName =
@@ -355,7 +437,11 @@ async function computeDesktopDiff(
     }
     if (!mainSource.includes("registerAdapter(")) continue;
 
-    const { spec, source, defaultSelected, warning } = buildPluginSpec(pkgName, desktopDeps[pkgName]);
+    const { spec, source, defaultSelected, warning } = buildPluginSpec(
+      pkgName,
+      desktopDeps[pkgName],
+      desktopDir,
+    );
     const configRow = findMatchingPluginRow(desktopPatch.entries, pkgName);
     let hasConfigPatch = false;
     if (configRow) {
@@ -387,6 +473,7 @@ async function computeDesktopDiff(
   return {
     piAiProviders,
     pluginConfigRows,
+    homePatch: homePatchBytes,
     diff: {
       targetProfile: normalizedTarget,
       desktopPresent: true,
@@ -403,6 +490,52 @@ export async function diffDshDesktopModels(
   return (await computeDesktopDiff(targetProfile, env)).diff;
 }
 
+/** Every selected id must still be offered; stale or unknown ids are refused, never skipped. */
+function staleSelections(selectedIds: string[], data: DesktopPatchData): DshProviderFailure[] {
+  const offered = new Set(data.diff.providers.map((p) => p.id));
+  return selectedIds
+    .filter((id) => !offered.has(id))
+    .map((id) => ({
+      id,
+      name: id.replace(/^(?:pi-ai|plugin):/, ""),
+      reason: "No longer offered by DeepSeek Harness Desktop. Reload the provider list and test again.",
+    }));
+}
+
+function hashBytes(bytes: Buffer | null): string | null {
+  return bytes === null ? null : createHash("sha256").update(bytes).digest("hex");
+}
+
+/** Binds a plan to the exact Desktop sources, home patch and target files it tested. */
+function migrationFingerprint(
+  targetProfile: string,
+  selectedIds: string[],
+  data: DesktopPatchData,
+  snapshot: ProfileSnapshot,
+): string {
+  const byId = new Map(data.diff.providers.map((p) => [p.id, p]));
+  const sources = [...selectedIds].sort().map((id) => {
+    const candidate = byId.get(id);
+    const providerId = candidate?.providerId ?? id;
+    return {
+      id,
+      spec: candidate?.spec ?? null,
+      models: candidate?.missingModels ?? candidate?.models ?? null,
+      config: data.piAiProviders.get(providerId) ?? data.pluginConfigRows.get(providerId) ?? null,
+    };
+  });
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        targetProfile,
+        sources,
+        home: hashBytes(data.homePatch),
+        files: PROFILE_FILES.map((file) => [file, hashBytes(snapshot.get(file) ?? null)]),
+      }),
+    )
+    .digest("hex");
+}
+
 function mergePatchEntries(
   existingEntries: any[],
   selectedIds: string[],
@@ -414,11 +547,9 @@ function mergePatchEntries(
     .map((id) => id.slice("pi-ai:".length));
 
   if (selectedPiAi.length > 0) {
-    let piAiEntry = entries.find(
-      (entry) =>
-        isPlainObject(entry) &&
-        (entry.id === "llm-pi-ai" || entry.name === "@deepseek-ai/dsh-llm-pi-ai"),
-    );
+    let piAiEntry = [...entries].reverse().find(
+      (entry) => isPiAiRow(entry) && Object.prototype.hasOwnProperty.call(entry, "config"),
+    ) ?? entries.find((entry) => isPiAiRow(entry));
     if (!piAiEntry) {
       piAiEntry = {
         id: "llm-pi-ai",
@@ -475,6 +606,43 @@ function mergePatchEntries(
   return entries;
 }
 
+async function runDshPlugin(
+  command: Command,
+  profileName: string,
+  args: string[],
+  dshHome: string,
+  env: NodeJS.ProcessEnv,
+  timeout = 120_000,
+): Promise<void> {
+  await execFileAsync(
+    command.command,
+    [...command.prefix, "plugin", "--profile", profileName, ...args],
+    {
+      shell: false,
+      windowsHide: true,
+      timeout,
+      maxBuffer: 10 * 1024 * 1024,
+      encoding: "utf8",
+      env: buildDshEnv(dshHome, command, env),
+    },
+  );
+}
+
+/** Reinstall a profile's dependency tree from its manifest and lockfile, as `dsh plugin` repairs it. */
+function installArgs(hasLockfile: boolean): string[] {
+  return ["install", hasLockfile ? "--frozen-lockfile" : "--config.lockfile=false"];
+}
+
+function hasDependencies(pkg: Buffer | null | undefined): boolean {
+  if (!pkg) return false;
+  try {
+    const parsed = JSON.parse(pkg.toString("utf8"));
+    return isPlainObject(parsed?.dependencies) && Object.keys(parsed.dependencies).length > 0;
+  } catch {
+    return false;
+  }
+}
+
 async function applySelectedToProfileDir(
   command: Command,
   profileName: string,
@@ -483,7 +651,7 @@ async function applySelectedToProfileDir(
   data: DesktopPatchData,
   dshHome: string,
   env: NodeJS.ProcessEnv,
-  onPluginStart?: (id: string, pkgName: string) => void,
+  progress?: { pluginStart?: (id: string, pkgName: string) => void; pluginsDone?: () => void },
 ): Promise<void> {
   const patchPath = join(profileDir, "cordis.patch.yml");
   const currentPatch = await readPatchStrict(patchPath);
@@ -500,21 +668,10 @@ async function applySelectedToProfileDir(
     if (!candidate) {
       throw new Error(`Selected migration candidate "${id}" was not found in Desktop profile.`);
     }
-    const spec = candidate.spec ?? candidate.providerId;
-    onPluginStart?.(id, candidate.name);
-    await execFileAsync(
-      command.command,
-      [...command.prefix, "plugin", "--profile", profileName, "add", spec],
-      {
-        shell: false,
-        windowsHide: true,
-        timeout: 60_000,
-        maxBuffer: 10 * 1024 * 1024,
-        encoding: "utf8",
-        env: buildDshEnv(dshHome, command, env),
-      },
-    );
+    progress?.pluginStart?.(id, candidate.name);
+    await runDshPlugin(command, profileName, ["add", candidate.spec ?? candidate.providerId], dshHome, env);
   }
+  progress?.pluginsDone?.();
 
   const merged = mergePatchEntries(currentPatch.entries, selectedIds, data);
   await writeFile(patchPath, stringifyDshPatchYaml(merged), "utf8");
@@ -528,7 +685,9 @@ async function cleanupStaleDryRunDirs(profilesDir: string): Promise<void> {
       if (!entry.isDirectory() || !isTemporaryDryRunProfile(entry.name)) continue;
       const dir = join(profilesDir, entry.name);
       try {
-        if (!(await exists(join(dir, DRYRUN_MARKER)))) continue;
+        // Only a directory MemCode created and marked is ever removed.
+        const marker = await readFile(join(dir, DRYRUN_MARKER), "utf8").catch(() => null);
+        if (marker !== DRYRUN_MARKER_TEXT) continue;
         const info = await stat(dir);
         if (now - info.mtimeMs > STALE_DRYRUN_AGE_MS) {
           await rm(dir, { recursive: true, force: true });
@@ -561,24 +720,116 @@ async function assertExistingAcpProfile(
   };
 }
 
+/** The provider a dsh catalog entry belongs to: ACP values are JSON `[provider, model]`. */
+function catalogEntry(model: ModelOption): { provider?: string; model: string } {
+  try {
+    const parsed = JSON.parse(model.id);
+    if (Array.isArray(parsed) && parsed.length === 2 && parsed.every((part) => typeof part === "string"))
+      return { provider: parsed[0], model: parsed[1] };
+  } catch {
+    /* Not a dsh provider tuple. */
+  }
+  return { provider: model.group, model: model.id };
+}
+
+function sameProvider(provider: string | undefined, providerId: string): boolean {
+  return (
+    provider === providerId ||
+    !!provider?.endsWith(`:${providerId}`) ||
+    !!provider?.endsWith(`/${providerId}`)
+  );
+}
+
+/**
+ * Check that each selected provider really contributes to the catalog: a
+ * pi-ai provider must list every model it was imported for, and a plugin must
+ * add at least one model from a provider the baseline did not have.
+ */
+function unmetExpectations(
+  ids: string[],
+  data: DesktopPatchData,
+  baseline: ModelOption[],
+  after: ModelOption[],
+): DshProviderFailure[] {
+  const byId = new Map(data.diff.providers.map((p) => [p.id, p]));
+  const entries = after.map((model) => ({ id: model.id, ...catalogEntry(model) }));
+  const baselineIds = new Set(baseline.map((model) => model.id));
+  const baselineProviders = new Set(baseline.map((model) => catalogEntry(model).provider));
+  const piAiProviders = ids
+    .filter((id) => id.startsWith("pi-ai:"))
+    .map((id) => byId.get(id)?.providerId ?? id.slice("pi-ai:".length));
+  const failures: DshProviderFailure[] = [];
+  for (const id of ids) {
+    const candidate = byId.get(id);
+    if (!candidate) continue;
+    if (candidate.kind === "pi-ai") {
+      const expected = candidate.missingModels ?? candidate.models;
+      const listed = (modelId?: string) =>
+        entries.some((entry) => {
+          if (modelId !== undefined && entry.model !== modelId) return false;
+          // An entry without provider identity can only vouch for a named model.
+          if (entry.provider === undefined) return modelId !== undefined;
+          return sameProvider(entry.provider, candidate.providerId) || entry.provider === candidate.name;
+        });
+      const missing = expected.length ? expected.filter((modelId) => !listed(modelId)) : listed() ? [] : ["any model"];
+      if (missing.length)
+        failures.push({
+          id,
+          name: candidate.name,
+          reason: `DeepSeek Harness did not list ${missing.join(", ")} for this provider after the import. Check its configuration and API key environment variable in Desktop.`,
+        });
+    }
+  }
+  const plugins = ids.filter((id) => byId.get(id)?.kind === "plugin");
+  if (plugins.length) {
+    const added = new Set(
+      entries
+        .filter(
+          (entry) =>
+            !baselineIds.has(entry.id) &&
+            !baselineProviders.has(entry.provider) &&
+            !piAiProviders.some((providerId) => sameProvider(entry.provider, providerId)),
+        )
+        .map((entry) => entry.provider ?? entry.id),
+    );
+    if (added.size < plugins.length)
+      for (const id of plugins)
+        failures.push({
+          id,
+          name: byId.get(id)?.name ?? id,
+          reason:
+            plugins.length === 1
+              ? "The plugin installed, but DeepSeek Harness listed no new models from it. Configure its provider in Desktop first."
+              : `The selected plugins added models from ${added.size} new provider${added.size === 1 ? "" : "s"}, not ${plugins.length}.`,
+        });
+  }
+  return failures;
+}
+
+function defaultProbe(options?: { probe?: StrictAcpProbe }): StrictAcpProbe {
+  return (
+    options?.probe ??
+    ((profile, cmd) =>
+      probeStandardCatalog("dsh", cmd, profile, { strictStdout: true, allowStaging: true }))
+  );
+}
+
 export async function dryRunDshMigration(
   command: Command,
   targetProfile: string,
   selectedIds: string[],
   options?: { env?: NodeJS.ProcessEnv; probe?: StrictAcpProbe },
-): Promise<DshDryRunResult> {
+): Promise<DshDryRunResult & { plan?: DshMigrationPlan }> {
   const env = options?.env ?? process.env;
   const { dshHome, normalizedTarget, targetDir } = await assertExistingAcpProfile(targetProfile, env);
   const profilesDir = join(dshHome, "profiles");
   await cleanupStaleDryRunDirs(profilesDir);
 
   const probeCmd = withDshHomeCommand(command, dshHome, env);
-  const probe: StrictAcpProbe =
-    options?.probe ??
-    ((profile, cmd) =>
-      probeStandardCatalog("dsh", cmd, profile, { strictStdout: true, allowStaging: true }));
+  const probe = defaultProbe(options);
+  const ids = [...new Set(selectedIds)];
 
-  if (selectedIds.length === 0) {
+  if (ids.length === 0) {
     const previewModels = await probe(normalizedTarget, probeCmd);
     return {
       ok: true,
@@ -589,23 +840,59 @@ export async function dryRunDshMigration(
     };
   }
 
-  const data = await computeDesktopDiff(normalizedTarget, env);
-  const candidateMap = new Map(data.diff.providers.map((p) => [p.id, p]));
+  const profileFailure = (reason: string): DshDryRunResult => ({
+    ok: false,
+    targetProfile: normalizedTarget,
+    passedIds: [],
+    failed: [{ id: `profile:${normalizedTarget}`, name: normalizedTarget, reason }],
+    previewModels: [],
+    error: reason,
+  });
 
-  const runStaging = async (ids: string[]): Promise<ModelOption[]> => {
+  // The fingerprint and every staging copy come from the same bytes.
+  let snapshot: ProfileSnapshot;
+  try {
+    snapshot = await readProfileSnapshot(targetDir);
+  } catch (error) {
+    return profileFailure(extractErrorMessage(error));
+  }
+  const data = await computeDesktopDiff(normalizedTarget, env);
+  const stale = staleSelections(ids, data);
+  if (stale.length) {
+    return {
+      ok: false,
+      targetProfile: normalizedTarget,
+      passedIds: [],
+      failed: stale,
+      previewModels: [],
+      error: "Some selected providers are no longer offered by DeepSeek Harness Desktop.",
+    };
+  }
+  const candidateMap = new Map(data.diff.providers.map((p) => [p.id, p]));
+  const targetHasDependencies = hasDependencies(snapshot.get("package.json"));
+
+  const runStaging = async (stagedIds: string[]): Promise<ModelOption[]> => {
     const stagingName = `memcode-dryrun-${randomBytes(4).toString("hex")}`;
     const stagingDir = join(profilesDir, stagingName);
     await mkdir(stagingDir, { recursive: true });
-    await writeFile(join(stagingDir, DRYRUN_MARKER), "memcode-dryrun\n", "utf8");
+    await writeFile(join(stagingDir, DRYRUN_MARKER), DRYRUN_MARKER_TEXT, "utf8");
     try {
-      for (const file of STAGING_COPY_FILES) {
-        const src = join(targetDir, file);
-        if (await exists(src)) {
-          await copyFile(src, join(stagingDir, file));
-        }
+      for (const [file, content] of snapshot) {
+        if (content !== null) await writeFile(join(stagingDir, file), content);
       }
-      if (ids.length > 0) {
-        await applySelectedToProfileDir(command, stagingName, stagingDir, ids, data, dshHome, env);
+      // A profile's third-party bundles load from its own node_modules. Build
+      // an independent tree in staging; `plugin add` installs it as well.
+      if (targetHasDependencies && !stagedIds.some((id) => id.startsWith("plugin:"))) {
+        await runDshPlugin(
+          command,
+          stagingName,
+          installArgs(snapshot.get("pnpm-lock.yaml") != null),
+          dshHome,
+          env,
+        );
+      }
+      if (stagedIds.length > 0) {
+        await applySelectedToProfileDir(command, stagingName, stagingDir, stagedIds, data, dshHome, env);
       }
       return await probe(stagingName, probeCmd);
     } finally {
@@ -613,127 +900,140 @@ export async function dryRunDshMigration(
     }
   };
 
+  // An already broken profile is a profile failure, never blamed on providers.
+  let baseline: ModelOption[];
   try {
-    const previewModels = await runStaging(selectedIds);
-    return {
-      ok: true,
-      targetProfile: normalizedTarget,
-      passedIds: [...selectedIds],
-      failed: [],
-      previewModels,
-    };
-  } catch (combinedError) {
-    try {
-      await runStaging([]);
-    } catch (baselineError) {
-      const baselineMessage = `Existing ACP profile failed validation before applying Desktop providers: ${extractErrorMessage(baselineError)}`;
+    baseline = await runStaging([]);
+  } catch (baselineError) {
+    return profileFailure(
+      `Existing ACP profile failed validation before applying Desktop providers: ${extractErrorMessage(baselineError)}`,
+    );
+  }
+
+  const attempt = async (stagedIds: string[]): Promise<{ models: ModelOption[]; failures: DshProviderFailure[] }> => {
+    const models = await runStaging(stagedIds);
+    return { models, failures: unmetExpectations(stagedIds, data, baseline, models) };
+  };
+
+  let combinedError: string;
+  try {
+    const combined = await attempt(ids);
+    if (combined.failures.length === 0) {
+      const baselineIds = new Set(baseline.map((model) => model.id));
       return {
-        ok: false,
+        ok: true,
         targetProfile: normalizedTarget,
-        passedIds: [],
-        failed: [
-          {
-            id: `profile:${normalizedTarget}`,
-            name: normalizedTarget,
-            reason: baselineMessage,
-          },
-        ],
-        previewModels: [],
-        error: baselineMessage,
+        passedIds: ids,
+        failed: [],
+        previewModels: combined.models,
+        plan: {
+          fingerprint: migrationFingerprint(normalizedTarget, ids, data, snapshot),
+          targetProfile: normalizedTarget,
+          selectedIds: ids,
+          expectedModelIds: combined.models
+            .map((model) => model.id)
+            .filter((id) => !baselineIds.has(id)),
+        },
       };
     }
-
-    const passedIds: string[] = [];
-    const failed: DshProviderFailure[] = [];
-    for (const id of selectedIds) {
-      const candidate = candidateMap.get(id);
-      try {
-        await runStaging([id]);
-        passedIds.push(id);
-      } catch (error) {
-        failed.push({
-          id,
-          name: candidate?.name ?? id,
-          reason: extractErrorMessage(error),
-        });
-      }
-    }
-    const combinationError =
-      failed.length === 0
-        ? `Selected providers passed individually but failed when combined: ${extractErrorMessage(combinedError)}`
-        : undefined;
-    return {
-      ok: false,
-      targetProfile: normalizedTarget,
-      passedIds,
-      failed,
-      previewModels: [],
-      ...(combinationError ? { error: combinationError } : {}),
-    };
+    combinedError = combined.failures.map((failure) => `${failure.name}: ${failure.reason}`).join(" ");
+  } catch (error) {
+    combinedError = extractErrorMessage(error);
   }
+
+  const passedIds: string[] = [];
+  const failed: DshProviderFailure[] = [];
+  for (const id of ids) {
+    const candidate = candidateMap.get(id);
+    try {
+      const single = await attempt([id]);
+      if (single.failures.length) failed.push(...single.failures);
+      else passedIds.push(id);
+    } catch (error) {
+      failed.push({
+        id,
+        name: candidate?.name ?? id,
+        reason: extractErrorMessage(error),
+      });
+    }
+  }
+  const combinationError =
+    failed.length === 0
+      ? `Selected providers passed individually but failed when combined: ${combinedError}`
+      : undefined;
+  return {
+    ok: false,
+    targetProfile: normalizedTarget,
+    passedIds,
+    failed,
+    previewModels: [],
+    ...(combinationError ? { error: combinationError } : {}),
+  };
 }
 
-export async function applyDshMigration(
-  command: Command,
-  targetProfile: string,
-  selectedIds: string[],
-  options?: { env?: NodeJS.ProcessEnv; probe?: StrictAcpProbe },
-): Promise<{
+export interface DshApplyResult {
   ok: boolean;
   appliedIds: string[];
   failed: DshProviderFailure[];
   models: ModelOption[];
   error?: string;
-}> {
+  /** False when rollback could not restore the profile; it may need manual recovery. */
+  restored?: boolean;
+}
+
+export async function applyDshMigration(
+  command: Command,
+  plan: DshMigrationPlan,
+  options?: { env?: NodeJS.ProcessEnv; probe?: StrictAcpProbe },
+): Promise<DshApplyResult> {
   const env = options?.env ?? process.env;
-  const { dshHome, normalizedTarget, targetDir } = await assertExistingAcpProfile(targetProfile, env);
+  const { dshHome, normalizedTarget, targetDir } = await assertExistingAcpProfile(plan.targetProfile, env);
   const probeCmd = withDshHomeCommand(command, dshHome, env);
-  const probe: StrictAcpProbe =
-    options?.probe ??
-    ((profile, cmd) =>
-      probeStandardCatalog("dsh", cmd, profile, { strictStdout: true, allowStaging: true }));
+  const probe = defaultProbe(options);
+  const selectedIds = plan.selectedIds;
+  const profileId = `profile:${normalizedTarget}`;
+  const refuse = (reason: string): DshApplyResult => ({
+    ok: false,
+    appliedIds: [],
+    failed: [{ id: profileId, name: normalizedTarget, reason }],
+    models: [],
+    error: reason,
+    restored: true,
+  });
 
-  if (selectedIds.length === 0) {
-    const models = await probe(normalizedTarget, probeCmd);
-    return { ok: true, appliedIds: [], failed: [], models };
+  if (normalizedTarget !== plan.targetProfile || selectedIds.length === 0)
+    return refuse("Test the selected providers before importing them.");
+
+  let snapshots: ProfileSnapshot;
+  try {
+    snapshots = await readProfileSnapshot(targetDir);
+  } catch (error) {
+    return refuse(`${extractErrorMessage(error)}. The profile was not modified.`);
   }
-
   const data = await computeDesktopDiff(normalizedTarget, env);
+  if (
+    staleSelections(selectedIds, data).length > 0 ||
+    migrationFingerprint(normalizedTarget, selectedIds, data, snapshots) !== plan.fingerprint
+  )
+    return refuse(
+      "DeepSeek Harness Desktop or this profile changed after the dry-run. Test the selected providers again before importing them.",
+    );
   const candidateMap = new Map(data.diff.providers.map((p) => [p.id, p]));
-
-  const snapshots = new Map<string, Buffer | null>();
-  for (const file of SNAPSHOT_FILES) {
-    const path = join(targetDir, file);
-    try {
-      snapshots.set(file, await readFile(path));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        snapshots.set(file, null);
-      } else {
-        const reason = `Cannot read existing profile file "${file}" before migration: ${extractErrorMessage(error)}`;
-        return {
-          ok: false,
-          appliedIds: [],
-          failed: [{ id: `profile:${normalizedTarget}`, name: normalizedTarget, reason }],
-          models: [],
-          error: reason,
-        };
-      }
-    }
-  }
 
   const selectedPlugins = selectedIds
     .filter((id) => id.startsWith("plugin:"))
     .map((id) => id.slice("plugin:".length));
   const preExistingPlugins = new Set<string>();
   for (const pkgName of selectedPlugins) {
-    if (await exists(join(targetDir, "node_modules", ...pkgName.split("/")))) {
+    if (await isDirectory(join(targetDir, "node_modules", ...pkgName.split("/")))) {
       preExistingPlugins.add(pkgName);
     }
   }
 
-  let activeId = selectedIds[0] ?? "migration";
-  let activeName = candidateMap.get(activeId)?.name ?? activeId;
+  // A failure is the profile's until a specific plugin is being installed.
+  let activeId = profileId;
+  let activeName = normalizedTarget;
+  let dependenciesTouched = false;
   try {
     await applySelectedToProfileDir(
       command,
@@ -743,12 +1043,25 @@ export async function applyDshMigration(
       data,
       dshHome,
       env,
-      (id, name) => {
-        activeId = id;
-        activeName = name;
+      {
+        pluginStart: (id, name) => {
+          activeId = id;
+          activeName = candidateMap.get(id)?.name ?? name;
+          dependenciesTouched = true;
+        },
+        pluginsDone: () => {
+          activeId = profileId;
+          activeName = normalizedTarget;
+        },
       },
     );
     const models = await probe(normalizedTarget, probeCmd);
+    const listed = new Set(models.map((model) => model.id));
+    const missing = plan.expectedModelIds.filter((id) => !listed.has(id));
+    if (missing.length > 0)
+      throw new Error(
+        `After the import DeepSeek Harness did not list ${missing.length} model${missing.length === 1 ? "" : "s"} the dry-run verified: ${missing.join(", ")}.`,
+      );
     return {
       ok: true,
       appliedIds: [...selectedIds],
@@ -769,15 +1082,35 @@ export async function applyDshMigration(
         rollbackErrors.push(`${file}: ${extractErrorMessage(rbError)}`);
       }
     }
-    for (const pkgName of selectedPlugins) {
-      if (!preExistingPlugins.has(pkgName)) {
+    if (dependenciesTouched) {
+      for (const pkgName of selectedPlugins) {
+        if (!preExistingPlugins.has(pkgName)) {
+          try {
+            await rm(join(targetDir, "node_modules", ...pkgName.split("/")), {
+              recursive: true,
+              force: true,
+            });
+          } catch (rbError) {
+            rollbackErrors.push(`node_modules/${pkgName}: ${extractErrorMessage(rbError)}`);
+          }
+        }
+      }
+      // `plugin add` can also change existing and transitive dependencies.
+      // Reinstall the restored lockfile, as dsh itself does after a rejected add.
+      if (rollbackErrors.length === 0) {
         try {
-          await rm(join(targetDir, "node_modules", ...pkgName.split("/")), {
-            recursive: true,
-            force: true,
-          });
+          await runDshPlugin(
+            command,
+            normalizedTarget,
+            installArgs(snapshots.get("pnpm-lock.yaml") != null),
+            dshHome,
+            env,
+            300_000,
+          );
         } catch (rbError) {
-          rollbackErrors.push(`node_modules/${pkgName}: ${extractErrorMessage(rbError)}`);
+          rollbackErrors.push(
+            `node_modules could not be reinstalled (${extractErrorMessage(rbError)}); run "dsh plugin --profile ${normalizedTarget} install"`,
+          );
         }
       }
     }
@@ -807,6 +1140,7 @@ export async function applyDshMigration(
         failed: [{ id: activeId, name: activeName, reason: fullError }],
         models: [],
         error: fullError,
+        restored: false,
       };
     }
     return {
@@ -821,6 +1155,7 @@ export async function applyDshMigration(
       ],
       models: [],
       error: reason,
+      restored: true,
     };
   }
 }

@@ -134,6 +134,8 @@ export interface DshDryRunResult {
   failed: DshProviderFailure[];
   previewModels: ModelOption[];
   error?: string;
+  /** Present when the dry-run passed; import accepts only this verified plan. */
+  planId?: string;
 }
 export interface DshApplyMigrationResult {
   ok: boolean;
@@ -143,6 +145,8 @@ export interface DshApplyMigrationResult {
   models: ModelOption[];
   runtime: RuntimeInfo;
   error?: string;
+  /** False when a failed import could not be fully rolled back. */
+  restored?: boolean;
 }
 export interface RouteDecision {
   policyVersion: "memcode-envelope-v2" | "memcode-evidence-v3" | "memcode-evidence-v4";
@@ -664,10 +668,7 @@ export interface MemCodeAPI extends CodeReviewAPI {
     targetProfile?: string;
     selectedIds: string[];
   }): Promise<DshDryRunResult>;
-  applyDshMigration(input: {
-    targetProfile?: string;
-    selectedIds: string[];
-  }): Promise<DshApplyMigrationResult>;
+  applyDshMigration(input: { planId: string }): Promise<DshApplyMigrationResult>;
   installationStatus(): Promise<{
     state: string;
     needsInstall: boolean;

@@ -673,15 +673,21 @@ export function SettingsDialog({
 }) {
   const [draft, setDraft] = useState(settings);
   const [section, setSection] = useState<SettingsSection>(initialSection);
-  const models =
-    runtime.harnesses.find((harness) => harness.id === draft.defaultHarness)
-      ?.models ?? [];
   const dshRuntime = runtime.harnesses.find((harness) => harness.id === "dsh");
   const dshProfiles = dshRuntime?.profiles?.length
     ? dshRuntime.profiles
     : [draft.dshProfile || dshRuntime?.activeProfile || "acp"];
   const selectedDshProfile =
     draft.dshProfile || dshRuntime?.activeProfile || dshProfiles[0] || "acp";
+  // The loaded dsh catalog belongs to the saved profile. Until a different
+  // draft profile is saved, offer no models that profile may not have.
+  const dshProfilePending =
+    !!dshRuntime?.activeProfile && selectedDshProfile !== dshRuntime.activeProfile;
+  const models =
+    draft.defaultHarness === "dsh" && dshProfilePending
+      ? []
+      : runtime.harnesses.find((harness) => harness.id === draft.defaultHarness)
+          ?.models ?? [];
   const dshProfileOptions = dshProfiles.includes(selectedDshProfile)
     ? dshProfiles
     : [selectedDshProfile, ...dshProfiles];
@@ -906,7 +912,16 @@ export function SettingsDialog({
                       aria-label="DeepSeek Harness ACP profile"
                       value={selectedDshProfile}
                       onValueChange={(dshProfile) =>
-                        setDraft({ ...draft, dshProfile })
+                        setDraft({
+                          ...draft,
+                          dshProfile,
+                          // A dsh model override belongs to the previous profile's catalog.
+                          ...(dshProfile !== selectedDshProfile &&
+                          draft.defaultHarness === "dsh" &&
+                          !draft.localModel
+                            ? { model: "" }
+                            : {}),
+                        })
                       }
                     >
                       {dshProfileOptions.map((profile) => (
@@ -916,7 +931,9 @@ export function SettingsDialog({
                       ))}
                     </Select>
                     <small>
-                      Models and providers are loaded from this ACP profile.
+                      {dshProfilePending
+                        ? "Save to load this profile’s models. Overrides that it does not offer reset to Automatic."
+                        : "Models and providers are loaded from this ACP profile."}
                     </small>
                   </label>
                 )}

@@ -37,7 +37,9 @@ export function startStandardSession(id: StandardHarness, options: AgentSessionO
     env: { ...options.env, ...(id === "dsh" ? { DSH_PERMISSION_MODE: options.permissionMode === "full-access" ? "danger-full-access" : "workspace-write" } : {}) },
   });
 }
-export function probeStandardCatalog(
+// Async, so an invalid profile name rejects instead of throwing before a
+// caller's .catch() is attached.
+export async function probeStandardCatalog(
   id: StandardHarness,
   command: Command,
   dshProfile?: string,

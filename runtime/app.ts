@@ -39,7 +39,9 @@ import {
   applyDshMigration,
   diffDshDesktopModels,
   dryRunDshMigration,
+  type DshMigrationPlan,
 } from "./dsh-migration";
+import { DshSetupGate } from "./dsh-setup-gate";
 import { planDefinedStory, readRoutingCalibration, readRoutingLanguage } from "./story-route";
 import { qualificationRequestFingerprint } from "./qualification";
 import { registerPlanning } from "./planning";
@@ -162,7 +164,10 @@ export async function createRuntime(
   let betaNeedsAnalysis = false;
   let betaReady = false;
   let requireFreshWorkerContext = false;
-  let dshSetupInFlight: string | null = null;
+  // Setup changes, dsh workers and dsh reviewers never overlap.
+  const dshGate = new DshSetupGate();
+  // Only the most recent successful dry-run can be applied, and only once.
+  let dshPlan: { id: string; plan: DshMigrationPlan } | null = null;
   const qaProfile =
     process.env.MEMCODE_NATIVE_TEST_PROFILE === "1" ||
     !!process.env.NODE_TEST_CONTEXT;
@@ -267,7 +272,7 @@ export async function createRuntime(
         appUpdateGate.assertMayStart();
         beta?.assertMayStart();
         if (!beta?.usesBeta()) connections.account.assertMayStart();
-        if (harness === "dsh" && dshSetupInFlight) {
+        if (harness === "dsh" && dshGate.operation) {
           throw new Error(
             "Wait for DeepSeek Harness setup to finish before starting a DeepSeek Harness worker.",
           );
@@ -885,21 +890,46 @@ export async function createRuntime(
   const withDshSetupLock = async <T>(
     operation: string,
     fn: () => Promise<T>,
-    options: { allowActiveWorker?: boolean } = {},
+    options: { readOnly?: boolean } = {},
   ): Promise<T> => {
-    if (dshSetupInFlight) {
-      throw new Error(
-        "Another DeepSeek Harness setup operation is already in progress. Wait for it to finish.",
-      );
-    }
-    if (!options.allowActiveWorker) assertNoActiveDshWorker();
-    dshSetupInFlight = operation;
+    if (!options.readOnly) assertNoActiveDshWorker();
     try {
-      return await fn();
+      return await dshGate.run(operation, fn, { mutates: !options.readOnly });
     } finally {
-      dshSetupInFlight = null;
       dispatchQueued?.();
     }
+  };
+  /**
+   * A model chosen from one profile's catalog may not exist in another. After
+   * a profile or its providers change, drop dsh overrides the new catalog does
+   * not offer, so later dsh tasks cannot fail model selection.
+   */
+  const revalidateDshOverrides = async () => {
+    const runtime = await store.runtime();
+    const offered = new Set(
+      runtime.harnesses.find((item) => item.id === "dsh")?.models.map((model) => model.id) ?? [],
+    );
+    // An unavailable catalog cannot prove an override wrong; keep them.
+    if (offered.size === 0) return runtime;
+    let dropped = false;
+    const settings = store.state.settings;
+    if (settings.defaultHarness === "dsh" && !settings.localModel && settings.model && !offered.has(settings.model)) {
+      settings.model = "";
+      dropped = true;
+    }
+    for (const item of store.state.tasks)
+      if (
+        !item.example &&
+        item.harness === "dsh" &&
+        item.stage !== "done" &&
+        item.modelOverride &&
+        !offered.has(item.modelOverride)
+      ) {
+        item.modelOverride = null;
+        dropped = true;
+      }
+    if (dropped) await changed();
+    return runtime;
   };
   const resolveDshTargetProfile = async (targetProfile?: string) =>
     targetProfile?.trim()
@@ -946,11 +976,12 @@ export async function createRuntime(
           );
         const profile = await createDshAcpProfile(command, normalized);
         store.state.settings.dshProfile = profile;
+        dshPlan = null;
         await changed();
         invalidateHarnessCache("dsh");
         const [status, runtime] = await Promise.all([
           dshSetupStatus(),
-          store.runtime(),
+          revalidateDshOverrides(),
         ]);
         return { profile, status, runtime };
       }),
@@ -969,11 +1000,12 @@ export async function createRuntime(
             `DeepSeek Harness profile "${profile}" is not an ACP profile.`,
           );
         store.state.settings.dshProfile = profile;
+        dshPlan = null;
         await changed();
         invalidateHarnessCache("dsh");
         const [status, runtime] = await Promise.all([
           dshSetupStatus(),
-          store.runtime(),
+          revalidateDshOverrides(),
         ]);
         return { profile, status, runtime };
       }),
@@ -1002,46 +1034,53 @@ export async function createRuntime(
               "Install the DeepSeek Harness CLI before testing Desktop model migration.",
             );
           const profile = await resolveDshTargetProfile(targetProfile);
-          return dryRunDshMigration(command, profile, selectedIds, {
+          dshPlan = null;
+          const { plan, ...result } = await dryRunDshMigration(command, profile, selectedIds, {
             probe: (p, cmd) =>
               probeStandardCatalog("dsh", cmd, p, {
                 strictStdout: true,
                 allowStaging: true,
               }),
           });
+          if (!plan) return result;
+          dshPlan = { id: randomUUID(), plan };
+          return { ...result, planId: dshPlan.id };
         },
-        { allowActiveWorker: true },
+        // Staging never touches the target profile or running workers.
+        { readOnly: true },
       ),
   );
   register(
     "dsh:apply-migrate",
-    z
-      .object({
-        targetProfile: z.string().max(64).optional(),
-        selectedIds: z.array(nonempty.max(200)).max(200),
-      })
-      .strict(),
-    ({ targetProfile, selectedIds }) =>
+    z.object({ planId: z.string().min(1).max(100) }).strict(),
+    ({ planId }) =>
       withDshSetupLock("apply-migrate", async () => {
+        // Apply runs exactly what a dry-run verified, at most once.
+        const verified = dshPlan && dshPlan.id === planId ? dshPlan.plan : null;
+        dshPlan = null;
+        if (!verified)
+          throw new Error(
+            "Test the selected providers again before importing them.",
+          );
         const command = await resolveDshCommand();
         if (!command)
           throw new Error(
             "Install the DeepSeek Harness CLI before importing Desktop models.",
           );
-        const profile = await resolveDshTargetProfile(targetProfile);
-        const applied = await applyDshMigration(command, profile, selectedIds, {
+        const applied = await applyDshMigration(command, verified, {
           probe: (p, cmd) =>
             probeStandardCatalog("dsh", cmd, p, { strictStdout: true }),
         });
         invalidateHarnessCache("dsh");
-        const runtime = await store.runtime();
+        const runtime = await revalidateDshOverrides();
         return {
           ok: applied.ok,
-          targetProfile: profile,
+          targetProfile: verified.targetProfile,
           appliedIds: applied.appliedIds,
           failed: applied.failed,
           models: applied.models,
           ...(applied.error ? { error: applied.error } : {}),
+          ...(applied.restored !== undefined ? { restored: applied.restored } : {}),
           runtime,
         };
       }),
@@ -1332,7 +1371,7 @@ export async function createRuntime(
         throw new Error(
           "Stop active workers before changing runtime settings.",
         );
-      if (dshSetupInFlight)
+      if (dshGate.operation)
         throw new Error(
           "Another DeepSeek Harness setup operation is already in progress. Wait for it to finish.",
         );
@@ -1347,8 +1386,11 @@ export async function createRuntime(
           : settings.dshProfile.trim()
             ? normalizeDshProfile(settings.dshProfile)
             : undefined;
-      if (dshProfile !== store.state.settings.dshProfile)
+      const dshProfileChanged = dshProfile !== store.state.settings.dshProfile;
+      if (dshProfileChanged) {
         invalidateHarnessCache("dsh");
+        dshPlan = null;
+      }
       // A Settings dialog opened before a worker-default or handoff choice must not erase it.
       store.state.settings = {
         ...store.state.settings,
@@ -1361,7 +1403,7 @@ export async function createRuntime(
         handoffAttribution: state().settings.handoffAttribution,
       };
       await changed();
-      return store.runtime();
+      return dshProfileChanged ? revalidateDshOverrides() : store.runtime();
     },
   );
   register("artifact:thumbnail", identifier, async (id) => {
@@ -1465,7 +1507,12 @@ export async function createRuntime(
   );
   registerGoalPlanner(
     register,
-    new GoalPlanner({ dataDir: store.dir, state, relatedFiles }),
+    new GoalPlanner({
+      dataDir: store.dir,
+      state,
+      relatedFiles,
+      reviewOptions: { dshAdmission: () => dshGate.admit("plan") },
+    }),
   );
   registerGoalUpdates(
     register,
@@ -1524,7 +1571,9 @@ export async function createRuntime(
       team?.identity(item.projectId) ?? connections.account.current.principal,
     reviewProject: (item, parent) => epicAnalysisProject(parent, item),
     engineVersion: (item) => engine.versionFor(item.id) ?? "Not reported",
-    reviewer: createReadonlyReviewAgent(store.dir, state),
+    reviewer: createReadonlyReviewAgent(store.dir, state, {
+      dshAdmission: () => dshGate.admit("review"),
+    }),
     implementationCount: () => workers.implementationCount(),
     implementationStarting: (taskId) => workers.implementationStarting(taskId),
     capacityChanged: () => workers.dispatchQueued(),
@@ -1984,6 +2033,9 @@ export async function createRuntime(
     async close() {
       if (closed) return;
       closed = true;
+      // A DeepSeek Harness import holds its only rollback snapshots in memory:
+      // let it verify or restore the profile before the process exits.
+      await dshGate.close();
       const betaClosing = beta?.close();
       clearInterval(artifactMaintenance);
       await reconcilingArtifacts?.catch((error) =>

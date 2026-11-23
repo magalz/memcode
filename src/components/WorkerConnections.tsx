@@ -136,15 +136,20 @@ export function WorkerConnections({
   useEffect(() => {
     if (!selectedHarness) return;
     const frame = requestAnimationFrame(() =>
-      document
-        .querySelector<HTMLElement>(
+      (
+        document.querySelector<HTMLElement>(
           selectedHarness === "dsh"
             ? ".dsh-setup-flow button:not([disabled]), .dsh-setup-flow input:not([disabled]), .connection-approval input"
             : readyToApprove
               ? ".connection-approval input"
               : ".connection-sign-in button",
+        ) ??
+        // While setup is still loading only a spinner renders; keep keyboard
+        // focus inside the modal on its always-present Close button.
+        document.querySelector<HTMLElement>(
+          'button[aria-label="Close connection approval"]',
         )
-        ?.focus(),
+      )?.focus(),
     );
     return () => cancelAnimationFrame(frame);
   }, [selectedHarness, readyToApprove]);
